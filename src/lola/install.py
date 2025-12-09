@@ -70,6 +70,41 @@ def link_module_to_local(module: Module, local_modules_path: Path) -> Path:
     return dest
 
 
+def copy_module_to_local(module: Module, local_modules_path: Path) -> Path:
+    """
+    Copy a module from the global registry to the local .lola/modules/.
+
+    Used for Gemini CLI which cannot follow symlinks outside the workspace.
+
+    Args:
+        module: The module to copy
+        local_modules_path: Path to .lola/modules/
+
+    Returns:
+        Path to the copied module
+    """
+    dest = local_modules_path / module.name
+
+    # If source and dest are the same (user scope), just return the path
+    if dest.resolve() == module.path.resolve():
+        return dest
+
+    # Ensure parent directory exists
+    local_modules_path.mkdir(parents=True, exist_ok=True)
+
+    # Remove existing link/directory if present
+    if dest.is_symlink() or dest.exists():
+        if dest.is_symlink():
+            dest.unlink()
+        else:
+            shutil.rmtree(dest)
+
+    # Copy the module (not symlink)
+    shutil.copytree(module.path, dest)
+
+    return dest
+
+
 def generate_claude_skill(source_path: Path, dest_path: Path) -> bool:
     """
     Generate Claude skill files from source.
@@ -149,7 +184,21 @@ GEMINI_START_MARKER = "<!-- lola:skills:start -->"
 GEMINI_END_MARKER = "<!-- lola:skills:end -->"
 
 
-def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str, str, Path]]) -> bool:
+GEMINI_HEADER = """## Lola Skills
+
+These skills are installed by Lola and provide specialized capabilities.
+When a task matches a skill's description, read the skill's SKILL.md file
+to learn the detailed instructions and workflows.
+
+**How to use skills:**
+1. Check if your task matches any skill description below
+2. Use `read_file` to read the skill's SKILL.md for detailed instructions
+3. Follow the instructions in the SKILL.md file
+
+"""
+
+
+def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str, str, Path]], project_path: str) -> bool:
     """
     Add or update skill entries in GEMINI.md file.
 
@@ -157,6 +206,7 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
         gemini_file: Path to GEMINI.md
         module_name: Name of the module being installed
         skills: List of (skill_name, description, skill_path) tuples
+        project_path: Path to the project root (for relative paths)
 
     Returns:
         True if successful
@@ -168,11 +218,21 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
         gemini_file.parent.mkdir(parents=True, exist_ok=True)
         content = ""
 
+    project_root = Path(project_path)
+
     # Build the skills section for this module
     skills_block = f"\n### {module_name}\n\n"
     for skill_name, description, skill_path in skills:
-        skills_block += f"- **{skill_name}**: {description}\n"
-        skills_block += f"  - Full documentation: {skill_path / 'SKILL.md'}\n"
+        # Use relative path from project root for Gemini compatibility
+        try:
+            relative_path = skill_path.relative_to(project_root)
+            skill_md_path = relative_path / 'SKILL.md'
+        except ValueError:
+            # Fallback to absolute path if not relative to project
+            skill_md_path = skill_path / 'SKILL.md'
+        skills_block += f"#### {skill_name}\n"
+        skills_block += f"**When to use:** {description}\n"
+        skills_block += f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
 
     # Find or create the lola-managed section
     if GEMINI_START_MARKER in content and GEMINI_END_MARKER in content:
@@ -203,7 +263,7 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
         content = content[:start_idx] + new_section + content[end_idx:]
     else:
         # Add new lola section at end
-        lola_section = f"\n\n## Lola Skills\n\n{GEMINI_START_MARKER}\n{skills_block}{GEMINI_END_MARKER}\n"
+        lola_section = f"\n\n{GEMINI_HEADER}{GEMINI_START_MARKER}\n{skills_block}{GEMINI_END_MARKER}\n"
         content = content.rstrip() + lola_section
 
     gemini_file.write_text(content)
@@ -270,6 +330,13 @@ def install_to_assistant(
     Returns:
         Number of skills installed
     """
+    # Gemini CLI can only read files within the project workspace
+    if assistant == 'gemini-cli' and scope == 'user':
+        console.print(f"[yellow]{assistant}[/yellow] -> skipped (user scope not supported)")
+        console.print("  Gemini CLI can only read files within project directories.")
+        console.print("  Use: lola install <module> -a gemini-cli -s project <path>")
+        return 0
+
     try:
         skill_dest = get_assistant_skill_path(assistant, scope, project_path)
     except ValueError as e:
@@ -278,8 +345,12 @@ def install_to_assistant(
 
     console.print(f"[bold]{assistant}[/bold] -> {skill_dest}")
 
-    # Link module to local .lola/modules/
-    local_module_path = link_module_to_local(module, local_modules)
+    # Copy or link module to local .lola/modules/
+    # Gemini needs a copy since it can't follow symlinks outside workspace
+    if assistant == 'gemini-cli':
+        local_module_path = copy_module_to_local(module, local_modules)
+    else:
+        local_module_path = link_module_to_local(module, local_modules)
 
     # Generate assistant-specific files
     installed_skills = []
@@ -299,7 +370,7 @@ def install_to_assistant(
                 console.print(f"  [red]{skill_name}[/red] (source not found)")
 
         if gemini_skills:
-            update_gemini_md(skill_dest, module.name, gemini_skills)
+            update_gemini_md(skill_dest, module.name, gemini_skills, project_path)
     else:
         # Claude/Cursor: Generate individual files
         for skill_rel in module.skills:
@@ -581,13 +652,39 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
     console.print(f"[bold]Updating {len(installations)} installation(s)...[/bold]")
     console.print()
 
-    for inst in installations:
-        local_modules = get_local_modules_path(inst.project_path)
-        source_module = local_modules / inst.module_name
+    # Track stale installations to remove
+    stale_installations = []
 
-        if not source_module.exists():
-            console.print(f"[red]{inst.module_name}: source not found[/red]")
+    for inst in installations:
+        # Check if project path still exists for project-scoped installations
+        if inst.scope == 'project' and inst.project_path:
+            if not Path(inst.project_path).exists():
+                console.print(f"[red]{inst.module_name}[/red] ({inst.assistant})")
+                console.print(f"  [red]Project path no longer exists: {inst.project_path}[/red]")
+                console.print(f"  [dim]Run 'lola uninstall {inst.module_name}' to remove this stale entry[/dim]")
+                stale_installations.append(inst)
+                continue
+
+        # Get the global module to refresh from
+        global_module_path = MODULES_DIR / inst.module_name
+        if not global_module_path.exists():
+            console.print(f"[red]{inst.module_name}: not found in registry[/red]")
+            console.print(f"  [dim]Run 'lola mod add <source>' to re-add, or 'lola uninstall {inst.module_name}' to remove[/dim]")
             continue
+
+        global_module = Module.from_path(global_module_path)
+        if not global_module:
+            console.print(f"[red]{inst.module_name}: invalid module (no .lola/module.yml)[/red]")
+            continue
+
+        local_modules = get_local_modules_path(inst.project_path)
+
+        # Refresh the local copy/symlink from global module
+        # Gemini needs a fresh copy, others use symlinks
+        if inst.assistant == 'gemini-cli':
+            source_module = copy_module_to_local(global_module, local_modules)
+        else:
+            source_module = link_module_to_local(global_module, local_modules)
 
         try:
             skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
@@ -609,7 +706,7 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                 else:
                     console.print(f"  [red]{skill_name}[/red] (source not found)")
             if gemini_skills:
-                update_gemini_md(skill_dest, inst.module_name, gemini_skills)
+                update_gemini_md(skill_dest, inst.module_name, gemini_skills, inst.project_path)
         else:
             for skill_name in inst.skills:
                 source = source_module / skill_name
@@ -626,6 +723,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                     console.print(f"  [red]{skill_name}[/red] (source not found)")
 
     console.print()
+    if stale_installations:
+        console.print(f"[yellow]Found {len(stale_installations)} stale installation(s)[/yellow]")
     console.print("[bold green]Update complete[/bold green]")
 
 

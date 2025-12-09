@@ -4,11 +4,13 @@ Lola manages and installs AI skills across different AI assistants. Package your
 
 ## Supported AI Assistants
 
-| Assistant | Skill Format | Location |
-|-----------|--------------|----------|
-| Claude Code | `SKILL.md` directories | `.claude/skills/<skill>/` |
-| Cursor | `.mdc` files | `.cursor/rules/<skill>.mdc` |
-| Gemini CLI | Entries in `GEMINI.md` | `.gemini/GEMINI.md` |
+| Assistant | Skill Format | Location | Scope |
+|-----------|--------------|----------|-------|
+| Claude Code | `SKILL.md` directories | `.claude/skills/<skill>/` | user, project |
+| Cursor | `.mdc` files | `.cursor/rules/<skill>.mdc` | user, project |
+| Gemini CLI | Entries in `GEMINI.md` | `GEMINI.md` | project only |
+
+> **Note:** Gemini CLI can only read files within the project workspace, so it only supports project-scope installs.
 
 ## Installation
 
