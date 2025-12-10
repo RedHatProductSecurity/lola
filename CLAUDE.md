@@ -12,6 +12,12 @@ Lola is an AI Skills Package Manager that lets you write AI context/skills once 
 # Install in development mode
 uv pip install -e .
 
+# Run tests
+pytest                     # All tests
+pytest tests/test_cli_mod.py  # Single test file
+pytest -k test_add         # Tests matching pattern
+pytest --cov=src/lola      # With coverage
+
 # Run the CLI
 lola --help
 lola mod ls
@@ -24,20 +30,22 @@ lola install <module> -a claude-code
 
 1. **Module Registration**: `lola mod add <source>` fetches modules (from git, zip, tar, or folder) to `~/.lola/modules/`
 2. **Installation**: `lola install <module>` copies modules to project's `.lola/modules/` and generates assistant-specific files:
-   - Claude Code: `.claude/skills/<skill>/SKILL.md` (native format, no conversion)
-   - Cursor: `.cursor/rules/<skill>.mdc` (converted with frontmatter rewrite)
+   - Claude Code: `.claude/skills/<module>-<skill>/SKILL.md` (native format, no conversion)
+   - Cursor: `.cursor/rules/<module>-<skill>.mdc` (converted with frontmatter rewrite)
    - Gemini CLI: `GEMINI.md` (entries appended to managed section between markers)
 3. **Updates**: `lola update` regenerates assistant files from source modules
 
 ### Key Source Files
 
 - `src/lola/main.py` - CLI entry point, registers all commands
-- `src/lola/mod.py` - Module management: add, rm, ls, info, init, update
-- `src/lola/install.py` - Install/uninstall commands, generates assistant-specific files
+- `src/lola/cli/mod.py` - Module management: add, rm, ls, info, init, update
+- `src/lola/cli/install.py` - Install/uninstall commands, generates assistant-specific files
 - `src/lola/models.py` - Data models: Module, Skill, Installation, InstallationRegistry
 - `src/lola/config.py` - Paths and assistant configurations (LOLA_HOME, MODULES_DIR, ASSISTANTS dict)
-- `src/lola/converters.py` - Format conversion (skill_to_cursor_mdc, parse_skill_frontmatter)
+- `src/lola/converters.py` - Skill format conversion (skill_to_cursor_mdc, parse_skill_frontmatter)
+- `src/lola/command_converters.py` - Command format conversion (command_to_gemini for TOML)
 - `src/lola/sources.py` - Source fetching (git clone, zip/tar extraction, folder copy)
+- `src/lola/frontmatter.py` - YAML frontmatter parsing shared by converters
 
 ### Module Structure
 
@@ -61,6 +69,16 @@ description: When to use this skill
 # Skill content...
 ```
 
+### Slash Commands
+
+Modules can include slash commands in `commands/` directory. Each command is a markdown file with frontmatter:
+- `$ARGUMENTS` - placeholder for all arguments as a single string
+- `$1`, `$2`, etc. - positional argument placeholders
+
+Commands are converted to assistant-native formats:
+- Claude/Cursor: Markdown pass-through to `.claude/commands/` or `.cursor/commands/`
+- Gemini: TOML format with `{{args}}` substitution to `.gemini/commands/`
+
 ### Installation Registry
 
 `~/.lola/installed.yml` tracks all installations with module name, assistant, scope, project path, and installed skills.
@@ -68,5 +86,12 @@ description: When to use this skill
 ### Assistant Scope Limitations
 
 - Claude Code: supports both user and project scope
-- Cursor: project scope only (user rules not supported)
-- Gemini CLI: project scope only (can only read files within workspace)
+- Cursor: project scope only for skills (commands work in both scopes)
+- Gemini CLI: project scope only for skills (commands work in both scopes)
+
+### Testing Patterns
+
+Tests use Click's `CliRunner` for CLI testing. Key fixtures in `tests/conftest.py`:
+- `mock_lola_home` - patches LOLA_HOME and MODULES_DIR to temp directory
+- `sample_module` - creates a complete test module with skill and command
+- `registered_module` - sample_module copied into mock_lola_home
