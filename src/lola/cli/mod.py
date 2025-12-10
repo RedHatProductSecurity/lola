@@ -11,7 +11,6 @@ import click
 
 from lola.config import MODULES_DIR, INSTALLED_FILE, get_assistant_skill_path
 from lola.core.generator import remove_gemini_skills
-from lola.layout import console
 from lola.models import Module, InstallationRegistry
 from lola.sources import (
     fetch_module,
@@ -22,6 +21,7 @@ from lola.sources import (
     validate_module_name,
 )
 from lola.utils import ensure_lola_dirs, get_local_modules_path
+from lola import ui
 
 
 def list_registered_modules() -> list[Module]:
@@ -89,18 +89,18 @@ def add_module(source: str, module_name: str):
 
     source_type = detect_source_type(source)
     if source_type == 'unknown':
-        console.print(f"[red]Cannot determine source type for: {source}[/red]")
-        console.print("Supported sources: git repos, .zip files, .tar/.tar.gz files, or local folders")
+        ui.error(f"Cannot determine source type for: {source}")
+        ui.hint("Supported: git repos, .zip files, .tar/.tar.gz files, or local folders")
         raise SystemExit(1)
 
-    console.print(f"[bold]Adding module from {source_type} source...[/bold]")
+    ui.info(f"Adding module from {source_type}...")
 
     try:
         module_path = fetch_module(source, MODULES_DIR)
         # Save source info for future updates
         save_source_info(module_path, source, source_type)
     except Exception as e:
-        console.print(f"[red]Failed to fetch module: {e}[/red]")
+        ui.error(f"Failed to fetch module: {e}")
         raise SystemExit(1)
 
     # Rename if name override provided
@@ -109,7 +109,7 @@ def add_module(source: str, module_name: str):
         try:
             module_name = validate_module_name(module_name)
         except ValueError as e:
-            console.print(f"[red]{e}[/red]")
+            ui.error(str(e))
             # Clean up the fetched module
             if module_path.exists():
                 shutil.rmtree(module_path)
@@ -124,39 +124,37 @@ def add_module(source: str, module_name: str):
     # Validate module structure
     module = Module.from_path(module_path)
     if not module:
-        console.print(f"[yellow]Warning: No valid .lola/module.yml found[/yellow]")
-        console.print(f"Module added to: {module_path}")
-        console.print("Create a .lola/module.yml to define skills for installation.")
+        ui.warning("No valid .lola/module.yml found")
+        ui.kv("Path", str(module_path))
+        ui.hint("Create a .lola/module.yml to define skills for installation")
         return
 
     is_valid, errors = module.validate()
     if not is_valid:
-        console.print(f"[yellow]Module has validation warnings:[/yellow]")
+        ui.warning("Module has validation issues:")
         for err in errors:
-            console.print(f"  - {err}")
+            ui.item(err)
 
-    console.print()
-    console.print(f"[green]Module '{module.name}' added successfully![/green]")
-    console.print(f"  Path: {module_path}")
-    console.print(f"  Version: {module.version}")
-    console.print(f"  Skills: {len(module.skills)}")
-    console.print(f"  Commands: {len(module.commands)}")
+    ui.blank()
+    ui.success(f"Added {ui.module_name(module.name)}")
+    ui.kv("Path", str(module_path))
+    ui.kv("Version", module.version)
+    ui.kv("Skills", str(len(module.skills)))
+    ui.kv("Commands", str(len(module.commands)))
 
     if module.skills:
-        console.print()
-        console.print("Available skills:")
+        ui.blank()
+        ui.subheader("Skills")
         for skill in module.skills:
-            console.print(f"  - {skill}")
+            ui.item(skill)
 
     if module.commands:
-        console.print()
-        console.print("Available commands:")
+        ui.blank()
+        ui.subheader("Commands")
         for cmd in module.commands:
-            console.print(f"  - /{module.name}-{cmd}")
+            ui.item(f"/{module.name}-{cmd}")
 
-    console.print()
-    console.print("Next steps:")
-    console.print(f"  lola install {module.name} -a <assistant> -s <scope>")
+    ui.next_steps([f"lola install {module.name} -a <assistant> -s <scope>"])
 
 
 @mod.command(name='init')
@@ -204,7 +202,7 @@ def init_module(name: str | None, description: str, skill_name: str, no_skill: b
         # Create a new subdirectory
         module_dir = Path.cwd() / name
         if module_dir.exists():
-            console.print(f"[red]Directory '{module_dir}' already exists[/red]")
+            ui.error(f"Directory already exists: {module_dir}")
             raise SystemExit(1)
         module_dir.mkdir(parents=True)
         module_name = name
@@ -215,7 +213,7 @@ def init_module(name: str | None, description: str, skill_name: str, no_skill: b
 
     lola_dir = module_dir / '.lola'
     if lola_dir.exists():
-        console.print(f"[red]Module already initialized (.lola/ exists)[/red]")
+        ui.error("Module already initialized (.lola/ exists)")
         raise SystemExit(1)
 
     lola_dir.mkdir()
@@ -286,35 +284,28 @@ Use $ARGUMENTS to reference any arguments passed to the command.
 '''
         (commands_dir / f'{command_name}.md').write_text(command_content)
 
-    console.print(f"[green]Initialized module '{module_name}'[/green]")
-    console.print(f"  Path: {module_dir}")
-    console.print()
-    console.print("[bold]Structure:[/bold]")
-    console.print(f"  {module_name}/")
-    console.print(f"    .lola/")
-    console.print(f"      module.yml")
-    if skill_name:
-        console.print(f"    {skill_name}/")
-        console.print(f"      SKILL.md")
-    if command_name:
-        console.print(f"    commands/")
-        console.print(f"      {command_name}.md")
+    ui.success(f"Initialized module [cyan]{module_name}[/cyan]")
+    ui.kv("Path", str(module_dir))
 
-    console.print()
-    console.print("[bold]Next steps:[/bold]")
-    step = 1
+    ui.blank()
+    ui.subheader("Structure")
+    ui.module_tree(
+        module_name,
+        skills=[skill_name] if skill_name else None,
+        commands=[command_name] if command_name else None
+    )
+
+    steps = []
     if skill_name:
-        console.print(f"  {step}. Edit {skill_name}/SKILL.md with your skill content")
-        step += 1
+        steps.append(f"Edit {skill_name}/SKILL.md with your skill content")
     if command_name:
-        console.print(f"  {step}. Edit commands/{command_name}.md with your command prompt")
-        step += 1
+        steps.append(f"Edit commands/{command_name}.md with your command prompt")
     if not skill_name and not command_name:
-        console.print(f"  {step}. Create skill directories with SKILL.md files or commands/ directory")
-        step += 1
-        console.print(f"  {step}. Add skill/command names to .lola/module.yml")
-        step += 1
-    console.print(f"  {step}. lola mod add {module_dir}")
+        steps.append("Create skill directories with SKILL.md files or commands/ directory")
+        steps.append("Add skill/command names to .lola/module.yml")
+    steps.append(f"lola mod add {module_dir}")
+
+    ui.next_steps(steps)
 
 
 @mod.command(name='rm')
@@ -336,8 +327,8 @@ def remove_module(module_name: str, force: bool):
     module_path = MODULES_DIR / module_name
 
     if not module_path.exists():
-        console.print(f"[red]Module '{module_name}' not found in registry[/red]")
-        console.print(f"Use 'lola mod ls' to see available modules")
+        ui.error(f"Module '{module_name}' not found")
+        ui.hint("Use 'lola mod ls' to see available modules")
         raise SystemExit(1)
 
     # Check for installations
@@ -345,17 +336,19 @@ def remove_module(module_name: str, force: bool):
     installations = registry.find(module_name)
 
     if not force:
-        console.print(f"This will remove module '{module_name}' from the registry.")
-        console.print(f"Path: {module_path}")
+        ui.console.print(f"Remove module [cyan]{module_name}[/cyan] from registry?")
+        ui.kv("Path", str(module_path))
         if installations:
-            console.print(f"[yellow]This will also uninstall from {len(installations)} location(s):[/yellow]")
+            ui.blank()
+            ui.warning(f"Will also uninstall from {len(installations)} location(s):")
             for inst in installations:
-                loc = f"  - {inst.assistant}/{inst.scope}"
+                loc = f"{inst.assistant}/{inst.scope}"
                 if inst.project_path:
                     loc += f" ({inst.project_path})"
-                console.print(loc)
+                ui.item(loc)
+        ui.blank()
         if not click.confirm("Continue?"):
-            console.print("[yellow]Cancelled[/yellow]")
+            ui.warning("Cancelled")
             return
 
     # Uninstall from all locations
@@ -363,28 +356,28 @@ def remove_module(module_name: str, force: bool):
         try:
             skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
         except ValueError:
-            console.print(f"[red]Cannot determine path for {inst.assistant}/{inst.scope}[/red]")
+            ui.error(f"Cannot determine path for {inst.assistant}/{inst.scope}")
             continue
 
         # Remove generated files
         if inst.assistant == 'gemini-cli':
             # Remove entries from GEMINI.md
             if remove_gemini_skills(skill_dest, module_name):
-                console.print(f"  [dim]Removed from: {skill_dest}[/dim]")
+                ui.dim(f"  Removed from: {skill_dest}")
         elif inst.assistant == 'cursor':
             # Remove .mdc files
-            for skill_name in inst.skills:
-                mdc_file = skill_dest / f'{skill_name}.mdc'
+            for skill in inst.skills:
+                mdc_file = skill_dest / f'{skill}.mdc'
                 if mdc_file.exists():
                     mdc_file.unlink()
-                    console.print(f"  [dim]Removed: {mdc_file}[/dim]")
+                    ui.dim(f"  Removed: {mdc_file}")
         else:
             # Remove skill directories (claude-code)
-            for skill_name in inst.skills:
-                skill_dir = skill_dest / skill_name
+            for skill in inst.skills:
+                skill_dir = skill_dest / skill
                 if skill_dir.exists():
                     shutil.rmtree(skill_dir)
-                    console.print(f"  [dim]Removed: {skill_dir}[/dim]")
+                    ui.dim(f"  Removed: {skill_dir}")
 
         # Remove source files from project .lola/modules/ if applicable
         if inst.project_path:
@@ -392,7 +385,7 @@ def remove_module(module_name: str, force: bool):
             source_module = local_modules / module_name
             if source_module.exists():
                 shutil.rmtree(source_module)
-                console.print(f"  [dim]Removed source: {source_module}[/dim]")
+                ui.dim(f"  Removed source: {source_module}")
 
         # Remove from registry
         registry.remove(
@@ -404,7 +397,7 @@ def remove_module(module_name: str, force: bool):
 
     # Remove from global registry
     shutil.rmtree(module_path)
-    console.print(f"[green]Module '{module_name}' removed from registry[/green]")
+    ui.success(f"Removed {ui.module_name(module_name)}")
 
 
 @mod.command(name='ls')
@@ -424,34 +417,35 @@ def list_modules(verbose: bool):
     modules = list_registered_modules()
 
     if not modules:
-        console.print("[yellow]No modules found in registry[/yellow]")
-        console.print()
-        console.print("Add modules with:")
-        console.print("  lola mod add <git-url|zip-file|tar-file|folder>")
+        ui.warning("No modules found")
+        ui.blank()
+        ui.hint("Add modules with: lola mod add <git-url|zip-file|tar-file|folder>")
         return
 
-    console.print(f"[bold]Registered modules ({len(modules)}):[/bold]")
-    console.print()
+    ui.header(f"Modules ({len(modules)})")
+    ui.blank()
 
     for module in modules:
-        console.print(f"[cyan]{module.name}[/cyan] (v{module.version})")
+        ui.console.print(f"{ui.module_name(module.name, module.version)}")
 
         if module.description:
-            console.print(f"  {module.description}")
+            ui.console.print(f"  {module.description}")
 
-        console.print(f"  Skills: {len(module.skills)}, Commands: {len(module.commands)}")
+        skills_str = ui.count_summary("skills", len(module.skills))
+        cmds_str = ui.count_summary("commands", len(module.commands))
+        ui.console.print(f"  [dim]{skills_str}, {cmds_str}[/dim]")
 
         if verbose:
             if module.skills:
-                console.print("  Skills:")
+                ui.console.print("  [bold]Skills:[/bold]")
                 for skill in module.skills:
-                    console.print(f"    - {skill}")
+                    ui.item(skill, indent=2)
             if module.commands:
-                console.print("  Commands:")
+                ui.console.print("  [bold]Commands:[/bold]")
                 for cmd in module.commands:
-                    console.print(f"    - /{module.name}-{cmd}")
+                    ui.item(f"/{module.name}-{cmd}", indent=2)
 
-        console.print()
+        ui.blank()
 
 
 @mod.command(name='info')
@@ -464,81 +458,80 @@ def module_info(module_name: str):
 
     module_path = MODULES_DIR / module_name
     if not module_path.exists():
-        console.print(f"[red]Module '{module_name}' not found[/red]")
+        ui.error(f"Module '{module_name}' not found")
         raise SystemExit(1)
 
     module = Module.from_path(module_path)
     if not module:
-        console.print(f"[yellow]No valid .lola/module.yml found in '{module_name}'[/yellow]")
-        console.print(f"Path: {module_path}")
+        ui.warning(f"No valid .lola/module.yml found in '{module_name}'")
+        ui.kv("Path", str(module_path))
         return
 
-    console.print(f"[bold cyan]{module.name}[/bold cyan]")
-    console.print()
-    console.print(f"  Version: {module.version}")
-    console.print(f"  Path: {module.path}")
+    ui.console.print(f"[bold cyan]{module.name}[/bold cyan]")
+    ui.blank()
+    ui.kv("Version", module.version)
+    ui.kv("Path", str(module.path))
 
     if module.description:
-        console.print(f"  Description: {module.description}")
+        ui.kv("Description", module.description)
 
-    console.print()
-    console.print("[bold]Skills:[/bold]")
+    ui.blank()
+    ui.subheader("Skills")
 
     if not module.skills:
-        console.print("  (no skills defined)")
+        ui.console.print("  [dim](none)[/dim]")
     else:
+        from lola.frontmatter import parse_file
         for skill_rel in module.skills:
             skill_path = module.path / skill_rel
             if skill_path.exists():
-                console.print(f"  [green]{skill_rel}[/green]")
+                ui.item_result(skill_rel, ok=True)
                 skill_file = skill_path / 'SKILL.md'
                 if skill_file.exists():
-                    # Show first line of SKILL.md as description
-                    content = skill_file.read_text().strip()
-                    lines = content.split('\n')
-                    for line in lines:
-                        if line.strip() and not line.startswith('#') and not line.startswith('---'):
-                            console.print(f"    {line.strip()[:60]}")
-                            break
+                    # Show description from frontmatter
+                    frontmatter, _ = parse_file(skill_file)
+                    desc = frontmatter.get('description', '')
+                    if desc:
+                        ui.console.print(f"    [dim]{desc[:60]}[/dim]")
             else:
-                console.print(f"  [red]{skill_rel}[/red] (not found)")
+                ui.item_result(skill_rel, ok=False, note="not found")
 
-    console.print()
-    console.print("[bold]Commands:[/bold]")
+    ui.blank()
+    ui.subheader("Commands")
 
     if not module.commands:
-        console.print("  (no commands defined)")
+        ui.console.print("  [dim](none)[/dim]")
     else:
         from lola.command_converters import parse_command_frontmatter
         commands_dir = module.path / 'commands'
         for cmd_name in module.commands:
             cmd_path = commands_dir / f'{cmd_name}.md'
             if cmd_path.exists():
-                console.print(f"  [green]/{module.name}-{cmd_name}[/green]")
+                ui.item_result(f"/{module.name}-{cmd_name}", ok=True)
                 # Show description from frontmatter
                 content = cmd_path.read_text()
                 frontmatter, _ = parse_command_frontmatter(content)
                 desc = frontmatter.get('description', '')
                 if desc:
-                    console.print(f"    {desc[:60]}")
+                    ui.console.print(f"    [dim]{desc[:60]}[/dim]")
             else:
-                console.print(f"  [red]{cmd_name}[/red] (not found)")
+                ui.item_result(cmd_name, ok=False, note="not found")
 
     # Source info
     source_info = load_source_info(module.path)
     if source_info:
-        console.print()
-        console.print("[bold]Source:[/bold]")
-        console.print(f"  Type: {source_info.get('type', 'unknown')}")
-        console.print(f"  Location: {source_info.get('source', 'unknown')}")
+        ui.blank()
+        ui.subheader("Source")
+        ui.kv("Type", source_info.get('type', 'unknown'))
+        ui.kv("Location", source_info.get('source', 'unknown'))
 
     # Validation status
     is_valid, errors = module.validate()
     if not is_valid:
-        console.print()
-        console.print("[yellow]Validation issues:[/yellow]")
+        ui.blank()
+        ui.warning("Validation issues:")
         for err in errors:
-            console.print(f"  - {err}")
+            ui.item(err)
 
 
 @mod.command(name='update')
@@ -562,57 +555,57 @@ def update_module_cmd(module_name: str | None):
         # Update specific module
         module_path = MODULES_DIR / module_name
         if not module_path.exists():
-            console.print(f"[red]Module '{module_name}' not found[/red]")
+            ui.error(f"Module '{module_name}' not found")
             raise SystemExit(1)
 
-        console.print(f"[bold]Updating '{module_name}'...[/bold]")
+        ui.info(f"Updating {ui.module_name(module_name)}...")
         success, message = update_module(module_path)
 
         if success:
-            console.print(f"[green]{message}[/green]")
+            ui.success(message)
 
             # Show updated module info
             module = Module.from_path(module_path)
             if module:
-                console.print(f"  Version: {module.version}")
-                console.print(f"  Skills: {len(module.skills)}")
+                ui.kv("Version", module.version)
+                ui.kv("Skills", str(len(module.skills)))
 
-            console.print()
-            console.print("Run 'lola update' to regenerate assistant files.")
+            ui.blank()
+            ui.hint("Run 'lola update' to regenerate assistant files")
         else:
-            console.print(f"[red]{message}[/red]")
+            ui.error(message)
             raise SystemExit(1)
     else:
         # Update all modules
         modules = list_registered_modules()
 
         if not modules:
-            console.print("[yellow]No modules to update[/yellow]")
+            ui.warning("No modules to update")
             return
 
-        console.print(f"[bold]Updating {len(modules)} module(s)...[/bold]")
-        console.print()
+        ui.info(f"Updating {len(modules)} module(s)...")
+        ui.blank()
 
         updated = 0
         failed = 0
 
         for module in modules:
-            console.print(f"[cyan]{module.name}[/cyan]")
+            ui.console.print(f"  {ui.module_name(module.name)}")
             success, message = update_module(module.path)
 
             if success:
-                console.print(f"  [green]{message}[/green]")
+                ui.item_result(message, ok=True, indent=2)
                 updated += 1
             else:
-                console.print(f"  [red]{message}[/red]")
+                ui.item_result(message, ok=False, indent=2)
                 failed += 1
 
-        console.print()
+        ui.blank()
         if updated > 0:
-            console.print(f"[green]Updated {updated} module(s)[/green]")
+            ui.success(f"Updated {ui.count_summary('modules', updated)}")
         if failed > 0:
-            console.print(f"[yellow]Failed to update {failed} module(s)[/yellow]")
+            ui.warning(f"Failed to update {ui.count_summary('modules', failed)}")
 
         if updated > 0:
-            console.print()
-            console.print("Run 'lola update' to regenerate assistant files.")
+            ui.blank()
+            ui.hint("Run 'lola update' to regenerate assistant files")

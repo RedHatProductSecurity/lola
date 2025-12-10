@@ -23,8 +23,8 @@ from lola.core.generator import (
     get_skill_description,
     update_gemini_md,
 )
-from lola.layout import console
 from lola.models import Installation, InstallationRegistry, Module
+from lola import ui
 
 
 def get_registry() -> InstallationRegistry:
@@ -72,6 +72,7 @@ def install_to_assistant(
     project_path: Optional[str],
     local_modules: Path,
     registry: InstallationRegistry,
+    verbose: bool = False,
 ) -> int:
     """
     Install a module's skills and commands to a specific assistant.
@@ -83,6 +84,7 @@ def install_to_assistant(
         project_path: Path to project (required for project scope)
         local_modules: Path to local .lola/modules/
         registry: Installation registry
+        verbose: Show detailed per-item output
 
     Returns:
         Number of skills + commands installed
@@ -92,32 +94,28 @@ def install_to_assistant(
 
     installed_skills = []
     installed_commands = []
+    failed_skills = []
+    failed_commands = []
 
     # Skills have scope restrictions for some assistants
-    skills_skipped = False
+    skills_skipped_reason = None
     if module.skills:
         # Gemini CLI can only read skill files within the project workspace
         if assistant == 'gemini-cli' and scope == 'user':
-            console.print(f"[yellow]{assistant}[/yellow] skills -> skipped (user scope not supported)")
-            console.print("  Gemini CLI skills can only read files within project directories.")
-            skills_skipped = True
+            skills_skipped_reason = "user scope not supported"
 
         # Cursor only supports project-level rules for skills
         if assistant == 'cursor' and scope == 'user':
-            console.print(f"[yellow]{assistant}[/yellow] skills -> skipped (user scope not supported)")
-            console.print("  Cursor only supports project-level rules for skills.")
-            skills_skipped = True
+            skills_skipped_reason = "user scope not supported"
 
-        if not skills_skipped:
+        if not skills_skipped_reason:
             try:
                 skill_dest = get_assistant_skill_path(assistant, scope, project_path)
             except ValueError as e:
-                console.print(f"[red]{e}[/red]")
+                ui.error(str(e))
                 skill_dest = None
 
             if skill_dest:
-                console.print(f"[bold]{assistant}[/bold] skills -> {skill_dest}")
-
                 if assistant == 'gemini-cli':
                     # Gemini: Add entries to GEMINI.md file
                     gemini_skills = []
@@ -129,9 +127,8 @@ def install_to_assistant(
                             description = get_skill_description(source)
                             gemini_skills.append((skill_name, description, source))
                             installed_skills.append(prefixed_name)
-                            console.print(f"  [green]{prefixed_name}[/green]")
                         else:
-                            console.print(f"  [red]{skill_name}[/red] (source not found)")
+                            failed_skills.append(skill_name)
 
                     if gemini_skills:
                         update_gemini_md(skill_dest, module.name, gemini_skills, project_path)
@@ -150,22 +147,19 @@ def install_to_assistant(
                             success = generate_claude_skill(source, dest)
 
                         if success:
-                            console.print(f"  [green]{prefixed_name}[/green]")
                             installed_skills.append(prefixed_name)
                         else:
-                            console.print(f"  [red]{skill_name}[/red] (source not found)")
+                            failed_skills.append(skill_name)
 
     # Commands support all scopes for all assistants
     if module.commands:
         try:
             command_dest = get_assistant_command_path(assistant, scope, project_path)
         except ValueError as e:
-            console.print(f"[red]Commands: {e}[/red]")
+            ui.error(f"Commands: {e}")
             command_dest = None
 
         if command_dest:
-            console.print(f"[bold]{assistant}[/bold] commands -> {command_dest}")
-
             commands_dir = local_module_path / 'commands'
             for cmd_name in module.commands:
                 source = commands_dir / f'{cmd_name}.md'
@@ -178,10 +172,29 @@ def install_to_assistant(
                     success = generate_claude_command(source, command_dest, cmd_name, module.name)
 
                 if success:
-                    console.print(f"  [green]/{module.name}-{cmd_name}[/green]")
                     installed_commands.append(cmd_name)
                 else:
-                    console.print(f"  [red]{cmd_name}[/red] (source not found)")
+                    failed_commands.append(cmd_name)
+
+    # Print compact summary for this assistant
+    if skills_skipped_reason:
+        ui.assistant_summary(assistant, skipped_reason=skills_skipped_reason)
+    elif installed_skills or installed_commands:
+        ui.assistant_summary(assistant, skills=installed_skills, commands=installed_commands)
+
+        # In verbose mode, list all items after the summary
+        if verbose:
+            for skill in installed_skills:
+                ui.item_result(skill, ok=True, indent=2)
+            for cmd in installed_commands:
+                ui.item_result(f"/{module.name}-{cmd}", ok=True, indent=2)
+
+        # Show failures (always show failures, not just in verbose mode)
+        if failed_skills or failed_commands:
+            for skill in failed_skills:
+                ui.item_result(skill, ok=False, note="source not found", indent=2)
+            for cmd in failed_commands:
+                ui.item_result(cmd, ok=False, note="source not found", indent=2)
 
     # Record installation
     if installed_skills or installed_commands:

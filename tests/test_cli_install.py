@@ -264,7 +264,7 @@ class TestUpdateCmd:
             result = cli_runner.invoke(update_cmd, ['mymodule'])
 
         assert result.exit_code == 0
-        assert 'Removed orphan' in result.output
+        assert 'orphaned' in result.output.lower()
         assert not orphan_cmd.exists(), "Orphaned command file should be removed"
 
     def test_update_removes_orphaned_skills(self, cli_runner, tmp_path):
@@ -323,7 +323,7 @@ class TestUpdateCmd:
             result = cli_runner.invoke(update_cmd, ['mymodule'])
 
         assert result.exit_code == 0
-        assert 'Removed orphan' in result.output
+        assert 'orphaned' in result.output.lower()
         assert not orphan_skill.exists(), "Orphaned skill directory should be removed"
 
     def test_update_updates_registry_after_cleanup(self, cli_runner, tmp_path):
@@ -436,7 +436,7 @@ class TestListInstalledCmd:
         assert result.exit_code == 0
         assert 'module1' in result.output
         assert 'module2' in result.output
-        assert 'Installed modules (2)' in result.output
+        assert 'Installed (2 modules)' in result.output
 
     def test_list_filter_by_assistant(self, cli_runner, tmp_path):
         """Filter list by assistant."""
@@ -463,4 +463,4 @@ class TestListInstalledCmd:
         assert result.exit_code == 0
         assert 'module1' in result.output
         assert 'module2' not in result.output
-        assert 'Installed modules (1)' in result.output
+        assert 'Installed (1 module' in result.output

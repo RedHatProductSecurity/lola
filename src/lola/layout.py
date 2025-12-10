@@ -1,7 +1,10 @@
 """
 layout defines the display format of parsed data
+
+This module re-exports the console from ui.py for backward compatibility.
+New code should import from lola.ui directly.
 """
 
-from rich.console import Console
+from lola.ui import console
 
-console = Console(soft_wrap=True, legacy_windows=False)
+__all__ = ["console"]

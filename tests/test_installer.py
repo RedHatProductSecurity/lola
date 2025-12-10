@@ -115,7 +115,7 @@ class TestInstallToAssistant:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.console_mock = MagicMock()
+        self.ui_mock = MagicMock()
 
     def create_test_module(self, tmp_path, name='testmod', skills=None, commands=None):
         """Helper to create a test module structure."""
@@ -169,7 +169,7 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / 'installed.yml')
         skill_dest = tmp_path / 'skills'
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
              patch('lola.core.installer.get_assistant_command_path', return_value=None):
 
@@ -194,7 +194,7 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / 'installed.yml')
         command_dest = tmp_path / 'commands'
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path', return_value=None), \
              patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
 
@@ -218,7 +218,7 @@ Do {cmd}.
         local_modules = tmp_path / '.lola' / 'modules'
         registry = InstallationRegistry(tmp_path / 'installed.yml')
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path') as skill_path_mock, \
              patch('lola.core.installer.get_assistant_command_path', return_value=None):
 
@@ -242,7 +242,7 @@ Do {cmd}.
         local_modules = tmp_path / '.lola' / 'modules'
         registry = InstallationRegistry(tmp_path / 'installed.yml')
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path') as skill_path_mock, \
              patch('lola.core.installer.get_assistant_command_path', return_value=None):
 
@@ -268,7 +268,7 @@ Do {cmd}.
         skill_dest = tmp_path / 'skills'
         command_dest = tmp_path / 'commands'
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
              patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
 
@@ -305,7 +305,7 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / 'installed.yml')
         skill_dest = tmp_path / 'skills'
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
              patch('lola.core.installer.get_assistant_command_path', return_value=None):
 
@@ -337,7 +337,7 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / 'installed.yml')
         command_dest = tmp_path / 'commands'
 
-        with patch('lola.core.installer.console', self.console_mock), \
+        with patch('lola.core.installer.ui', self.ui_mock), \
              patch('lola.core.installer.get_assistant_skill_path', return_value=None), \
              patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
 

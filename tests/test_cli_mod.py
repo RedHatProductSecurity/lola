@@ -48,7 +48,7 @@ class TestModAdd:
             result = cli_runner.invoke(mod, ['add', str(sample_module)])
 
         assert result.exit_code == 0
-        assert 'added successfully' in result.output
+        assert 'Added' in result.output
         assert (modules_dir / 'sample-module').exists()
 
     def test_add_with_name_override(self, cli_runner, sample_module, tmp_path):
@@ -406,7 +406,7 @@ class TestModInfoAdvanced:
             result = cli_runner.invoke(mod, ['info', 'sample-module'])
 
         assert result.exit_code == 0
-        assert 'Source:' in result.output
+        assert 'Source' in result.output
         assert 'git' in result.output
 
     def test_info_invalid_module(self, cli_runner, tmp_path):
