@@ -204,6 +204,188 @@ class TestUpdateCmd:
         assert result.exit_code == 0
         assert 'Update complete' in result.output
 
+    def test_update_removes_orphaned_commands(self, cli_runner, tmp_path):
+        """Update removes orphaned command files when command removed from module."""
+        modules_dir = tmp_path / '.lola' / 'modules'
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / '.lola' / 'installed.yml'
+
+        # Create a module with only one command (cmd1 removed)
+        module_dir = modules_dir / 'mymodule'
+        module_dir.mkdir()
+        lola_dir = module_dir / '.lola'
+        lola_dir.mkdir()
+        manifest = {
+            'type': 'lola/module',
+            'version': '1.0.0',
+            'description': 'Test module',
+            'skills': ['skill1'],
+            'commands': ['cmd2'],  # cmd1 was removed
+        }
+        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
+
+        # Create skill
+        skill_dir = module_dir / 'skill1'
+        skill_dir.mkdir()
+        (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
+
+        # Create command
+        commands_dir = module_dir / 'commands'
+        commands_dir.mkdir()
+        (commands_dir / 'cmd2.md').write_text('---\ndescription: Cmd 2\n---\nContent')
+
+        # Create registry with old installation (had cmd1 and cmd2)
+        registry = InstallationRegistry(installed_file)
+        inst = Installation(
+            module_name='mymodule',
+            assistant='claude-code',
+            scope='user',
+            skills=['mymodule-skill1'],
+            commands=['cmd1', 'cmd2'],  # cmd1 is orphaned
+        )
+        registry.add(inst)
+
+        # Create mock paths with orphaned file
+        skill_dest = tmp_path / 'skills'
+        skill_dest.mkdir()
+        command_dest = tmp_path / 'commands'
+        command_dest.mkdir()
+
+        # Create orphaned command file
+        orphan_cmd = command_dest / 'mymodule-cmd1.md'
+        orphan_cmd.write_text('orphaned content')
+
+        with patch('lola.cli.install.MODULES_DIR', modules_dir), \
+             patch('lola.cli.install.ensure_lola_dirs'), \
+             patch('lola.cli.install.get_registry', return_value=registry), \
+             patch('lola.cli.install.get_local_modules_path', return_value=modules_dir), \
+             patch('lola.cli.install.get_assistant_skill_path', return_value=skill_dest), \
+             patch('lola.cli.install.get_assistant_command_path', return_value=command_dest):
+            result = cli_runner.invoke(update_cmd, ['mymodule'])
+
+        assert result.exit_code == 0
+        assert 'Removed orphan' in result.output
+        assert not orphan_cmd.exists(), "Orphaned command file should be removed"
+
+    def test_update_removes_orphaned_skills(self, cli_runner, tmp_path):
+        """Update removes orphaned skill files when skill removed from module."""
+        modules_dir = tmp_path / '.lola' / 'modules'
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / '.lola' / 'installed.yml'
+
+        # Create a module with only skill1 (skill2 removed)
+        module_dir = modules_dir / 'mymodule'
+        module_dir.mkdir()
+        lola_dir = module_dir / '.lola'
+        lola_dir.mkdir()
+        manifest = {
+            'type': 'lola/module',
+            'version': '1.0.0',
+            'description': 'Test module',
+            'skills': ['skill1'],  # skill2 was removed
+            'commands': [],
+        }
+        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
+
+        # Create skill
+        skill_dir = module_dir / 'skill1'
+        skill_dir.mkdir()
+        (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
+
+        # Create registry with old installation (had skill1 and skill2)
+        registry = InstallationRegistry(installed_file)
+        inst = Installation(
+            module_name='mymodule',
+            assistant='claude-code',
+            scope='user',
+            skills=['mymodule-skill1', 'mymodule-skill2'],  # skill2 is orphaned
+            commands=[],
+        )
+        registry.add(inst)
+
+        # Create mock paths with orphaned file
+        skill_dest = tmp_path / 'skills'
+        skill_dest.mkdir()
+        command_dest = tmp_path / 'commands'
+        command_dest.mkdir()
+
+        # Create orphaned skill directory
+        orphan_skill = skill_dest / 'mymodule-skill2'
+        orphan_skill.mkdir()
+        (orphan_skill / 'SKILL.md').write_text('orphaned content')
+
+        with patch('lola.cli.install.MODULES_DIR', modules_dir), \
+             patch('lola.cli.install.ensure_lola_dirs'), \
+             patch('lola.cli.install.get_registry', return_value=registry), \
+             patch('lola.cli.install.get_local_modules_path', return_value=modules_dir), \
+             patch('lola.cli.install.get_assistant_skill_path', return_value=skill_dest), \
+             patch('lola.cli.install.get_assistant_command_path', return_value=command_dest):
+            result = cli_runner.invoke(update_cmd, ['mymodule'])
+
+        assert result.exit_code == 0
+        assert 'Removed orphan' in result.output
+        assert not orphan_skill.exists(), "Orphaned skill directory should be removed"
+
+    def test_update_updates_registry_after_cleanup(self, cli_runner, tmp_path):
+        """Update updates registry to reflect current module state."""
+        modules_dir = tmp_path / '.lola' / 'modules'
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / '.lola' / 'installed.yml'
+
+        # Create a module with fewer items than registry
+        module_dir = modules_dir / 'mymodule'
+        module_dir.mkdir()
+        lola_dir = module_dir / '.lola'
+        lola_dir.mkdir()
+        manifest = {
+            'type': 'lola/module',
+            'version': '1.0.0',
+            'description': 'Test module',
+            'skills': ['skill1'],
+            'commands': ['cmd1'],
+        }
+        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
+
+        # Create skill and command
+        skill_dir = module_dir / 'skill1'
+        skill_dir.mkdir()
+        (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
+        commands_dir = module_dir / 'commands'
+        commands_dir.mkdir()
+        (commands_dir / 'cmd1.md').write_text('---\ndescription: Cmd 1\n---\nContent')
+
+        # Create registry with old installation (had more items)
+        registry = InstallationRegistry(installed_file)
+        inst = Installation(
+            module_name='mymodule',
+            assistant='claude-code',
+            scope='user',
+            skills=['mymodule-skill1', 'mymodule-skill2', 'mymodule-skill3'],
+            commands=['cmd1', 'cmd2'],
+        )
+        registry.add(inst)
+
+        # Create mock paths
+        skill_dest = tmp_path / 'skills'
+        skill_dest.mkdir()
+        command_dest = tmp_path / 'commands'
+        command_dest.mkdir()
+
+        with patch('lola.cli.install.MODULES_DIR', modules_dir), \
+             patch('lola.cli.install.ensure_lola_dirs'), \
+             patch('lola.cli.install.get_registry', return_value=registry), \
+             patch('lola.cli.install.get_local_modules_path', return_value=modules_dir), \
+             patch('lola.cli.install.get_assistant_skill_path', return_value=skill_dest), \
+             patch('lola.cli.install.get_assistant_command_path', return_value=command_dest):
+            result = cli_runner.invoke(update_cmd, ['mymodule'])
+
+        assert result.exit_code == 0
+
+        # Registry should now reflect current module state
+        updated_inst = registry.find('mymodule')[0]
+        assert set(updated_inst.skills) == {'mymodule-skill1'}
+        assert set(updated_inst.commands) == {'cmd1'}
+
 
 class TestListInstalledCmd:
     """Tests for installed (list) command."""

@@ -363,8 +363,52 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
         console.print(f"[cyan]{inst.module_name}[/cyan] -> {inst.assistant}")
         console.print(f"  [dim]Local path: {source_module}[/dim]")
 
-        # Update skills
-        if inst.skills:
+        # Compute current skills and commands from the module (with prefixes)
+        current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
+        current_commands = set(global_module.commands)
+
+        # Find orphaned skills (in registry but not in module)
+        orphaned_skills = set(inst.skills) - current_skills
+        orphaned_commands = set(inst.commands) - current_commands
+
+        # Remove orphaned skill files
+        if orphaned_skills:
+            try:
+                skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
+            except ValueError:
+                skill_dest = None
+
+            if skill_dest:
+                for skill_name in orphaned_skills:
+                    if inst.assistant == 'cursor':
+                        orphan_file = skill_dest / f'{skill_name}.mdc'
+                        if orphan_file.exists():
+                            orphan_file.unlink()
+                            console.print(f"  [yellow]Removed orphan: {skill_name}[/yellow]")
+                    elif inst.assistant == 'claude-code':
+                        orphan_dir = skill_dest / skill_name
+                        if orphan_dir.exists():
+                            shutil.rmtree(orphan_dir)
+                            console.print(f"  [yellow]Removed orphan: {skill_name}[/yellow]")
+                    # Gemini skills are handled by update_gemini_md which rebuilds the whole section
+
+        # Remove orphaned command files
+        if orphaned_commands:
+            try:
+                command_dest = get_assistant_command_path(inst.assistant, inst.scope, inst.project_path)
+            except ValueError:
+                command_dest = None
+
+            if command_dest:
+                for cmd_name in orphaned_commands:
+                    filename = get_command_filename(inst.assistant, inst.module_name, cmd_name)
+                    orphan_file = command_dest / filename
+                    if orphan_file.exists():
+                        orphan_file.unlink()
+                        console.print(f"  [yellow]Removed orphan: /{inst.module_name}-{cmd_name}[/yellow]")
+
+        # Update skills - iterate over CURRENT module skills, not old registry
+        if global_module.skills:
             try:
                 skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
             except ValueError:
@@ -375,14 +419,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                 if inst.assistant == 'gemini-cli':
                     # Gemini: Update entries in GEMINI.md
                     gemini_skills = []
-                    for prefixed_skill in inst.skills:
-                        # Extract original skill name by removing module prefix
-                        prefix = f"{inst.module_name}-"
-                        if prefixed_skill.startswith(prefix):
-                            original_skill = prefixed_skill[len(prefix):]
-                        else:
-                            original_skill = prefixed_skill  # Fallback for old records
-
+                    for original_skill in global_module.skills:
+                        prefixed_skill = f"{inst.module_name}-{original_skill}"
                         source = source_module / original_skill
                         if source.exists():
                             description = get_skill_description(source)
@@ -393,14 +431,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                     if gemini_skills:
                         update_gemini_md(skill_dest, inst.module_name, gemini_skills, inst.project_path)
                 else:
-                    for prefixed_skill in inst.skills:
-                        # Extract original skill name by removing module prefix
-                        prefix = f"{inst.module_name}-"
-                        if prefixed_skill.startswith(prefix):
-                            original_skill = prefixed_skill[len(prefix):]
-                        else:
-                            original_skill = prefixed_skill  # Fallback for old records
-
+                    for original_skill in global_module.skills:
+                        prefixed_skill = f"{inst.module_name}-{original_skill}"
                         source = source_module / original_skill
 
                         if inst.assistant == 'cursor':
@@ -414,8 +446,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                         else:
                             console.print(f"  [red]{original_skill}[/red] (source not found)")
 
-        # Update commands
-        if inst.commands:
+        # Update commands - iterate over CURRENT module commands, not old registry
+        if global_module.commands:
             try:
                 command_dest = get_assistant_command_path(inst.assistant, inst.scope, inst.project_path)
             except ValueError:
@@ -424,7 +456,7 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
 
             if command_dest:
                 commands_dir = source_module / 'commands'
-                for cmd_name in inst.commands:
+                for cmd_name in global_module.commands:
                     source = commands_dir / f'{cmd_name}.md'
 
                     if inst.assistant == 'gemini-cli':
@@ -438,6 +470,11 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str]):
                         console.print(f"  [green]/{inst.module_name}-{cmd_name}[/green]")
                     else:
                         console.print(f"  [red]{cmd_name}[/red] (source not found)")
+
+        # Update the registry with current skills/commands
+        inst.skills = list(current_skills)
+        inst.commands = list(current_commands)
+        registry.add(inst)
 
     console.print()
     if stale_installations:
