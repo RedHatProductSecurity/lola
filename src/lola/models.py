@@ -9,6 +9,7 @@ from typing import Optional
 import yaml
 
 from lola.config import MODULE_MANIFEST, SKILL_FILE
+from lola import frontmatter as fm
 
 
 @dataclass
@@ -25,18 +26,42 @@ class Skill:
         description = None
 
         if skill_file.exists():
-            content = skill_file.read_text()
-            # Try to extract description from frontmatter or first paragraph
-            lines = content.strip().split('\n')
-            for line in lines:
-                if line.strip() and not line.startswith('#') and not line.startswith('---'):
-                    description = line.strip()[:100]
-                    break
+            description = fm.get_description(skill_file)
 
         return cls(
             name=skill_path.name,
             path=skill_path,
             description=description
+        )
+
+
+@dataclass
+class Command:
+    """Represents a slash command within a module."""
+    name: str
+    path: Path
+    description: Optional[str] = None
+    argument_hint: Optional[str] = None
+
+    @classmethod
+    def from_path(cls, command_path: Path) -> 'Command':
+        """Load a command from its file path."""
+        description = None
+        argument_hint = None
+
+        if command_path.exists():
+            metadata = fm.get_metadata(command_path)
+            description = metadata.get('description')
+            argument_hint = metadata.get('argument-hint')
+
+        # Command name derived from filename (without .md extension)
+        name = command_path.stem
+
+        return cls(
+            name=name,
+            path=command_path,
+            description=description,
+            argument_hint=argument_hint
         )
 
 
@@ -47,6 +72,7 @@ class Module:
     path: Path
     version: str = "0.1.0"
     skills: list[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
     description: Optional[str] = None
 
     @classmethod
@@ -73,12 +99,18 @@ class Module:
             path=module_path,
             version=data.get('version', '0.1.0'),
             skills=data.get('skills', []),
+            commands=data.get('commands', []),
             description=data.get('description'),
         )
 
     def get_skill_paths(self) -> list[Path]:
         """Get the full paths to all skills in this module."""
         return [self.path / skill for skill in self.skills]
+
+    def get_command_paths(self) -> list[Path]:
+        """Get the full paths to all commands in this module."""
+        commands_dir = self.path / 'commands'
+        return [commands_dir / f"{cmd}.md" for cmd in self.commands]
 
     def validate(self) -> tuple[bool, list[str]]:
         """
@@ -106,6 +138,17 @@ class Module:
                 skill_errors = validate_skill_frontmatter(skill_path / SKILL_FILE)
                 for err in skill_errors:
                     errors.append(f"{skill_rel}/{SKILL_FILE}: {err}")
+
+        # Check each command exists and has valid frontmatter
+        commands_dir = self.path / 'commands'
+        for cmd_name in self.commands:
+            cmd_path = commands_dir / f"{cmd_name}.md"
+            if not cmd_path.exists():
+                errors.append(f"Command file not found: commands/{cmd_name}.md")
+            else:
+                cmd_errors = validate_command_frontmatter(cmd_path)
+                for err in cmd_errors:
+                    errors.append(f"commands/{cmd_name}.md: {err}")
 
         return len(errors) == 0, errors
 
@@ -167,6 +210,19 @@ def validate_skill_frontmatter(skill_file: Path) -> list[str]:
     return errors
 
 
+def validate_command_frontmatter(command_file: Path) -> list[str]:
+    """
+    Validate the YAML frontmatter in a command .md file.
+
+    Args:
+        command_file: Path to the command .md file
+
+    Returns:
+        List of error messages (empty if valid)
+    """
+    return fm.validate_command(command_file)
+
+
 @dataclass
 class Installation:
     """Represents an installed module."""
@@ -175,6 +231,7 @@ class Installation:
     scope: str
     project_path: Optional[str] = None
     skills: list[str] = field(default_factory=list)
+    commands: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for YAML serialization."""
@@ -183,6 +240,7 @@ class Installation:
             'assistant': self.assistant,
             'scope': self.scope,
             'skills': self.skills,
+            'commands': self.commands,
         }
         if self.project_path:
             result['project_path'] = self.project_path
@@ -197,6 +255,7 @@ class Installation:
             scope=data.get('scope', 'user'),
             project_path=data.get('project_path'),
             skills=data.get('skills', []),
+            commands=data.get('commands', []),
         )
 
 

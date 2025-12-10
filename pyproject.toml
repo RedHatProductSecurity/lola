@@ -16,6 +16,13 @@ dependencies = [
     "click>=8.3.0",
     "rich>=13.0.0",
     "pyyaml>=6.0.0",
+    "python-frontmatter>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
 ]
 
 [project.scripts]
@@ -23,3 +30,18 @@ lola = "lola.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lola"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/lola"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

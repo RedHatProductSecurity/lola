@@ -1,0 +1,126 @@
+"""Shared pytest fixtures for lola tests."""
+
+import os
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import yaml
+from click.testing import CliRunner
+
+
+@pytest.fixture
+def cli_runner():
+    """Provide a Click CLI test runner."""
+    return CliRunner()
+
+
+@pytest.fixture
+def isolated_cli_runner():
+    """Provide an isolated Click CLI test runner with temp directory."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        yield runner
+
+
+@pytest.fixture
+def mock_lola_home(tmp_path):
+    """Create a mock LOLA_HOME directory structure."""
+    lola_home = tmp_path / '.lola'
+    modules_dir = lola_home / 'modules'
+    modules_dir.mkdir(parents=True)
+
+    with patch('lola.config.LOLA_HOME', lola_home), \
+         patch('lola.config.MODULES_DIR', modules_dir), \
+         patch('lola.config.INSTALLED_FILE', lola_home / 'installed.yml'), \
+         patch('lola.cli.mod.MODULES_DIR', modules_dir), \
+         patch('lola.cli.mod.INSTALLED_FILE', lola_home / 'installed.yml'), \
+         patch('lola.cli.install.MODULES_DIR', modules_dir):
+        yield {
+            'home': lola_home,
+            'modules': modules_dir,
+            'installed': lola_home / 'installed.yml',
+        }
+
+
+@pytest.fixture
+def sample_module(tmp_path):
+    """Create a sample module for testing."""
+    module_dir = tmp_path / 'sample-module'
+    module_dir.mkdir()
+
+    # Create .lola/module.yml
+    lola_dir = module_dir / '.lola'
+    lola_dir.mkdir()
+    manifest = {
+        'type': 'lola/module',
+        'version': '1.0.0',
+        'description': 'A sample test module',
+        'skills': ['skill1'],
+        'commands': ['cmd1'],
+    }
+    (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
+
+    # Create skill directory
+    skill_dir = module_dir / 'skill1'
+    skill_dir.mkdir()
+    (skill_dir / 'SKILL.md').write_text("""---
+description: A test skill
+---
+
+# Skill 1
+
+This is a test skill.
+""")
+
+    # Create command file
+    commands_dir = module_dir / 'commands'
+    commands_dir.mkdir()
+    (commands_dir / 'cmd1.md').write_text("""---
+description: A test command
+---
+
+Do something with $ARGUMENTS.
+""")
+
+    return module_dir
+
+
+@pytest.fixture
+def registered_module(mock_lola_home, sample_module):
+    """Create and register a module in the mock LOLA_HOME."""
+    import shutil
+
+    dest = mock_lola_home['modules'] / 'sample-module'
+    shutil.copytree(sample_module, dest)
+
+    return dest
+
+
+@pytest.fixture
+def mock_assistant_paths(tmp_path):
+    """Create mock assistant paths for testing installations."""
+    paths = {
+        'claude-code': {
+            'skills': tmp_path / '.claude' / 'skills',
+            'commands': tmp_path / '.claude' / 'commands',
+        },
+        'cursor': {
+            'skills': tmp_path / '.cursor' / 'rules',
+            'commands': tmp_path / '.cursor' / 'commands',
+        },
+        'gemini-cli': {
+            'skills': tmp_path / '.gemini' / 'GEMINI.md',
+            'commands': tmp_path / '.gemini' / 'commands',
+        },
+    }
+
+    # Create directories
+    for assistant, dirs in paths.items():
+        if assistant != 'gemini-cli':
+            dirs['skills'].mkdir(parents=True, exist_ok=True)
+        else:
+            dirs['skills'].parent.mkdir(parents=True, exist_ok=True)
+        dirs['commands'].mkdir(parents=True, exist_ok=True)
+
+    return paths

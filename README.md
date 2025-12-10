@@ -2,21 +2,21 @@
 
 **Write your AI context once, use it everywhere.**
 
-Every AI tool wants its own prompt format. Claude Code uses `SKILL.md`. Cursor uses `.mdc` rules. Gemini CLI uses `GEMINI.md`. You end up maintaining the same instructions in three different places—or worse, giving up and only using one tool.
+Every AI tool wants its own prompt format. Claude Code uses `SKILL.md`. Cursor uses `.mdc` rules. Gemini CLI uses `GEMINI.md`. Slash commands? Different syntax for each. You end up maintaining the same instructions in three different places—or worse, giving up and only using one tool.
 
-Lola fixes this. Write your skills once as portable modules, then install them everywhere with a single command.
+Lola fixes this. Write your skills and commands once as portable modules, then install them everywhere with a single command.
 
 [![asciicast](https://asciinema.org/a/UsbI8adasbdAhAFQuiXj70eVp.svg)](https://asciinema.org/a/UsbI8adasbdAhAFQuiXj70eVp)
 
 ## Supported AI Assistants
 
-| Assistant | Skill Format | Location | Scope |
-|-----------|--------------|----------|-------|
-| Claude Code | `SKILL.md` directories | `.claude/skills/<skill>/` | user, project |
-| Cursor | `.mdc` files | `.cursor/rules/<skill>.mdc` | project only |
-| Gemini CLI | Entries in `GEMINI.md` | `GEMINI.md` | project only |
+| Assistant | Skills | Commands | Scope |
+|-----------|--------|----------|-------|
+| Claude Code | `.claude/skills/<module>-<skill>/SKILL.md` | `.claude/commands/<module>-<cmd>.md` | user, project |
+| Cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` | skills: project only, commands: user, project |
+| Gemini CLI | `GEMINI.md` | `.gemini/commands/<module>-<cmd>.toml` | skills: project only, commands: user, project |
 
-> **Note:** Cursor and Gemini CLI only support project-scope installs.
+> **Note:** Cursor and Gemini CLI skills require project-scope installs. Commands work in both scopes for all assistants.
 
 ## Installation
 
@@ -74,7 +74,7 @@ lola mod update my-skills
 lola update
 ```
 
-## Commands
+## CLI Reference
 
 ### Module Management (`lola mod`)
 
@@ -84,6 +84,7 @@ lola update
 | `lola mod ls` | List registered modules |
 | `lola mod info <name>` | Show module details |
 | `lola mod init [name]` | Initialize a new module |
+| `lola mod init [name] -c` | Initialize with a command template |
 | `lola mod update [name]` | Update module(s) from source |
 | `lola mod rm <name>` | Remove a module |
 
@@ -91,10 +92,10 @@ lola update
 
 | Command | Description |
 |---------|-------------|
-| `lola install <module>` | Install skills to all assistants |
+| `lola install <module>` | Install skills and commands to all assistants |
 | `lola install <module> -a <assistant>` | Install to specific assistant |
 | `lola install <module> -s project <path>` | Install to a project |
-| `lola uninstall <module>` | Uninstall skills |
+| `lola uninstall <module>` | Uninstall skills and commands |
 | `lola installed` | List all installations |
 | `lola update` | Regenerate assistant files |
 
@@ -146,6 +147,32 @@ my-skills/
     SKILL.md
 ```
 
+### 4. Add slash commands
+
+Create a `commands/` directory with markdown files:
+
+```
+my-skills/
+  .lola/
+    module.yml
+  git-workflow/
+    SKILL.md
+  commands/
+    review-pr.md
+    quick-commit.md
+```
+
+Command files use YAML frontmatter:
+
+```markdown
+---
+description: Review a pull request
+argument-hint: <pr-number>
+---
+
+Review PR #$ARGUMENTS and provide feedback.
+```
+
 Update `.lola/module.yml`:
 
 ```yaml
@@ -156,9 +183,13 @@ description: My skills collection
 skills:
   - git-workflow
   - code-review
+
+commands:
+  - review-pr
+  - quick-commit
 ```
 
-### 4. Add to registry and install
+### 5. Add to registry and install
 
 ```bash
 lola mod add ./my-skills
@@ -176,6 +207,9 @@ my-module/
     SKILL.md         # Required: skill definition
     scripts/         # Optional: supporting files
     templates/       # Optional: templates
+  commands/          # Optional: slash commands
+    review-pr.md
+    quick-commit.md
 ```
 
 ### module.yml
@@ -188,6 +222,10 @@ description: What this module provides
 skills:
   - skill-one
   - skill-two
+
+commands:
+  - review-pr
+  - quick-commit
 ```
 
 ### SKILL.md
@@ -203,12 +241,32 @@ description: When to use this skill
 Your instructions, workflows, and guidance for the AI assistant.
 ```
 
+### Command Files
+
+```markdown
+---
+description: What this command does
+argument-hint: <required> [optional]
+---
+
+Your prompt template here. Use $ARGUMENTS for all args or $1, $2 for positional.
+```
+
+**Argument variables:**
+- `$ARGUMENTS` - All arguments as a single string
+- `$1`, `$2`, `$3`... - Positional arguments
+
+Commands are automatically converted to each assistant's format:
+- Claude/Cursor: Markdown with frontmatter (pass-through)
+- Gemini: TOML with `{{args}}` substitution
+
 ## How It Works
 
 1. **Registry**: Modules are stored in `~/.lola/modules/`
-2. **Installation**: Skills are converted and copied to assistant-specific locations
-3. **Project scope**: Copies modules to `.lola/modules/` within the project
-4. **Updates**: `lola mod update` re-fetches from original source; `lola update` regenerates files
+2. **Installation**: Skills and commands are converted to each assistant's native format
+3. **Prefixing**: Skills and commands are prefixed with module name to avoid conflicts (e.g., `mymodule-skill`)
+4. **Project scope**: Copies modules to `.lola/modules/` within the project
+5. **Updates**: `lola mod update` re-fetches from original source; `lola update` regenerates files
 
 ## License
 

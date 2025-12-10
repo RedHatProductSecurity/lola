@@ -5,3 +5,7 @@ description: Example skills module demonstrating the lola package structure
 skills:
   - git-workflow
   - code-review
+
+commands:
+  - review-pr
+  - quick-commit

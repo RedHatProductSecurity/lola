@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-import yaml
+from lola import frontmatter as fm
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict, str]:
@@ -20,29 +20,7 @@ def parse_skill_frontmatter(content: str) -> tuple[dict, str]:
     Returns:
         Tuple of (frontmatter dict, body content)
     """
-    if not content.startswith('---'):
-        return {}, content
-
-    # Find the closing ---
-    lines = content.split('\n')
-    end_idx = None
-    for i, line in enumerate(lines[1:], 1):
-        if line.strip() == '---':
-            end_idx = i
-            break
-
-    if end_idx is None:
-        return {}, content
-
-    frontmatter_text = '\n'.join(lines[1:end_idx])
-    body = '\n'.join(lines[end_idx + 1:]).lstrip('\n')
-
-    try:
-        frontmatter = yaml.safe_load(frontmatter_text) or {}
-    except yaml.YAMLError:
-        frontmatter = {}
-
-    return frontmatter, body
+    return fm.parse(content)
 
 
 def rewrite_relative_paths(content: str, assets_path: str) -> str:

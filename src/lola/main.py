@@ -6,8 +6,8 @@ main:
 import click
 from lola.layout import console
 from lola import __version__
-from lola.mod import mod
-from lola.install import install_cmd, uninstall_cmd, update_cmd, list_installed_cmd
+from lola.cli.mod import mod
+from lola.cli.install import install_cmd, uninstall_cmd, update_cmd, list_installed_cmd
 
 
 def ver():

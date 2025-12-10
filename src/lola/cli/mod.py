@@ -1,6 +1,7 @@
 """
-mod:
-    Module management commands for lola package manager
+Module management CLI commands.
+
+Commands for adding, removing, and managing lola modules.
 """
 
 import shutil
@@ -8,12 +9,18 @@ from pathlib import Path
 
 import click
 
-from lola.config import MODULES_DIR, get_assistant_skill_path
+from lola.config import MODULES_DIR, INSTALLED_FILE, get_assistant_skill_path
+from lola.core.generator import remove_gemini_skills
 from lola.layout import console
 from lola.models import Module, InstallationRegistry
-from lola.config import INSTALLED_FILE
-from lola.sources import fetch_module, detect_source_type, save_source_info, load_source_info, update_module, validate_module_name
-from lola.install import remove_gemini_skills
+from lola.sources import (
+    fetch_module,
+    detect_source_type,
+    save_source_info,
+    load_source_info,
+    update_module,
+    validate_module_name,
+)
 from lola.utils import ensure_lola_dirs, get_local_modules_path
 
 
@@ -133,12 +140,19 @@ def add_module(source: str, module_name: str):
     console.print(f"  Path: {module_path}")
     console.print(f"  Version: {module.version}")
     console.print(f"  Skills: {len(module.skills)}")
+    console.print(f"  Commands: {len(module.commands)}")
 
     if module.skills:
         console.print()
         console.print("Available skills:")
         for skill in module.skills:
             console.print(f"  - {skill}")
+
+    if module.commands:
+        console.print()
+        console.print("Available commands:")
+        for cmd in module.commands:
+            console.print(f"  - /{module.name}-{cmd}")
 
     console.print()
     console.print("Next steps:")
@@ -163,7 +177,13 @@ def add_module(source: str, module_name: str):
     is_flag=True,
     help='Do not create an initial skill'
 )
-def init_module(name: str | None, description: str, skill_name: str, no_skill: bool):
+@click.option(
+    '-c', '--command',
+    'command_name',
+    default=None,
+    help='Name for an initial slash command'
+)
+def init_module(name: str | None, description: str, skill_name: str, no_skill: bool, command_name: str):
     """
     Initialize a new lola module.
 
@@ -178,6 +198,7 @@ def init_module(name: str | None, description: str, skill_name: str, no_skill: b
         lola mod init -d "My custom skills"
         lola mod init -s code-review            # Custom skill name
         lola mod init --no-skill                # Skip initial skill
+        lola mod init -c review-pr              # Create initial command
     """
     if name:
         # Create a new subdirectory
@@ -210,11 +231,16 @@ def init_module(name: str | None, description: str, skill_name: str, no_skill: b
     if skill_name:
         skills_list.append(skill_name)
 
+    commands_list = []
+    if command_name:
+        commands_list.append(command_name)
+
     module_yml = {
         'type': 'lola/module',
         'version': '0.1.0',
         'description': description or f'{module_name} module',
         'skills': skills_list,
+        'commands': commands_list,
     }
 
     import yaml
@@ -244,6 +270,22 @@ Provide examples of the skill in action.
 '''
         (skill_dir / 'SKILL.md').write_text(skill_content)
 
+    # Create initial command if requested
+    if command_name:
+        commands_dir = module_dir / 'commands'
+        commands_dir.mkdir()
+
+        command_content = f'''---
+description: Description of what this command does
+argument-hint: "[optional args]"
+---
+
+Prompt instructions for the {command_name} command.
+
+Use $ARGUMENTS to reference any arguments passed to the command.
+'''
+        (commands_dir / f'{command_name}.md').write_text(command_content)
+
     console.print(f"[green]Initialized module '{module_name}'[/green]")
     console.print(f"  Path: {module_dir}")
     console.print()
@@ -254,16 +296,25 @@ Provide examples of the skill in action.
     if skill_name:
         console.print(f"    {skill_name}/")
         console.print(f"      SKILL.md")
+    if command_name:
+        console.print(f"    commands/")
+        console.print(f"      {command_name}.md")
 
     console.print()
     console.print("[bold]Next steps:[/bold]")
+    step = 1
     if skill_name:
-        console.print(f"  1. Edit {skill_name}/SKILL.md with your skill content")
-        console.print(f"  2. lola mod add {module_dir}")
-    else:
-        console.print(f"  1. Create skill directories with SKILL.md files")
-        console.print(f"  2. Add skill names to .lola/module.yml")
-        console.print(f"  3. lola mod add {module_dir}")
+        console.print(f"  {step}. Edit {skill_name}/SKILL.md with your skill content")
+        step += 1
+    if command_name:
+        console.print(f"  {step}. Edit commands/{command_name}.md with your command prompt")
+        step += 1
+    if not skill_name and not command_name:
+        console.print(f"  {step}. Create skill directories with SKILL.md files or commands/ directory")
+        step += 1
+        console.print(f"  {step}. Add skill/command names to .lola/module.yml")
+        step += 1
+    console.print(f"  {step}. lola mod add {module_dir}")
 
 
 @mod.command(name='rm')
@@ -388,11 +439,17 @@ def list_modules(verbose: bool):
         if module.description:
             console.print(f"  {module.description}")
 
-        console.print(f"  Skills: {len(module.skills)}")
+        console.print(f"  Skills: {len(module.skills)}, Commands: {len(module.commands)}")
 
-        if verbose and module.skills:
-            for skill in module.skills:
-                console.print(f"    - {skill}")
+        if verbose:
+            if module.skills:
+                console.print("  Skills:")
+                for skill in module.skills:
+                    console.print(f"    - {skill}")
+            if module.commands:
+                console.print("  Commands:")
+                for cmd in module.commands:
+                    console.print(f"    - /{module.name}-{cmd}")
 
         console.print()
 
@@ -445,6 +502,27 @@ def module_info(module_name: str):
                             break
             else:
                 console.print(f"  [red]{skill_rel}[/red] (not found)")
+
+    console.print()
+    console.print("[bold]Commands:[/bold]")
+
+    if not module.commands:
+        console.print("  (no commands defined)")
+    else:
+        from lola.command_converters import parse_command_frontmatter
+        commands_dir = module.path / 'commands'
+        for cmd_name in module.commands:
+            cmd_path = commands_dir / f'{cmd_name}.md'
+            if cmd_path.exists():
+                console.print(f"  [green]/{module.name}-{cmd_name}[/green]")
+                # Show description from frontmatter
+                content = cmd_path.read_text()
+                frontmatter, _ = parse_command_frontmatter(content)
+                desc = frontmatter.get('description', '')
+                if desc:
+                    console.print(f"    {desc[:60]}")
+            else:
+                console.print(f"  [red]{cmd_name}[/red] (not found)")
 
     # Source info
     source_info = load_source_info(module.path)
