@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import click
+from rich.console import Console
 
 from lola.config import (
     ASSISTANTS,
@@ -34,30 +35,40 @@ from lola.core.generator import (
 )
 from lola.models import Module
 from lola.utils import ensure_lola_dirs, get_local_modules_path
-from lola import ui
+
+console = Console()
 
 
-@click.command(name='install')
-@click.argument('module_name')
+@click.command(name="install")
+@click.argument("module_name")
 @click.option(
-    '-a', '--assistant',
+    "-a",
+    "--assistant",
     type=click.Choice(list(ASSISTANTS.keys())),
     default=None,
-    help='AI assistant to install skills for (default: all)'
+    help="AI assistant to install skills for (default: all)",
 )
 @click.option(
-    '-s', '--scope',
-    type=click.Choice(['user', 'project']),
-    default='project',
-    help='Installation scope'
+    "-s",
+    "--scope",
+    type=click.Choice(["user", "project"]),
+    default="project",
+    help="Installation scope",
 )
 @click.option(
-    '-v', '--verbose',
+    "-v",
+    "--verbose",
     is_flag=True,
-    help='Show detailed output for each skill and command'
+    help="Show detailed output for each skill and command",
 )
-@click.argument('project_path', required=False, default="./")
-def install_cmd(module_name: str, assistant: Optional[str], scope: str, verbose: bool, project_path: Optional[str]):
+@click.argument("project_path", required=False, default="./")
+def install_cmd(
+    module_name: str,
+    assistant: Optional[str],
+    scope: str,
+    verbose: bool,
+    project_path: str,
+):
     """
     Install a module's skills to AI assistants.
 
@@ -74,40 +85,37 @@ def install_cmd(module_name: str, assistant: Optional[str], scope: str, verbose:
     ensure_lola_dirs()
 
     # Validate project path for project scope
-    if scope == 'project':
-        if not project_path:
-            ui.error("Project path required for project scope")
-            ui.hint("Usage: lola install <module> -s project <path/to/project>")
-            raise SystemExit(1)
-
+    if scope == "project":
         project_path = str(Path(project_path).resolve())
         if not Path(project_path).exists():
-            ui.error(f"Project path does not exist: {project_path}")
+            console.print(f"[red]Project path does not exist: {project_path}[/red]")
             raise SystemExit(1)
 
     # Find module in global registry
     module_path = MODULES_DIR / module_name
     if not module_path.exists():
-        ui.error(f"Module '{module_name}' not found")
-        ui.hint("Use 'lola mod ls' to see available modules")
-        ui.hint("Use 'lola mod add <source>' to add a module")
+        console.print(f"[red]Module '{module_name}' not found[/red]")
+        console.print("[dim]Use 'lola mod ls' to see available modules[/dim]")
+        console.print("[dim]Use 'lola mod add <source>' to add a module[/dim]")
         raise SystemExit(1)
 
     module = Module.from_path(module_path)
     if not module:
-        ui.error("Invalid module: no .lola/module.yml found")
+        console.print("[red]Invalid module: no .lola/module.yml found[/red]")
         raise SystemExit(1)
 
     # Validate module structure and skill files
     is_valid, errors = module.validate()
     if not is_valid:
-        ui.error(f"Module '{module_name}' has validation errors:")
+        console.print(f"[red]Module '{module_name}' has validation errors:[/red]")
         for err in errors:
-            ui.item(f"[red]{err}[/red]")
+            console.print(f"  [red]{err}[/red]")
         raise SystemExit(1)
 
     if not module.skills and not module.commands:
-        ui.warning(f"Module '{module_name}' has no skills or commands defined")
+        console.print(
+            f"[yellow]Module '{module_name}' has no skills or commands defined[/yellow]"
+        )
         return
 
     # Get paths and registry
@@ -118,13 +126,13 @@ def install_cmd(module_name: str, assistant: Optional[str], scope: str, verbose:
     assistants_to_install = [assistant] if assistant else list(ASSISTANTS.keys())
 
     # Build location string
-    if scope == 'project':
+    if scope == "project":
         location = project_path
     else:
         location = "~/.lola (user scope)"
 
-    ui.header(f"Installing {ui.module_name(module_name)} {ui.Icons.ARROW} {location}")
-    ui.blank()
+    console.print(f"\n[bold]Installing {module_name} -> {location}[/bold]")
+    console.print()
 
     total_installed = 0
     for asst in assistants_to_install:
@@ -132,37 +140,43 @@ def install_cmd(module_name: str, assistant: Optional[str], scope: str, verbose:
             module, asst, scope, project_path, local_modules, registry, verbose
         )
 
-    ui.blank()
-    ui.success(f"Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}")
+    console.print()
+    console.print(
+        f"[green]Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}[/green]"
+    )
 
 
-@click.command(name='uninstall')
-@click.argument('module_name')
+@click.command(name="uninstall")
+@click.argument("module_name")
 @click.option(
-    '-a', '--assistant',
+    "-a",
+    "--assistant",
     type=click.Choice(list(ASSISTANTS.keys())),
     default=None,
-    help='AI assistant to uninstall from (optional)'
+    help="AI assistant to uninstall from (optional)",
 )
 @click.option(
-    '-s', '--scope',
-    type=click.Choice(['user', 'project']),
+    "-s",
+    "--scope",
+    type=click.Choice(["user", "project"]),
     default=None,
-    help='Installation scope (optional)'
+    help="Installation scope (optional)",
 )
 @click.option(
-    '-v', '--verbose',
-    is_flag=True,
-    help='Show detailed output for each file removed'
+    "-v", "--verbose", is_flag=True, help="Show detailed output for each file removed"
 )
-@click.argument('project_path', required=False, default=None)
+@click.argument("project_path", required=False, default=None)
 @click.option(
-    '-f', '--force',
-    is_flag=True,
-    help='Force uninstall without confirmation'
+    "-f", "--force", is_flag=True, help="Force uninstall without confirmation"
 )
-def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[str],
-                  verbose: bool, project_path: Optional[str], force: bool):
+def uninstall_cmd(
+    module_name: str,
+    assistant: Optional[str],
+    scope: Optional[str],
+    verbose: bool,
+    project_path: Optional[str],
+    force: bool,
+):
     """
     Uninstall a module's skills from AI assistants.
 
@@ -181,7 +195,7 @@ def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[st
     installations = registry.find(module_name)
 
     if not installations:
-        ui.warning(f"No installations found for '{module_name}'")
+        console.print(f"[yellow]No installations found for '{module_name}'[/yellow]")
         return
 
     # Filter by assistant/scope if provided
@@ -194,12 +208,12 @@ def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[st
         installations = [i for i in installations if i.project_path == project_path]
 
     if not installations:
-        ui.warning("No matching installations found")
+        console.print("[yellow]No matching installations found[/yellow]")
         return
 
     # Show what will be uninstalled
-    ui.header(f"Uninstalling {ui.module_name(module_name)}")
-    ui.blank()
+    console.print(f"\n[bold]Uninstalling {module_name}[/bold]")
+    console.print()
 
     # Group installations by project for cleaner display
     by_project = {}
@@ -221,20 +235,22 @@ def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[st
             parts.append(f"{cmd_count} command{'s' if cmd_count != 1 else ''}")
 
         summary = ", ".join(parts) if parts else "no items"
-        ui.console.print(f"  [dim]{project}[/dim]")
-        ui.console.print(f"    {', '.join(assistants)} [dim]({summary})[/dim]")
+        console.print(f"  [dim]{project}[/dim]")
+        console.print(f"    {', '.join(assistants)} [dim]({summary})[/dim]")
 
-    ui.blank()
+    console.print()
 
     # Confirm if multiple installations and not forced
     if len(installations) > 1 and not force:
-        ui.warning("Multiple installations found")
-        ui.hint("Use -a <assistant> and -s <scope> to target specific installation")
-        ui.hint("Use -f/--force to uninstall all")
-        ui.blank()
+        console.print("[yellow]Multiple installations found[/yellow]")
+        console.print(
+            "[dim]Use -a <assistant> and -s <scope> to target specific installation[/dim]"
+        )
+        console.print("[dim]Use -f/--force to uninstall all[/dim]")
+        console.print()
 
         if not click.confirm("Uninstall all?"):
-            ui.warning("Cancelled")
+            console.print("[yellow]Cancelled[/yellow]")
             return
 
     # Uninstall each
@@ -243,27 +259,33 @@ def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[st
         # Remove skill files
         if inst.skills:
             try:
-                skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
+                skill_dest = get_assistant_skill_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
-                ui.error(f"Cannot determine skill path for {inst.assistant}/{inst.scope}")
+                console.print(
+                    f"[red]Cannot determine skill path for {inst.assistant}/{inst.scope}[/red]"
+                )
                 skill_dest = None
 
             if skill_dest:
-                if inst.assistant == 'gemini-cli':
+                if inst.assistant == "gemini-cli":
                     # Remove entries from GEMINI.md
                     if remove_gemini_skills(skill_dest, module_name):
                         removed_count += 1
                         if verbose:
-                            ui.item_result(f"Removed skills from {skill_dest}", ok=True)
-                elif inst.assistant == 'cursor':
+                            console.print(
+                                f"  [green]Removed skills from {skill_dest}[/green]"
+                            )
+                elif inst.assistant == "cursor":
                     # Remove .mdc files
                     for skill in inst.skills:
-                        mdc_file = skill_dest / f'{skill}.mdc'
+                        mdc_file = skill_dest / f"{skill}.mdc"
                         if mdc_file.exists():
                             mdc_file.unlink()
                             removed_count += 1
                             if verbose:
-                                ui.item_result(f"Removed {mdc_file}", ok=True)
+                                console.print(f"  [green]Removed {mdc_file}[/green]")
                 else:
                     # Remove skill directories (claude-code)
                     for skill in inst.skills:
@@ -272,65 +294,75 @@ def uninstall_cmd(module_name: str, assistant: Optional[str], scope: Optional[st
                             shutil.rmtree(skill_dir)
                             removed_count += 1
                             if verbose:
-                                ui.item_result(f"Removed {skill_dir}", ok=True)
+                                console.print(f"  [green]Removed {skill_dir}[/green]")
 
         # Remove command files
         if inst.commands:
             try:
-                command_dest = get_assistant_command_path(inst.assistant, inst.scope, inst.project_path)
+                command_dest = get_assistant_command_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
-                ui.error(f"Cannot determine command path for {inst.assistant}/{inst.scope}")
+                console.print(
+                    f"[red]Cannot determine command path for {inst.assistant}/{inst.scope}[/red]"
+                )
                 command_dest = None
 
             if command_dest:
                 for cmd_name in inst.commands:
-                    filename = get_command_filename(inst.assistant, module_name, cmd_name)
+                    filename = get_command_filename(
+                        inst.assistant, module_name, cmd_name
+                    )
                     cmd_file = command_dest / filename
                     if cmd_file.exists():
                         cmd_file.unlink()
                         removed_count += 1
                         if verbose:
-                            ui.item_result(f"Removed {cmd_file}", ok=True)
+                            console.print(f"  [green]Removed {cmd_file}[/green]")
 
         # For project scope, also remove the project-local module copy
-        if inst.scope == 'project' and inst.project_path:
+        if inst.scope == "project" and inst.project_path:
             local_modules = get_local_modules_path(inst.project_path)
             source_module = local_modules / module_name
             if source_module.is_symlink():
                 source_module.unlink()
                 removed_count += 1
                 if verbose:
-                    ui.item_result(f"Removed symlink {source_module}", ok=True)
+                    console.print(f"  [green]Removed symlink {source_module}[/green]")
             elif source_module.exists():
                 # Handle legacy copies
                 shutil.rmtree(source_module)
                 removed_count += 1
                 if verbose:
-                    ui.item_result(f"Removed {source_module}", ok=True)
+                    console.print(f"  [green]Removed {source_module}[/green]")
 
         # Remove from registry
         registry.remove(
             module_name,
             assistant=inst.assistant,
             scope=inst.scope,
-            project_path=inst.project_path
+            project_path=inst.project_path,
         )
 
-    ui.success(f"Uninstalled from {len(installations)} installation{'s' if len(installations) != 1 else ''}")
+    console.print(
+        f"[green]Uninstalled from {len(installations)} installation{'s' if len(installations) != 1 else ''}[/green]"
+    )
 
 
-@click.command(name='update')
-@click.argument('module_name', required=False, default=None)
+@click.command(name="update")
+@click.argument("module_name", required=False, default=None)
 @click.option(
-    '-a', '--assistant',
+    "-a",
+    "--assistant",
     type=click.Choice(list(ASSISTANTS.keys())),
     default=None,
-    help='Filter by AI assistant'
+    help="Filter by AI assistant",
 )
 @click.option(
-    '-v', '--verbose',
+    "-v",
+    "--verbose",
     is_flag=True,
-    help='Show detailed output for each skill and command'
+    help="Show detailed output for each skill and command",
 )
 def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bool):
     """
@@ -357,42 +389,52 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         installations = [i for i in installations if i.assistant == assistant]
 
     if not installations:
-        ui.warning("No installations to update")
+        console.print("[yellow]No installations to update[/yellow]")
         return
 
-    ui.info(f"Updating {len(installations)} installation(s)...")
-    ui.blank()
+    console.print(f"Updating {len(installations)} installation(s)...")
+    console.print()
 
     # Track stale installations and errors
     stale_installations = []
 
     for inst in installations:
         # Check if project path still exists for project-scoped installations
-        if inst.scope == 'project' and inst.project_path:
+        if inst.scope == "project" and inst.project_path:
             if not Path(inst.project_path).exists():
-                ui.error(f"{inst.module_name} ({inst.assistant}): project path no longer exists")
-                ui.hint(f"Run 'lola uninstall {inst.module_name}' to remove this stale entry")
+                console.print(
+                    f"[red]{inst.module_name} ({inst.assistant}): project path no longer exists[/red]"
+                )
+                console.print(
+                    f"[dim]Run 'lola uninstall {inst.module_name}' to remove this stale entry[/dim]"
+                )
                 stale_installations.append(inst)
                 continue
 
         # Get the global module to refresh from
         global_module_path = MODULES_DIR / inst.module_name
         if not global_module_path.exists():
-            ui.error(f"{inst.module_name}: not found in registry")
-            ui.hint(f"Run 'lola mod add <source>' to re-add, or 'lola uninstall {inst.module_name}' to remove")
+            console.print(f"[red]{inst.module_name}: not found in registry[/red]")
+            console.print(
+                f"[dim]Run 'lola mod add <source>' to re-add, or 'lola uninstall {inst.module_name}' to remove[/dim]"
+            )
             continue
 
         global_module = Module.from_path(global_module_path)
         if not global_module:
-            ui.error(f"{inst.module_name}: invalid module (no .lola/module.yml)")
+            console.print(
+                f"[red]{inst.module_name}: invalid module (no .lola/module.yml)[/red]"
+            )
             continue
 
         # Validate module structure and skill files
         is_valid, errors = global_module.validate()
         if not is_valid:
-            ui.error(f"{inst.module_name} ({inst.assistant}): validation errors")
+            console.print(
+                f"[red]{inst.module_name} ({inst.assistant}): validation errors[/red]"
+            )
             for err in errors:
-                ui.item(f"[red]{err}[/red]", indent=2)
+                console.print(f"    [red]{err}[/red]")
             continue
 
         local_modules = get_local_modules_path(inst.project_path)
@@ -401,9 +443,13 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         source_module = copy_module_to_local(global_module, local_modules)
 
         try:
-            skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
+            skill_dest = get_assistant_skill_path(
+                inst.assistant, inst.scope, inst.project_path
+            )
         except ValueError:
-            ui.error(f"Cannot determine path for {inst.assistant}/{inst.scope}")
+            console.print(
+                f"[red]Cannot determine path for {inst.assistant}/{inst.scope}[/red]"
+            )
             continue
 
         # Compute current skills and commands from the module (with prefixes)
@@ -424,19 +470,21 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         # Remove orphaned skill files
         if orphaned_skills:
             try:
-                skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
+                skill_dest = get_assistant_skill_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
                 skill_dest = None
 
             if skill_dest:
                 for skill in orphaned_skills:
                     removed = False
-                    if inst.assistant == 'cursor':
-                        orphan_file = skill_dest / f'{skill}.mdc'
+                    if inst.assistant == "cursor":
+                        orphan_file = skill_dest / f"{skill}.mdc"
                         if orphan_file.exists():
                             orphan_file.unlink()
                             removed = True
-                    elif inst.assistant == 'claude-code':
+                    elif inst.assistant == "claude-code":
                         orphan_dir = skill_dest / skill
                         if orphan_dir.exists():
                             shutil.rmtree(orphan_dir)
@@ -446,35 +494,45 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                     if removed:
                         orphans_removed += 1
                         if verbose:
-                            ui.console.print(f"    [yellow]{ui.Icons.REMOVE} {skill}[/yellow] [dim](orphaned)[/dim]")
+                            console.print(
+                                f"    [yellow]- {skill}[/yellow] [dim](orphaned)[/dim]"
+                            )
 
         # Remove orphaned command files
         if orphaned_commands:
             try:
-                command_dest = get_assistant_command_path(inst.assistant, inst.scope, inst.project_path)
+                command_dest = get_assistant_command_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
                 command_dest = None
 
             if command_dest:
                 for cmd_name in orphaned_commands:
-                    filename = get_command_filename(inst.assistant, inst.module_name, cmd_name)
+                    filename = get_command_filename(
+                        inst.assistant, inst.module_name, cmd_name
+                    )
                     orphan_file = command_dest / filename
                     if orphan_file.exists():
                         orphan_file.unlink()
                         orphans_removed += 1
                         if verbose:
-                            ui.console.print(f"    [yellow]{ui.Icons.REMOVE} /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]")
+                            console.print(
+                                f"    [yellow]- /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
+                            )
 
         # Update skills - iterate over CURRENT module skills, not old registry
         if global_module.skills:
             try:
-                skill_dest = get_assistant_skill_path(inst.assistant, inst.scope, inst.project_path)
+                skill_dest = get_assistant_skill_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
-                ui.error("Cannot determine skill path")
+                console.print("[red]Cannot determine skill path[/red]")
                 skill_dest = None
 
             if skill_dest:
-                if inst.assistant == 'gemini-cli':
+                if inst.assistant == "gemini-cli":
                     # Gemini: Update entries in GEMINI.md
                     gemini_skills = []
                     for original_skill in global_module.skills:
@@ -485,20 +543,29 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                             gemini_skills.append((original_skill, description, source))
                             skills_ok += 1
                             if verbose:
-                                ui.item_result(prefixed_skill, ok=True, indent=2)
+                                console.print(f"    [green]{prefixed_skill}[/green]")
                         else:
                             skills_failed += 1
                             if verbose:
-                                ui.item_result(original_skill, ok=False, note="source not found", indent=2)
+                                console.print(
+                                    f"    [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                                )
                     if gemini_skills:
-                        update_gemini_md(skill_dest, inst.module_name, gemini_skills, inst.project_path)
+                        update_gemini_md(
+                            skill_dest,
+                            inst.module_name,
+                            gemini_skills,
+                            inst.project_path,
+                        )
                 else:
                     for original_skill in global_module.skills:
                         prefixed_skill = f"{inst.module_name}-{original_skill}"
                         source = source_module / original_skill
 
-                        if inst.assistant == 'cursor':
-                            success = generate_cursor_rule(source, skill_dest, prefixed_skill, inst.project_path)
+                        if inst.assistant == "cursor":
+                            success = generate_cursor_rule(
+                                source, skill_dest, prefixed_skill, inst.project_path
+                            )
                         else:
                             dest = skill_dest / prefixed_skill
                             success = generate_claude_skill(source, dest)
@@ -506,40 +573,54 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                         if success:
                             skills_ok += 1
                             if verbose:
-                                ui.item_result(prefixed_skill, ok=True, indent=2)
+                                console.print(f"    [green]{prefixed_skill}[/green]")
                         else:
                             skills_failed += 1
                             if verbose:
-                                ui.item_result(original_skill, ok=False, note="source not found", indent=2)
+                                console.print(
+                                    f"    [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                                )
 
         # Update commands - iterate over CURRENT module commands, not old registry
         if global_module.commands:
             try:
-                command_dest = get_assistant_command_path(inst.assistant, inst.scope, inst.project_path)
+                command_dest = get_assistant_command_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
             except ValueError:
-                ui.error("Cannot determine command path")
+                console.print("[red]Cannot determine command path[/red]")
                 command_dest = None
 
             if command_dest:
-                commands_dir = source_module / 'commands'
+                commands_dir = source_module / "commands"
                 for cmd_name in global_module.commands:
-                    source = commands_dir / f'{cmd_name}.md'
+                    source = commands_dir / f"{cmd_name}.md"
 
-                    if inst.assistant == 'gemini-cli':
-                        success = generate_gemini_command(source, command_dest, cmd_name, inst.module_name)
-                    elif inst.assistant == 'cursor':
-                        success = generate_cursor_command(source, command_dest, cmd_name, inst.module_name)
+                    if inst.assistant == "gemini-cli":
+                        success = generate_gemini_command(
+                            source, command_dest, cmd_name, inst.module_name
+                        )
+                    elif inst.assistant == "cursor":
+                        success = generate_cursor_command(
+                            source, command_dest, cmd_name, inst.module_name
+                        )
                     else:
-                        success = generate_claude_command(source, command_dest, cmd_name, inst.module_name)
+                        success = generate_claude_command(
+                            source, command_dest, cmd_name, inst.module_name
+                        )
 
                     if success:
                         commands_ok += 1
                         if verbose:
-                            ui.item_result(f"/{inst.module_name}-{cmd_name}", ok=True, indent=2)
+                            console.print(
+                                f"    [green]/{inst.module_name}-{cmd_name}[/green]"
+                            )
                     else:
                         commands_failed += 1
                         if verbose:
-                            ui.item_result(cmd_name, ok=False, note="source not found", indent=2)
+                            console.print(
+                                f"    [red]{cmd_name}[/red] [dim](source not found)[/dim]"
+                            )
 
         # Update the registry with current skills/commands
         inst.skills = list(current_skills)
@@ -551,7 +632,9 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         if skills_ok > 0:
             parts.append(f"{skills_ok} {('skill' if skills_ok == 1 else 'skills')}")
         if commands_ok > 0:
-            parts.append(f"{commands_ok} {('command' if commands_ok == 1 else 'commands')}")
+            parts.append(
+                f"{commands_ok} {('command' if commands_ok == 1 else 'commands')}"
+            )
 
         summary = ", ".join(parts) if parts else "no items"
 
@@ -564,20 +647,25 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
 
         status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
 
-        ui.console.print(f"  [green]{ui.Icons.SUCCESS}[/green] {ui.module_name(inst.module_name)} {ui.Icons.ARROW} {inst.assistant} [dim]({summary}){status_suffix}[/dim]")
+        console.print(
+            f"  [green]{inst.module_name}[/green] -> {inst.assistant} [dim]({summary}){status_suffix}[/dim]"
+        )
 
-    ui.blank()
+    console.print()
     if stale_installations:
-        ui.warning(f"Found {len(stale_installations)} stale installation(s)")
-    ui.success("Update complete")
+        console.print(
+            f"[yellow]Found {len(stale_installations)} stale installation(s)[/yellow]"
+        )
+    console.print("[green]Update complete[/green]")
 
 
-@click.command(name='list')
+@click.command(name="list")
 @click.option(
-    '-a', '--assistant',
+    "-a",
+    "--assistant",
     type=click.Choice(list(ASSISTANTS.keys())),
     default=None,
-    help='Filter by AI assistant'
+    help="Filter by AI assistant",
 )
 def list_installed_cmd(assistant: Optional[str]):
     """
@@ -594,9 +682,9 @@ def list_installed_cmd(assistant: Optional[str]):
         installations = [i for i in installations if i.assistant == assistant]
 
     if not installations:
-        ui.warning("No modules installed")
-        ui.blank()
-        ui.hint("Install modules with: lola install <module>")
+        console.print("[yellow]No modules installed[/yellow]")
+        console.print()
+        console.print("[dim]Install modules with: lola install <module>[/dim]")
         return
 
     # Group by module name
@@ -606,18 +694,29 @@ def list_installed_cmd(assistant: Optional[str]):
             by_module[inst.module_name] = []
         by_module[inst.module_name].append(inst)
 
-    ui.header(f"Installed ({len(by_module)} modules)")
-    ui.blank()
+    # Pluralize correctly
+    module_word = "module" if len(by_module) == 1 else "modules"
+    console.print(f"\n[bold]Installed ({len(by_module)} {module_word})[/bold]")
+    console.print()
 
     for mod_name, insts in by_module.items():
-        ui.console.print(f"{ui.module_name(mod_name)}")
+        console.print(f"[bold]{mod_name}[/bold]")
+
+        # Group installations by (scope, path) to consolidate assistants
+        by_scope_path = {}
         for inst in insts:
-            scope_str = f"{inst.assistant}/{inst.scope}"
-            if inst.project_path:
-                scope_str += f" [dim]({inst.project_path})[/dim]"
-            ui.item(scope_str)
-            if inst.skills:
-                ui.kv("Skills", ', '.join(inst.skills), indent=2)
-            if inst.commands:
-                ui.kv("Commands", ', '.join(inst.commands), indent=2)
-        ui.blank()
+            key = (inst.scope, inst.project_path)
+            if key not in by_scope_path:
+                by_scope_path[key] = []
+            by_scope_path[key].append(inst)
+
+        for (scope, project_path), scope_insts in by_scope_path.items():
+            # Collect all assistants for this scope/path
+            assistants = sorted(set(inst.assistant for inst in scope_insts))
+            assistants_str = ", ".join(assistants)
+
+            console.print(f"- [dim]scope:[/dim] {scope}")
+            if project_path:
+                console.print(f'  [dim]path:[/dim] "{project_path}"')
+            console.print(f"  [dim]assistants:[/dim] \\[{assistants_str}]")
+        console.print()

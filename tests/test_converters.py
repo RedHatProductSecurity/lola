@@ -1,9 +1,5 @@
 """Tests for converter modules."""
 
-from pathlib import Path
-
-import pytest
-
 from lola.converters import (
     parse_skill_frontmatter,
     skill_to_claude,
@@ -33,9 +29,9 @@ description: My skill description
 Content here.
 """
         metadata, body = parse_skill_frontmatter(content)
-        assert metadata['name'] == 'myskill'
-        assert metadata['description'] == 'My skill description'
-        assert '# My Skill' in body
+        assert metadata["name"] == "myskill"
+        assert metadata["description"] == "My skill description"
+        assert "# My Skill" in body
 
     def test_skill_to_claude(self, tmp_path):
         """Convert skill to Claude format (passthrough)."""
@@ -91,9 +87,9 @@ argument-hint: "<file>"
 Do the thing.
 """
         metadata, body = parse_command_frontmatter(content)
-        assert metadata['description'] == 'My command'
-        assert metadata['argument-hint'] == '<file>'
-        assert 'Do the thing.' in body
+        assert metadata["description"] == "My command"
+        assert metadata["argument-hint"] == "<file>"
+        assert "Do the thing." in body
 
     def test_has_positional_args(self):
         """Detect positional arguments."""
@@ -130,10 +126,10 @@ Do something with $ARGUMENTS.
         assert result is not None
         assert 'description = "Test command"' in result
         assert 'prompt = """' in result
-        assert '{{args}}' in result
+        assert "{{args}}" in result
 
     def test_get_command_filename(self):
         """Get correct filename for each assistant."""
-        assert get_command_filename('claude-code', 'mod', 'cmd') == 'mod-cmd.md'
-        assert get_command_filename('cursor', 'mod', 'cmd') == 'mod-cmd.md'
-        assert get_command_filename('gemini-cli', 'mod', 'cmd') == 'mod-cmd.toml'
+        assert get_command_filename("claude-code", "mod", "cmd") == "mod-cmd.md"
+        assert get_command_filename("cursor", "mod", "cmd") == "mod-cmd.md"
+        assert get_command_filename("gemini-cli", "mod", "cmd") == "mod-cmd.toml"

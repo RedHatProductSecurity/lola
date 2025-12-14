@@ -21,16 +21,17 @@ def get_skill_description(source_path: Path) -> str:
     """Extract description from a SKILL.md file's frontmatter."""
     from lola import frontmatter as fm
 
-    skill_file = source_path / 'SKILL.md'
+    skill_file = source_path / "SKILL.md"
     if not skill_file.exists():
-        return ''
+        return ""
 
-    return fm.get_description(skill_file) or ''
+    return fm.get_description(skill_file) or ""
 
 
 # =============================================================================
 # Skill Generators
 # =============================================================================
+
 
 def generate_claude_skill(source_path: Path, dest_path: Path) -> bool:
     """
@@ -51,11 +52,11 @@ def generate_claude_skill(source_path: Path, dest_path: Path) -> bool:
     # Generate SKILL.md
     content = skill_to_claude(source_path)
     if content:
-        (dest_path / 'SKILL.md').write_text(content)
+        (dest_path / "SKILL.md").write_text(content)
 
     # Copy supporting files (not SKILL.md)
     for item in source_path.iterdir():
-        if item.name == 'SKILL.md':
+        if item.name == "SKILL.md":
             continue
         dest_item = dest_path / item.name
         if item.is_dir():
@@ -68,7 +69,9 @@ def generate_claude_skill(source_path: Path, dest_path: Path) -> bool:
     return True
 
 
-def generate_cursor_rule(source_path: Path, rules_dir: Path, skill_name: str, project_path: str) -> bool:
+def generate_cursor_rule(
+    source_path: Path, rules_dir: Path, skill_name: str, project_path: str | None
+) -> bool:
     """
     Generate Cursor .mdc rule from source.
 
@@ -87,17 +90,20 @@ def generate_cursor_rule(source_path: Path, rules_dir: Path, skill_name: str, pr
     rules_dir.mkdir(parents=True, exist_ok=True)
 
     # Compute relative path from project root to the skill source
-    try:
-        relative_source = source_path.relative_to(Path(project_path))
-        assets_path = str(relative_source)
-    except ValueError:
-        # Fallback to absolute path if not relative to project
+    if project_path:
+        try:
+            relative_source = source_path.relative_to(Path(project_path))
+            assets_path = str(relative_source)
+        except ValueError:
+            # Fallback to absolute path if not relative to project
+            assets_path = str(source_path)
+    else:
         assets_path = str(source_path)
 
     # Generate .mdc file with paths pointing to source
     content = skill_to_cursor_mdc(source_path, assets_path)
     if content:
-        mdc_file = rules_dir / f'{skill_name}.mdc'
+        mdc_file = rules_dir / f"{skill_name}.mdc"
         mdc_file.write_text(content)
 
     return True
@@ -107,7 +113,10 @@ def generate_cursor_rule(source_path: Path, rules_dir: Path, skill_name: str, pr
 # Command Generators
 # =============================================================================
 
-def generate_claude_command(source_path: Path, dest_dir: Path, cmd_name: str, module_name: str) -> bool:
+
+def generate_claude_command(
+    source_path: Path, dest_dir: Path, cmd_name: str, module_name: str
+) -> bool:
     """
     Generate Claude command file from source.
 
@@ -127,13 +136,15 @@ def generate_claude_command(source_path: Path, dest_dir: Path, cmd_name: str, mo
 
     content = command_to_claude(source_path)
     if content:
-        filename = get_command_filename('claude-code', module_name, cmd_name)
+        filename = get_command_filename("claude-code", module_name, cmd_name)
         (dest_dir / filename).write_text(content)
         return True
     return False
 
 
-def generate_cursor_command(source_path: Path, dest_dir: Path, cmd_name: str, module_name: str) -> bool:
+def generate_cursor_command(
+    source_path: Path, dest_dir: Path, cmd_name: str, module_name: str
+) -> bool:
     """
     Generate Cursor command file from source.
 
@@ -153,13 +164,15 @@ def generate_cursor_command(source_path: Path, dest_dir: Path, cmd_name: str, mo
 
     content = command_to_cursor(source_path)
     if content:
-        filename = get_command_filename('cursor', module_name, cmd_name)
+        filename = get_command_filename("cursor", module_name, cmd_name)
         (dest_dir / filename).write_text(content)
         return True
     return False
 
 
-def generate_gemini_command(source_path: Path, dest_dir: Path, cmd_name: str, module_name: str) -> bool:
+def generate_gemini_command(
+    source_path: Path, dest_dir: Path, cmd_name: str, module_name: str
+) -> bool:
     """
     Generate Gemini CLI command file (TOML format) from source.
 
@@ -179,7 +192,7 @@ def generate_gemini_command(source_path: Path, dest_dir: Path, cmd_name: str, mo
 
     content = command_to_gemini(source_path)
     if content:
-        filename = get_command_filename('gemini-cli', module_name, cmd_name)
+        filename = get_command_filename("gemini-cli", module_name, cmd_name)
         (dest_dir / filename).write_text(content)
         return True
     return False
@@ -207,7 +220,12 @@ to learn the detailed instructions and workflows.
 """
 
 
-def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str, str, Path]], project_path: str) -> bool:
+def update_gemini_md(
+    gemini_file: Path,
+    module_name: str,
+    skills: list[tuple[str, str, Path]],
+    project_path: str | None,
+) -> bool:
     """
     Add or update skill entries in GEMINI.md file.
 
@@ -227,21 +245,26 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
         gemini_file.parent.mkdir(parents=True, exist_ok=True)
         content = ""
 
-    project_root = Path(project_path)
+    project_root = Path(project_path) if project_path else None
 
     # Build the skills section for this module
     skills_block = f"\n### {module_name}\n\n"
     for skill_name, description, skill_path in skills:
         # Use relative path from project root for Gemini compatibility
-        try:
-            relative_path = skill_path.relative_to(project_root)
-            skill_md_path = relative_path / 'SKILL.md'
-        except ValueError:
-            # Fallback to absolute path if not relative to project
-            skill_md_path = skill_path / 'SKILL.md'
+        if project_root:
+            try:
+                relative_path = skill_path.relative_to(project_root)
+                skill_md_path = relative_path / "SKILL.md"
+            except ValueError:
+                # Fallback to absolute path if not relative to project
+                skill_md_path = skill_path / "SKILL.md"
+        else:
+            skill_md_path = skill_path / "SKILL.md"
         skills_block += f"#### {skill_name}\n"
         skills_block += f"**When to use:** {description}\n"
-        skills_block += f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
+        skills_block += (
+            f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
+        )
 
     # Find or create the lola-managed section
     if GEMINI_START_MARKER in content and GEMINI_END_MARKER in content:
@@ -251,15 +274,17 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
         existing_section = content[start_idx:end_idx]
 
         # Parse existing modules in the section
-        section_content = existing_section[len(GEMINI_START_MARKER):-len(GEMINI_END_MARKER)]
+        section_content = existing_section[
+            len(GEMINI_START_MARKER) : -len(GEMINI_END_MARKER)
+        ]
 
         # Remove old entry for this module if exists
-        lines = section_content.split('\n')
+        lines = section_content.split("\n")
         new_lines = []
         skip_until_next_module = False
         for line in lines:
-            if line.startswith('### '):
-                if line == f'### {module_name}':
+            if line.startswith("### "):
+                if line == f"### {module_name}":
                     skip_until_next_module = True
                     continue
                 else:
@@ -268,7 +293,12 @@ def update_gemini_md(gemini_file: Path, module_name: str, skills: list[tuple[str
                 new_lines.append(line)
 
         # Add new module entry
-        new_section = GEMINI_START_MARKER + '\n'.join(new_lines) + skills_block + GEMINI_END_MARKER
+        new_section = (
+            GEMINI_START_MARKER
+            + "\n".join(new_lines)
+            + skills_block
+            + GEMINI_END_MARKER
+        )
         content = content[:start_idx] + new_section + content[end_idx:]
     else:
         # Add new lola section at end
@@ -303,14 +333,16 @@ def remove_gemini_skills(gemini_file: Path, module_name: str) -> bool:
     existing_section = content[start_idx:end_idx]
 
     # Parse and remove module
-    section_content = existing_section[len(GEMINI_START_MARKER):-len(GEMINI_END_MARKER)]
-    lines = section_content.split('\n')
+    section_content = existing_section[
+        len(GEMINI_START_MARKER) : -len(GEMINI_END_MARKER)
+    ]
+    lines = section_content.split("\n")
     new_lines = []
     skip_until_next_module = False
 
     for line in lines:
-        if line.startswith('### '):
-            if line == f'### {module_name}':
+        if line.startswith("### "):
+            if line == f"### {module_name}":
                 skip_until_next_module = True
                 continue
             else:
@@ -318,7 +350,7 @@ def remove_gemini_skills(gemini_file: Path, module_name: str) -> bool:
         if not skip_until_next_module:
             new_lines.append(line)
 
-    new_section = GEMINI_START_MARKER + '\n'.join(new_lines) + GEMINI_END_MARKER
+    new_section = GEMINI_START_MARKER + "\n".join(new_lines) + GEMINI_END_MARKER
     content = content[:start_idx] + new_section + content[end_idx:]
 
     gemini_file.write_text(content)

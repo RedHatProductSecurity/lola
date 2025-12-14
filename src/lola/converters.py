@@ -43,8 +43,8 @@ def rewrite_relative_paths(content: str, assets_path: str) -> str:
     # Matches: ./path, ../path, or bare paths in code blocks/commands
     patterns = [
         # ./relative/path or ../relative/path
-        (r'(\s|^|"|\'|\(|`)(\.\./[^\s"\')\]`]+)', r'\1' + assets_path + r'/\2'),
-        (r'(\s|^|"|\'|\(|`)(\./([^\s"\')\]`]+))', r'\1' + assets_path + r'/\3'),
+        (r'(\s|^|"|\'|\(|`)(\.\./[^\s"\')\]`]+)', r"\1" + assets_path + r"/\2"),
+        (r'(\s|^|"|\'|\(|`)(\./([^\s"\')\]`]+))', r"\1" + assets_path + r"/\3"),
     ]
 
     result = content
@@ -52,12 +52,14 @@ def rewrite_relative_paths(content: str, assets_path: str) -> str:
         result = re.sub(pattern, replacement, result)
 
     # Clean up any double slashes (except in URLs)
-    result = re.sub(r'(?<!:)//+', '/', result)
+    result = re.sub(r"(?<!:)//+", "/", result)
 
     return result
 
 
-def skill_to_cursor_mdc(skill_path: Path, assets_path: Optional[str] = None) -> Optional[str]:
+def skill_to_cursor_mdc(
+    skill_path: Path, assets_path: Optional[str] = None
+) -> Optional[str]:
     """
     Convert a SKILL.md file to Cursor MDC format.
 
@@ -68,7 +70,7 @@ def skill_to_cursor_mdc(skill_path: Path, assets_path: Optional[str] = None) -> 
     Returns:
         MDC file content, or None if conversion fails
     """
-    skill_file = skill_path / 'SKILL.md'
+    skill_file = skill_path / "SKILL.md"
     if not skill_file.exists():
         return None
 
@@ -80,15 +82,15 @@ def skill_to_cursor_mdc(skill_path: Path, assets_path: Optional[str] = None) -> 
         body = rewrite_relative_paths(body, assets_path)
 
     # Build MDC content
-    mdc_lines = ['---']
+    mdc_lines = ["---"]
     mdc_lines.append(f"description: {frontmatter.get('description', '')}")
-    mdc_lines.append('globs:')
-    mdc_lines.append('alwaysApply: false')
-    mdc_lines.append('---')
-    mdc_lines.append('')
+    mdc_lines.append("globs:")
+    mdc_lines.append("alwaysApply: false")
+    mdc_lines.append("---")
+    mdc_lines.append("")
     mdc_lines.append(body)
 
-    return '\n'.join(mdc_lines)
+    return "\n".join(mdc_lines)
 
 
 def skill_to_claude(skill_path: Path) -> Optional[str]:
@@ -101,7 +103,7 @@ def skill_to_claude(skill_path: Path) -> Optional[str]:
     Returns:
         Skill file content, or None if not found
     """
-    skill_file = skill_path / 'SKILL.md'
+    skill_file = skill_path / "SKILL.md"
     if not skill_file.exists():
         return None
     return skill_file.read_text()
@@ -124,11 +126,11 @@ def skill_to_gemini(skill_path: Path) -> Optional[str]:
 
 def get_skill_filename(assistant: str, skill_name: str) -> str:
     """Get the appropriate skill filename for an assistant."""
-    if assistant == 'cursor':
-        return f'{skill_name}.mdc'
-    return 'SKILL.md'
+    if assistant == "cursor":
+        return f"{skill_name}.mdc"
+    return "SKILL.md"
 
 
 def is_flat_file_assistant(assistant: str) -> bool:
     """Check if the assistant uses flat files instead of directories."""
-    return assistant == 'cursor'
+    return assistant == "cursor"

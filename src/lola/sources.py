@@ -34,15 +34,16 @@ def download_file(url: str, dest_path: Path) -> None:
     """
     try:
         with urlopen(url, timeout=60) as response:
-            with open(dest_path, 'wb') as f:
+            with open(dest_path, "wb") as f:
                 shutil.copyfileobj(response, f)
     except URLError as e:
         raise RuntimeError(f"Failed to download {url}: {e}")
     except Exception as e:
         raise RuntimeError(f"Download error: {e}")
 
+
 # File to track module source for updates
-SOURCE_FILE = '.lola/source.yml'
+SOURCE_FILE = ".lola/source.yml"
 
 
 def validate_module_name(name: str) -> str:
@@ -62,19 +63,21 @@ def validate_module_name(name: str) -> str:
         raise ValueError("Module name cannot be empty")
 
     # Reject path traversal attempts
-    if name in ('.', '..'):
+    if name in (".", ".."):
         raise ValueError(f"Invalid module name: '{name}' (path traversal not allowed)")
 
-    if '/' in name or '\\' in name:
+    if "/" in name or "\\" in name:
         raise ValueError(f"Invalid module name: '{name}' (path separators not allowed)")
 
     # Reject names starting with . (hidden files/special dirs)
-    if name.startswith('.'):
+    if name.startswith("."):
         raise ValueError(f"Invalid module name: '{name}' (cannot start with '.')")
 
     # Reject names with null bytes or other control characters
     if any(ord(c) < 32 for c in name):
-        raise ValueError(f"Invalid module name: '{name}' (control characters not allowed)")
+        raise ValueError(
+            f"Invalid module name: '{name}' (control characters not allowed)"
+        )
 
     return name
 
@@ -107,22 +110,24 @@ class GitSourceHandler(SourceHandler):
 
     def can_handle(self, source: str) -> bool:
         """Check if source is a git URL or ends with .git."""
-        if source.endswith('.git'):
+        if source.endswith(".git"):
             return True
         parsed = urlparse(source)
-        if parsed.scheme in ('git', 'ssh'):
+        if parsed.scheme in ("git", "ssh"):
             return True
-        if parsed.scheme in ('http', 'https') and ('github.com' in source or
-                                                     'gitlab.com' in source or
-                                                     'bitbucket.org' in source):
+        if parsed.scheme in ("http", "https") and (
+            "github.com" in source
+            or "gitlab.com" in source
+            or "bitbucket.org" in source
+        ):
             return True
         return False
 
     def fetch(self, source: str, dest_dir: Path) -> Path:
         """Clone git repository to destination."""
         # Extract repo name from URL
-        repo_name = source.rstrip('/').split('/')[-1]
-        if repo_name.endswith('.git'):
+        repo_name = source.rstrip("/").split("/")[-1]
+        if repo_name.endswith(".git"):
             repo_name = repo_name[:-4]
 
         # Validate module name to prevent directory traversal
@@ -135,16 +140,16 @@ class GitSourceHandler(SourceHandler):
 
         # Clone the repository
         result = subprocess.run(
-            ['git', 'clone', '--depth', '1', source, str(module_dir)],
+            ["git", "clone", "--depth", "1", source, str(module_dir)],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         if result.returncode != 0:
             raise RuntimeError(f"Git clone failed: {result.stderr}")
 
         # Remove .git directory to save space
-        git_dir = module_dir / '.git'
+        git_dir = module_dir / ".git"
         if git_dir.exists():
             shutil.rmtree(git_dir)
 
@@ -156,7 +161,7 @@ class ZipSourceHandler(SourceHandler):
 
     def can_handle(self, source: str) -> bool:
         """Check if source is a zip file."""
-        return source.endswith('.zip') and Path(source).exists()
+        return source.endswith(".zip") and Path(source).exists()
 
     def fetch(self, source: str, dest_dir: Path) -> Path:
         """Extract zip file to destination."""
@@ -165,7 +170,7 @@ class ZipSourceHandler(SourceHandler):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
 
-            with zipfile.ZipFile(source_path, 'r') as zf:
+            with zipfile.ZipFile(source_path, "r") as zf:
                 self._safe_extract(zf, tmp_path)
 
             # Find the module directory (may be nested)
@@ -202,8 +207,8 @@ class ZipSourceHandler(SourceHandler):
             return path.parent.parent
 
         # Or look for a commands/ directory with .md files
-        for path in root.rglob('commands'):
-            if path.is_dir() and list(path.glob('*.md')):
+        for path in root.rglob("commands"):
+            if path.is_dir() and list(path.glob("*.md")):
                 return path.parent
 
         return None
@@ -214,7 +219,10 @@ class ZipSourceHandler(SourceHandler):
         for member in zf.namelist():
             # Normalize the path and check for traversal
             member_path = (dest / member).resolve()
-            if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
+            if (
+                not str(member_path).startswith(str(dest) + os.sep)
+                and member_path != dest
+            ):
                 raise ValueError(f"Zip Slip attack detected: {member}")
         # All members are safe, extract them
         zf.extractall(dest)
@@ -226,11 +234,13 @@ class TarSourceHandler(SourceHandler):
     def can_handle(self, source: str) -> bool:
         """Check if source is a tar file."""
         source_lower = source.lower()
-        is_tar = (source_lower.endswith('.tar') or
-                  source_lower.endswith('.tar.gz') or
-                  source_lower.endswith('.tgz') or
-                  source_lower.endswith('.tar.bz2') or
-                  source_lower.endswith('.tar.xz'))
+        is_tar = (
+            source_lower.endswith(".tar")
+            or source_lower.endswith(".tar.gz")
+            or source_lower.endswith(".tgz")
+            or source_lower.endswith(".tar.bz2")
+            or source_lower.endswith(".tar.xz")
+        )
         return is_tar and Path(source).exists()
 
     def fetch(self, source: str, dest_dir: Path) -> Path:
@@ -240,8 +250,8 @@ class TarSourceHandler(SourceHandler):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
 
-            with tarfile.open(source_path, 'r:*') as tf:
-                tf.extractall(tmp_path, filter='data')
+            with tarfile.open(source_path, "r:*") as tf:
+                tf.extractall(tmp_path, filter="data")
 
             # Find the module directory (may be nested)
             module_dir = self._find_module_dir(tmp_path)
@@ -258,9 +268,9 @@ class TarSourceHandler(SourceHandler):
             if module_name == tmp_path.name:
                 # Strip extensions from source name
                 module_name = source_path.name
-                for ext in ['.tar.gz', '.tgz', '.tar.bz2', '.tar.xz', '.tar']:
+                for ext in [".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar"]:
                     if module_name.lower().endswith(ext):
-                        module_name = module_name[:-len(ext)]
+                        module_name = module_name[: -len(ext)]
                         break
 
             # Validate module name to prevent directory traversal
@@ -282,8 +292,8 @@ class TarSourceHandler(SourceHandler):
             return path.parent.parent
 
         # Or look for a commands/ directory with .md files
-        for path in root.rglob('commands'):
-            if path.is_dir() and list(path.glob('*.md')):
+        for path in root.rglob("commands"):
+            if path.is_dir() and list(path.glob("*.md")):
                 return path.parent
 
         return None
@@ -295,10 +305,10 @@ class ZipUrlSourceHandler(SourceHandler):
     def can_handle(self, source: str) -> bool:
         """Check if source is a URL to a zip file."""
         parsed = urlparse(source)
-        if parsed.scheme not in ('http', 'https'):
+        if parsed.scheme not in ("http", "https"):
             return False
         # Check if the path ends with .zip
-        return parsed.path.lower().endswith('.zip')
+        return parsed.path.lower().endswith(".zip")
 
     def fetch(self, source: str, dest_dir: Path) -> Path:
         """Download and extract zip file from URL."""
@@ -314,15 +324,18 @@ class ZipUrlSourceHandler(SourceHandler):
             download_file(source, zip_path)
 
             # Extract to a subdirectory
-            extract_path = tmp_path / 'extracted'
+            extract_path = tmp_path / "extracted"
             extract_path.mkdir()
 
-            with zipfile.ZipFile(zip_path, 'r') as zf:
+            with zipfile.ZipFile(zip_path, "r") as zf:
                 # Safe extraction
                 dest = extract_path.resolve()
                 for member in zf.namelist():
                     member_path = (dest / member).resolve()
-                    if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
+                    if (
+                        not str(member_path).startswith(str(dest) + os.sep)
+                        and member_path != dest
+                    ):
                         raise ValueError(f"Zip Slip attack detected: {member}")
                 zf.extractall(extract_path)
 
@@ -359,8 +372,8 @@ class ZipUrlSourceHandler(SourceHandler):
             return path.parent.parent
 
         # Or look for a commands/ directory with .md files
-        for path in root.rglob('commands'):
-            if path.is_dir() and list(path.glob('*.md')):
+        for path in root.rglob("commands"):
+            if path.is_dir() and list(path.glob("*.md")):
                 return path.parent
 
         return None
@@ -369,12 +382,12 @@ class ZipUrlSourceHandler(SourceHandler):
 class TarUrlSourceHandler(SourceHandler):
     """Handler for tar file URLs."""
 
-    TAR_EXTENSIONS = ('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tar.xz')
+    TAR_EXTENSIONS = (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz")
 
     def can_handle(self, source: str) -> bool:
         """Check if source is a URL to a tar file."""
         parsed = urlparse(source)
-        if parsed.scheme not in ('http', 'https'):
+        if parsed.scheme not in ("http", "https"):
             return False
         path_lower = parsed.path.lower()
         return any(path_lower.endswith(ext) for ext in self.TAR_EXTENSIONS)
@@ -392,11 +405,11 @@ class TarUrlSourceHandler(SourceHandler):
             download_file(source, tar_path)
 
             # Extract to a subdirectory
-            extract_path = tmp_path / 'extracted'
+            extract_path = tmp_path / "extracted"
             extract_path.mkdir()
 
-            with tarfile.open(tar_path, 'r:*') as tf:
-                tf.extractall(extract_path, filter='data')
+            with tarfile.open(tar_path, "r:*") as tf:
+                tf.extractall(extract_path, filter="data")
 
             # Find the module directory (may be nested)
             module_dir = self._find_module_dir(extract_path)
@@ -412,9 +425,9 @@ class TarUrlSourceHandler(SourceHandler):
             if module_name == extract_path.name:
                 # Strip extensions from filename
                 module_name = filename
-                for ext in ['.tar.gz', '.tgz', '.tar.bz2', '.tar.xz', '.tar']:
+                for ext in [".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar"]:
                     if module_name.lower().endswith(ext):
-                        module_name = module_name[:-len(ext)]
+                        module_name = module_name[: -len(ext)]
                         break
 
             # Validate module name to prevent directory traversal
@@ -436,8 +449,8 @@ class TarUrlSourceHandler(SourceHandler):
             return path.parent.parent
 
         # Or look for a commands/ directory with .md files
-        for path in root.rglob('commands'):
-            if path.is_dir() and list(path.glob('*.md')):
+        for path in root.rglob("commands"):
+            if path.is_dir() and list(path.glob("*.md")):
                 return path.parent
 
         return None
@@ -512,8 +525,8 @@ def detect_source_type(source: str) -> str:
     """Detect the type of source."""
     for handler in SOURCE_HANDLERS:
         if handler.can_handle(source):
-            return handler.__class__.__name__.replace('SourceHandler', '').lower()
-    return 'unknown'
+            return handler.__class__.__name__.replace("SourceHandler", "").lower()
+    return "unknown"
 
 
 def save_source_info(module_path: Path, source: str, source_type: str):
@@ -529,16 +542,16 @@ def save_source_info(module_path: Path, source: str, source_type: str):
     source_file.parent.mkdir(parents=True, exist_ok=True)
 
     # For local paths (not URLs), store the absolute resolved path
-    if source_type in ('folder', 'zip', 'tar'):
+    if source_type in ("folder", "zip", "tar"):
         source = str(Path(source).resolve())
     # URL types (zipurl, tarurl, git) keep the original URL
 
     data = {
-        'source': source,
-        'type': source_type,
+        "source": source,
+        "type": source_type,
     }
 
-    with open(source_file, 'w') as f:
+    with open(source_file, "w") as f:
         yaml.dump(data, f, default_flow_style=False)
 
 
@@ -556,7 +569,7 @@ def load_source_info(module_path: Path) -> Optional[dict]:
     if not source_file.exists():
         return None
 
-    with open(source_file, 'r') as f:
+    with open(source_file, "r") as f:
         return yaml.safe_load(f)
 
 
@@ -574,17 +587,17 @@ def update_module(module_path: Path) -> tuple[bool, str]:
     if not source_info:
         return False, "No source information found. Module cannot be updated."
 
-    source = source_info.get('source')
-    source_type = source_info.get('type')
+    source = source_info.get("source")
+    source_type = source_info.get("type")
 
     if not source or not source_type:
         return False, "Invalid source information."
 
     # Validate source still exists/is accessible (for local sources only)
-    if source_type == 'folder':
+    if source_type == "folder":
         if not Path(source).exists():
             return False, f"Source folder no longer exists: {source}"
-    elif source_type in ('zip', 'tar'):
+    elif source_type in ("zip", "tar"):
         if not Path(source).exists():
             return False, f"Source archive no longer exists: {source}"
     # URL sources (zipurl, tarurl, git) will be validated during fetch
@@ -592,7 +605,7 @@ def update_module(module_path: Path) -> tuple[bool, str]:
     # Find the appropriate handler
     handler = None
     for h in SOURCE_HANDLERS:
-        handler_type = h.__class__.__name__.replace('SourceHandler', '').lower()
+        handler_type = h.__class__.__name__.replace("SourceHandler", "").lower()
         if handler_type == source_type:
             handler = h
             break

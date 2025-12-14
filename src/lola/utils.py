@@ -26,5 +26,5 @@ def get_local_modules_path(project_path: Optional[str]) -> Path:
         Path to .lola/modules/
     """
     if project_path:
-        return Path(project_path) / '.lola' / 'modules'
-    return Path.home() / '.lola' / 'modules'
+        return Path(project_path) / ".lola" / "modules"
+    return Path.home() / ".lola" / "modules"

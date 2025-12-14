@@ -1,18 +1,14 @@
 """Tests for the core/installer module."""
 
-import shutil
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import pytest
-import yaml
 
 from lola.core.installer import (
     get_registry,
     copy_module_to_local,
     install_to_assistant,
 )
-from lola.models import Module, InstallationRegistry, Installation
+from lola.models import Module, InstallationRegistry
 
 
 class TestGetRegistry:
@@ -20,7 +16,7 @@ class TestGetRegistry:
 
     def test_returns_registry(self, tmp_path):
         """Returns an InstallationRegistry."""
-        with patch('lola.core.installer.INSTALLED_FILE', tmp_path / 'installed.yml'):
+        with patch("lola.core.installer.INSTALLED_FILE", tmp_path / "installed.yml"):
             registry = get_registry()
 
         assert isinstance(registry, InstallationRegistry)
@@ -32,32 +28,32 @@ class TestCopyModuleToLocal:
     def test_copies_module(self, tmp_path):
         """Copies module to local modules path."""
         # Create source module
-        source_dir = tmp_path / 'source' / 'mymodule'
+        source_dir = tmp_path / "source" / "mymodule"
         source_dir.mkdir(parents=True)
-        (source_dir / 'SKILL.md').write_text('# My Skill')
-        (source_dir / 'subdir').mkdir()
-        (source_dir / 'subdir' / 'file.txt').write_text('content')
+        (source_dir / "SKILL.md").write_text("# My Skill")
+        (source_dir / "subdir").mkdir()
+        (source_dir / "subdir" / "file.txt").write_text("content")
 
-        module = Module(name='mymodule', path=source_dir)
+        module = Module(name="mymodule", path=source_dir)
 
-        local_modules = tmp_path / 'local' / '.lola' / 'modules'
+        local_modules = tmp_path / "local" / ".lola" / "modules"
 
         result = copy_module_to_local(module, local_modules)
 
-        assert result == local_modules / 'mymodule'
+        assert result == local_modules / "mymodule"
         assert result.exists()
-        assert (result / 'SKILL.md').read_text() == '# My Skill'
-        assert (result / 'subdir' / 'file.txt').read_text() == 'content'
+        assert (result / "SKILL.md").read_text() == "# My Skill"
+        assert (result / "subdir" / "file.txt").read_text() == "content"
 
     def test_same_path_returns_unchanged(self, tmp_path):
         """Returns same path if source and dest are identical."""
-        module_dir = tmp_path / '.lola' / 'modules' / 'mymodule'
+        module_dir = tmp_path / ".lola" / "modules" / "mymodule"
         module_dir.mkdir(parents=True)
-        (module_dir / 'SKILL.md').write_text('# My Skill')
+        (module_dir / "SKILL.md").write_text("# My Skill")
 
-        module = Module(name='mymodule', path=module_dir)
+        module = Module(name="mymodule", path=module_dir)
 
-        local_modules = tmp_path / '.lola' / 'modules'
+        local_modules = tmp_path / ".lola" / "modules"
 
         result = copy_module_to_local(module, local_modules)
 
@@ -66,48 +62,48 @@ class TestCopyModuleToLocal:
     def test_overwrites_existing(self, tmp_path):
         """Overwrites existing module directory."""
         # Create source module
-        source_dir = tmp_path / 'source' / 'mymodule'
+        source_dir = tmp_path / "source" / "mymodule"
         source_dir.mkdir(parents=True)
-        (source_dir / 'new.txt').write_text('new content')
+        (source_dir / "new.txt").write_text("new content")
 
-        module = Module(name='mymodule', path=source_dir)
+        module = Module(name="mymodule", path=source_dir)
 
-        local_modules = tmp_path / 'local' / '.lola' / 'modules'
+        local_modules = tmp_path / "local" / ".lola" / "modules"
         local_modules.mkdir(parents=True)
 
         # Create existing directory
-        existing = local_modules / 'mymodule'
+        existing = local_modules / "mymodule"
         existing.mkdir()
-        (existing / 'old.txt').write_text('old content')
+        (existing / "old.txt").write_text("old content")
 
         result = copy_module_to_local(module, local_modules)
 
-        assert (result / 'new.txt').exists()
-        assert not (result / 'old.txt').exists()
+        assert (result / "new.txt").exists()
+        assert not (result / "old.txt").exists()
 
     def test_removes_existing_symlink(self, tmp_path):
         """Removes existing symlink before copying."""
         # Create source module
-        source_dir = tmp_path / 'source' / 'mymodule'
+        source_dir = tmp_path / "source" / "mymodule"
         source_dir.mkdir(parents=True)
-        (source_dir / 'SKILL.md').write_text('# My Skill')
+        (source_dir / "SKILL.md").write_text("# My Skill")
 
-        module = Module(name='mymodule', path=source_dir)
+        module = Module(name="mymodule", path=source_dir)
 
-        local_modules = tmp_path / 'local' / '.lola' / 'modules'
+        local_modules = tmp_path / "local" / ".lola" / "modules"
         local_modules.mkdir(parents=True)
 
         # Create a symlink
-        target = tmp_path / 'target'
+        target = tmp_path / "target"
         target.mkdir()
-        symlink = local_modules / 'mymodule'
+        symlink = local_modules / "mymodule"
         symlink.symlink_to(target)
 
         result = copy_module_to_local(module, local_modules)
 
         assert not result.is_symlink()
         assert result.is_dir()
-        assert (result / 'SKILL.md').exists()
+        assert (result / "SKILL.md").exists()
 
 
 class TestInstallToAssistant:
@@ -115,11 +111,11 @@ class TestInstallToAssistant:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.ui_mock = MagicMock()
+        self.console_mock = MagicMock()
 
-    def create_test_module(self, tmp_path, name='testmod', skills=None, commands=None):
+    def create_test_module(self, tmp_path, name="testmod", skills=None, commands=None):
         """Helper to create a test module structure."""
-        module_dir = tmp_path / 'modules' / name
+        module_dir = tmp_path / "modules" / name
         module_dir.mkdir(parents=True)
 
         # Create skill directories (auto-discovered via SKILL.md)
@@ -127,7 +123,7 @@ class TestInstallToAssistant:
             for skill in skills:
                 skill_dir = module_dir / skill
                 skill_dir.mkdir()
-                (skill_dir / 'SKILL.md').write_text(f"""---
+                (skill_dir / "SKILL.md").write_text(f"""---
 description: {skill} description
 ---
 
@@ -138,10 +134,10 @@ Content.
 
         # Create command files (auto-discovered from commands/*.md)
         if commands:
-            commands_dir = module_dir / 'commands'
+            commands_dir = module_dir / "commands"
             commands_dir.mkdir()
             for cmd in commands:
-                (commands_dir / f'{cmd}.md').write_text(f"""---
+                (commands_dir / f"{cmd}.md").write_text(f"""---
 description: {cmd} command
 ---
 
@@ -152,20 +148,23 @@ Do {cmd}.
 
     def test_install_claude_code_user_skills(self, tmp_path):
         """Install skills to claude-code user scope."""
-        module = self.create_test_module(tmp_path, skills=['skill1'])
+        module = self.create_test_module(tmp_path, skills=["skill1"])
 
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
-        skill_dest = tmp_path / 'skills'
+        local_modules = tmp_path / ".lola" / "modules"
+        registry = InstallationRegistry(tmp_path / "installed.yml")
+        skill_dest = tmp_path / "skills"
 
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
-             patch('lola.core.installer.get_assistant_command_path', return_value=None):
-
+        with (
+            patch("lola.core.installer.console", self.console_mock),
+            patch(
+                "lola.core.installer.get_assistant_skill_path", return_value=skill_dest
+            ),
+            patch("lola.core.installer.get_assistant_command_path", return_value=None),
+        ):
             count = install_to_assistant(
                 module=module,
-                assistant='claude-code',
-                scope='user',
+                assistant="claude-code",
+                scope="user",
                 project_path=None,
                 local_modules=local_modules,
                 registry=registry,
@@ -173,24 +172,28 @@ Do {cmd}.
 
         assert count == 1
         # Check skill was installed
-        assert (skill_dest / 'testmod-skill1' / 'SKILL.md').exists()
+        assert (skill_dest / "testmod-skill1" / "SKILL.md").exists()
 
     def test_install_claude_code_commands(self, tmp_path):
         """Install commands to claude-code."""
-        module = self.create_test_module(tmp_path, commands=['cmd1'])
+        module = self.create_test_module(tmp_path, commands=["cmd1"])
 
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
-        command_dest = tmp_path / 'commands'
+        local_modules = tmp_path / ".lola" / "modules"
+        registry = InstallationRegistry(tmp_path / "installed.yml")
+        command_dest = tmp_path / "commands"
 
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path', return_value=None), \
-             patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
-
+        with (
+            patch("lola.core.installer.console", self.console_mock),
+            patch("lola.core.installer.get_assistant_skill_path", return_value=None),
+            patch(
+                "lola.core.installer.get_assistant_command_path",
+                return_value=command_dest,
+            ),
+        ):
             count = install_to_assistant(
                 module=module,
-                assistant='claude-code',
-                scope='user',
+                assistant="claude-code",
+                scope="user",
                 project_path=None,
                 local_modules=local_modules,
                 registry=registry,
@@ -198,23 +201,24 @@ Do {cmd}.
 
         assert count == 1
         # Check command was installed
-        assert (command_dest / 'testmod-cmd1.md').exists()
+        assert (command_dest / "testmod-cmd1.md").exists()
 
     def test_install_gemini_cli_user_skills_skipped(self, tmp_path):
         """Gemini CLI user scope skills are skipped."""
-        module = self.create_test_module(tmp_path, skills=['skill1'])
+        module = self.create_test_module(tmp_path, skills=["skill1"])
 
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
+        local_modules = tmp_path / ".lola" / "modules"
+        registry = InstallationRegistry(tmp_path / "installed.yml")
 
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path') as skill_path_mock, \
-             patch('lola.core.installer.get_assistant_command_path', return_value=None):
-
+        with (
+            patch("lola.core.installer.console", self.console_mock),
+            patch("lola.core.installer.get_assistant_skill_path") as skill_path_mock,
+            patch("lola.core.installer.get_assistant_command_path", return_value=None),
+        ):
             count = install_to_assistant(
                 module=module,
-                assistant='gemini-cli',
-                scope='user',
+                assistant="gemini-cli",
+                scope="user",
                 project_path=None,
                 local_modules=local_modules,
                 registry=registry,
@@ -226,19 +230,20 @@ Do {cmd}.
 
     def test_install_cursor_user_skills_skipped(self, tmp_path):
         """Cursor user scope skills are skipped."""
-        module = self.create_test_module(tmp_path, skills=['skill1'])
+        module = self.create_test_module(tmp_path, skills=["skill1"])
 
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
+        local_modules = tmp_path / ".lola" / "modules"
+        registry = InstallationRegistry(tmp_path / "installed.yml")
 
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path') as skill_path_mock, \
-             patch('lola.core.installer.get_assistant_command_path', return_value=None):
-
+        with (
+            patch("lola.core.installer.console", self.console_mock),
+            patch("lola.core.installer.get_assistant_skill_path") as skill_path_mock,
+            patch("lola.core.installer.get_assistant_command_path", return_value=None),
+        ):
             count = install_to_assistant(
                 module=module,
-                assistant='cursor',
-                scope='user',
+                assistant="cursor",
+                scope="user",
                 project_path=None,
                 local_modules=local_modules,
                 registry=registry,
@@ -250,33 +255,39 @@ Do {cmd}.
 
     def test_install_records_installation(self, tmp_path):
         """Installation is recorded in registry."""
-        module = self.create_test_module(tmp_path, skills=['skill1'], commands=['cmd1'])
+        module = self.create_test_module(tmp_path, skills=["skill1"], commands=["cmd1"])
 
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
-        skill_dest = tmp_path / 'skills'
-        command_dest = tmp_path / 'commands'
+        local_modules = tmp_path / ".lola" / "modules"
+        registry = InstallationRegistry(tmp_path / "installed.yml")
+        skill_dest = tmp_path / "skills"
+        command_dest = tmp_path / "commands"
 
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
-             patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
-
+        with (
+            patch("lola.core.installer.console", self.console_mock),
+            patch(
+                "lola.core.installer.get_assistant_skill_path", return_value=skill_dest
+            ),
+            patch(
+                "lola.core.installer.get_assistant_command_path",
+                return_value=command_dest,
+            ),
+        ):
             install_to_assistant(
                 module=module,
-                assistant='claude-code',
-                scope='user',
+                assistant="claude-code",
+                scope="user",
                 project_path=None,
                 local_modules=local_modules,
                 registry=registry,
             )
 
         # Check registry
-        installations = registry.find('testmod')
+        installations = registry.find("testmod")
         assert len(installations) == 1
-        assert installations[0].assistant == 'claude-code'
-        assert installations[0].scope == 'user'
-        assert 'testmod-skill1' in installations[0].skills
-        assert 'cmd1' in installations[0].commands
+        assert installations[0].assistant == "claude-code"
+        assert installations[0].scope == "user"
+        assert "testmod-skill1" in installations[0].skills
+        assert "cmd1" in installations[0].commands
 
     # Note: test_install_missing_skill_source and test_install_missing_command_source
     # were removed because with auto-discovery, skills and commands are only

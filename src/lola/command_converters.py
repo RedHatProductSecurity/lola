@@ -34,7 +34,7 @@ def has_positional_args(content: str) -> bool:
         True if positional args are used
     """
     # Match $1, $2, etc. but not $ARGUMENTS
-    return bool(re.search(r'\$\d+', content))
+    return bool(re.search(r"\$\d+", content))
 
 
 def convert_to_gemini_args(content: str) -> str:
@@ -52,7 +52,7 @@ def convert_to_gemini_args(content: str) -> str:
         Content with converted argument syntax
     """
     # Replace $ARGUMENTS with {{args}}
-    result = content.replace('$ARGUMENTS', '{{args}}')
+    result = content.replace("$ARGUMENTS", "{{args}}")
 
     # If positional args exist, prepend the Arguments block
     if has_positional_args(result):
@@ -111,13 +111,13 @@ def command_to_gemini(command_path: Path) -> Optional[str]:
     content = command_path.read_text()
     frontmatter, body = parse_command_frontmatter(content)
 
-    description = frontmatter.get('description', '')
+    description = frontmatter.get("description", "")
 
     # Convert argument placeholders for Gemini
     prompt = convert_to_gemini_args(body)
 
     # Escape description for TOML (double quotes)
-    description_escaped = description.replace('\\', '\\\\').replace('"', '\\"')
+    description_escaped = description.replace("\\", "\\\\").replace('"', '\\"')
 
     # Build TOML content
     toml_lines = [
@@ -127,7 +127,7 @@ def command_to_gemini(command_path: Path) -> Optional[str]:
         '"""',
     ]
 
-    return '\n'.join(toml_lines)
+    return "\n".join(toml_lines)
 
 
 def get_command_filename(assistant: str, module_name: str, command_name: str) -> str:
@@ -142,7 +142,7 @@ def get_command_filename(assistant: str, module_name: str, command_name: str) ->
     Returns:
         Filename like 'module-command.md' or 'module-command.toml'
     """
-    base_name = f'{module_name}-{command_name}'
-    if assistant == 'gemini-cli':
-        return f'{base_name}.toml'
-    return f'{base_name}.md'
+    base_name = f"{module_name}-{command_name}"
+    if assistant == "gemini-cli":
+        return f"{base_name}.toml"
+    return f"{base_name}.md"

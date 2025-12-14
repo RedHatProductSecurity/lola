@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from lola.utils import (
     ensure_lola_dirs,
@@ -16,11 +15,13 @@ class TestEnsureLolaDir:
 
     def test_creates_directories(self, tmp_path):
         """Creates LOLA_HOME and MODULES_DIR if they don't exist."""
-        lola_home = tmp_path / '.lola'
-        modules_dir = lola_home / 'modules'
+        lola_home = tmp_path / ".lola"
+        modules_dir = lola_home / "modules"
 
-        with patch('lola.utils.LOLA_HOME', lola_home), \
-             patch('lola.utils.MODULES_DIR', modules_dir):
+        with (
+            patch("lola.utils.LOLA_HOME", lola_home),
+            patch("lola.utils.MODULES_DIR", modules_dir),
+        ):
             ensure_lola_dirs()
 
         assert lola_home.exists()
@@ -28,11 +29,13 @@ class TestEnsureLolaDir:
 
     def test_idempotent(self, tmp_path):
         """Calling multiple times doesn't cause errors."""
-        lola_home = tmp_path / '.lola'
-        modules_dir = lola_home / 'modules'
+        lola_home = tmp_path / ".lola"
+        modules_dir = lola_home / "modules"
 
-        with patch('lola.utils.LOLA_HOME', lola_home), \
-             patch('lola.utils.MODULES_DIR', modules_dir):
+        with (
+            patch("lola.utils.LOLA_HOME", lola_home),
+            patch("lola.utils.MODULES_DIR", modules_dir),
+        ):
             ensure_lola_dirs()
             ensure_lola_dirs()  # Should not raise
 
@@ -41,21 +44,23 @@ class TestEnsureLolaDir:
 
     def test_preserves_existing_content(self, tmp_path):
         """Existing content is preserved."""
-        lola_home = tmp_path / '.lola'
-        modules_dir = lola_home / 'modules'
+        lola_home = tmp_path / ".lola"
+        modules_dir = lola_home / "modules"
         lola_home.mkdir(parents=True)
         modules_dir.mkdir()
 
         # Create some content
-        test_file = lola_home / 'test.txt'
-        test_file.write_text('existing content')
+        test_file = lola_home / "test.txt"
+        test_file.write_text("existing content")
 
-        with patch('lola.utils.LOLA_HOME', lola_home), \
-             patch('lola.utils.MODULES_DIR', modules_dir):
+        with (
+            patch("lola.utils.LOLA_HOME", lola_home),
+            patch("lola.utils.MODULES_DIR", modules_dir),
+        ):
             ensure_lola_dirs()
 
         assert test_file.exists()
-        assert test_file.read_text() == 'existing content'
+        assert test_file.read_text() == "existing content"
 
 
 class TestGetLocalModulesPath:
@@ -63,24 +68,24 @@ class TestGetLocalModulesPath:
 
     def test_project_scope(self, tmp_path):
         """Get modules path for project scope."""
-        project = tmp_path / 'myproject'
+        project = tmp_path / "myproject"
         project.mkdir()
 
         path = get_local_modules_path(str(project))
 
-        assert path == project / '.lola' / 'modules'
+        assert path == project / ".lola" / "modules"
 
     def test_user_scope(self):
         """Get modules path for user scope (None project_path)."""
         path = get_local_modules_path(None)
 
-        assert path == Path.home() / '.lola' / 'modules'
+        assert path == Path.home() / ".lola" / "modules"
 
     def test_empty_string_treated_as_falsy(self):
         """Empty string project_path uses user scope."""
-        path = get_local_modules_path('')
+        path = get_local_modules_path("")
 
-        assert path == Path.home() / '.lola' / 'modules'
+        assert path == Path.home() / ".lola" / "modules"
 
     def test_returns_path_object(self, tmp_path):
         """Returns a Path object."""

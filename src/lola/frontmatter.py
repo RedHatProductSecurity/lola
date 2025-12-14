@@ -40,7 +40,7 @@ def parse_file(file_path: Path) -> tuple[dict, str]:
         Tuple of (frontmatter dict, body content)
     """
     try:
-        post = frontmatter.load(file_path)
+        post = frontmatter.load(str(file_path))
         return dict(post.metadata), post.content
     except Exception:
         # If parsing fails, return empty frontmatter and file content
@@ -68,7 +68,7 @@ def validate_command(command_file: Path) -> list[str]:
         return [f"Cannot read file: {e}"]
 
     # Frontmatter is optional for commands but recommended
-    if not content.startswith('---'):
+    if not content.startswith("---"):
         return ["Warning: Missing frontmatter with 'description' field (recommended)"]
 
     # Try to parse and check for YAML errors
@@ -78,7 +78,7 @@ def validate_command(command_file: Path) -> list[str]:
     except Exception as e:
         # Provide helpful message for common YAML issues
         error_msg = str(e)
-        if '[' in error_msg or 'found' in error_msg.lower():
+        if "[" in error_msg or "found" in error_msg.lower():
             errors.append(
                 "Error: YAML parsing failed - if using brackets in values like "
                 "'[--flag]', wrap them in quotes: '\"[--flag]\"'"
@@ -88,7 +88,7 @@ def validate_command(command_file: Path) -> list[str]:
         return errors
 
     # description is recommended but not strictly required
-    if not metadata.get('description'):
+    if not metadata.get("description"):
         errors.append("Warning: Missing 'description' field (recommended)")
 
     return errors
@@ -111,7 +111,7 @@ def validate_skill(skill_file: Path) -> list[str]:
     except Exception as e:
         return [f"Cannot read file: {e}"]
 
-    if not content.startswith('---'):
+    if not content.startswith("---"):
         errors.append("Missing YAML frontmatter (required)")
         return errors
 
@@ -122,7 +122,7 @@ def validate_skill(skill_file: Path) -> list[str]:
         errors.append(f"Error: Invalid YAML frontmatter - {e}")
         return errors
 
-    if not metadata.get('description'):
+    if not metadata.get("description"):
         errors.append("Missing required 'description' field in frontmatter")
 
     return errors
@@ -153,4 +153,4 @@ def get_description(file_path: Path) -> Optional[str]:
         Description string or None if not found
     """
     metadata = get_metadata(file_path)
-    return metadata.get('description')
+    return metadata.get("description")

@@ -1,8 +1,5 @@
 """Tests for the models module."""
 
-from pathlib import Path
-
-import pytest
 import yaml
 
 from lola.models import (
@@ -12,7 +9,6 @@ from lola.models import (
     Installation,
     InstallationRegistry,
     validate_skill_frontmatter,
-    validate_command_frontmatter,
 )
 
 
@@ -82,7 +78,7 @@ class TestModule:
         module_dir.mkdir()
 
         # Create skill directories with SKILL.md
-        for skill in ['skill1', 'skill2']:
+        for skill in ["skill1", "skill2"]:
             skill_dir = module_dir / skill
             skill_dir.mkdir()
             (skill_dir / "SKILL.md").write_text(f"""---
@@ -96,7 +92,7 @@ Content.
         assert module is not None
         assert module.name == "mymodule"
         assert module.version == "0.1.0"  # default version
-        assert module.skills == ['skill1', 'skill2']
+        assert module.skills == ["skill1", "skill2"]
 
     def test_from_path_valid_module_with_commands(self, tmp_path):
         """Load valid module with auto-discovered commands."""
@@ -111,7 +107,7 @@ Content.
 
         module = Module.from_path(module_dir)
         assert module is not None
-        assert module.commands == ['cmd1', 'cmd2']
+        assert module.commands == ["cmd1", "cmd2"]
 
     def test_from_path_empty_directory(self, tmp_path):
         """Return None when directory has no skills or commands."""
@@ -138,8 +134,8 @@ Content.
 
         module = Module.from_path(module_dir)
         assert module is not None
-        assert module.skills == ['myskill']
-        assert '.hidden' not in module.skills
+        assert module.skills == ["myskill"]
+        assert ".hidden" not in module.skills
 
     def test_from_path_skips_commands_folder_as_skill(self, tmp_path):
         """Don't treat commands folder as a skill even if it has SKILL.md."""
@@ -158,17 +154,13 @@ Content.
 
         module = Module.from_path(module_dir)
         assert module is not None
-        assert 'commands' not in module.skills
-        assert module.skills == ['myskill']
-        assert module.commands == ['cmd1']
+        assert "commands" not in module.skills
+        assert module.skills == ["myskill"]
+        assert module.commands == ["cmd1"]
 
     def test_get_skill_paths(self, tmp_path):
         """Get full paths to skills."""
-        module = Module(
-            name="test",
-            path=tmp_path,
-            skills=['skill1', 'skill2']
-        )
+        module = Module(name="test", path=tmp_path, skills=["skill1", "skill2"])
         paths = module.get_skill_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "skill1"
@@ -176,11 +168,7 @@ Content.
 
     def test_get_command_paths(self, tmp_path):
         """Get full paths to commands."""
-        module = Module(
-            name="test",
-            path=tmp_path,
-            commands=['cmd1', 'cmd2']
-        )
+        module = Module(name="test", path=tmp_path, commands=["cmd1", "cmd2"])
         paths = module.get_command_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "commands" / "cmd1.md"
@@ -233,7 +221,7 @@ Content.
         module = Module.from_path(module_dir)
         is_valid, errors = module.validate()
         assert is_valid is False
-        assert any('description' in e.lower() for e in errors)
+        assert any("description" in e.lower() for e in errors)
 
 
 class TestValidateSkillFrontmatter:
@@ -259,7 +247,7 @@ Content.
 
         errors = validate_skill_frontmatter(skill_file)
         assert len(errors) == 1
-        assert 'Missing YAML frontmatter' in errors[0]
+        assert "Missing YAML frontmatter" in errors[0]
 
     def test_unclosed_frontmatter(self, tmp_path):
         """Validate file with unclosed frontmatter."""
@@ -270,7 +258,7 @@ Content without closing.
 """)
         errors = validate_skill_frontmatter(skill_file)
         assert len(errors) == 1
-        assert 'Unclosed' in errors[0]
+        assert "Unclosed" in errors[0]
 
     def test_missing_description(self, tmp_path):
         """Validate file without description field."""
@@ -283,7 +271,7 @@ Content.
 """)
         errors = validate_skill_frontmatter(skill_file)
         assert len(errors) == 1
-        assert 'description' in errors[0].lower()
+        assert "description" in errors[0].lower()
 
 
 class TestInstallation:
@@ -299,12 +287,12 @@ class TestInstallation:
             commands=["cmd1"],
         )
         d = inst.to_dict()
-        assert d['module'] == "mymodule"
-        assert d['assistant'] == "claude-code"
-        assert d['scope'] == "user"
-        assert d['skills'] == ["skill1"]
-        assert d['commands'] == ["cmd1"]
-        assert 'project_path' not in d
+        assert d["module"] == "mymodule"
+        assert d["assistant"] == "claude-code"
+        assert d["scope"] == "user"
+        assert d["skills"] == ["skill1"]
+        assert d["commands"] == ["cmd1"]
+        assert "project_path" not in d
 
     def test_to_dict_with_project_path(self):
         """Convert installation with project path to dictionary."""
@@ -316,23 +304,23 @@ class TestInstallation:
             skills=["skill1"],
         )
         d = inst.to_dict()
-        assert d['project_path'] == "/path/to/project"
+        assert d["project_path"] == "/path/to/project"
 
     def test_from_dict(self):
         """Create installation from dictionary."""
         d = {
-            'module': 'mymodule',
-            'assistant': 'claude-code',
-            'scope': 'user',
-            'skills': ['skill1', 'skill2'],
-            'commands': ['cmd1'],
+            "module": "mymodule",
+            "assistant": "claude-code",
+            "scope": "user",
+            "skills": ["skill1", "skill2"],
+            "commands": ["cmd1"],
         }
         inst = Installation.from_dict(d)
         assert inst.module_name == "mymodule"
         assert inst.assistant == "claude-code"
         assert inst.scope == "user"
-        assert inst.skills == ['skill1', 'skill2']
-        assert inst.commands == ['cmd1']
+        assert inst.skills == ["skill1", "skill2"]
+        assert inst.commands == ["cmd1"]
 
 
 class TestInstallationRegistry:
@@ -427,11 +415,22 @@ class TestInstallationRegistry:
         """Load registry from existing file."""
         registry_path = tmp_path / "installed.yml"
         data = {
-            'version': '1.0',
-            'installations': [
-                {'module': 'mod1', 'assistant': 'claude-code', 'scope': 'user', 'skills': ['s1']},
-                {'module': 'mod2', 'assistant': 'cursor', 'scope': 'project', 'project_path': '/p', 'skills': []},
-            ]
+            "version": "1.0",
+            "installations": [
+                {
+                    "module": "mod1",
+                    "assistant": "claude-code",
+                    "scope": "user",
+                    "skills": ["s1"],
+                },
+                {
+                    "module": "mod2",
+                    "assistant": "cursor",
+                    "scope": "project",
+                    "project_path": "/p",
+                    "skills": [],
+                },
+            ],
         }
         registry_path.write_text(yaml.dump(data))
 

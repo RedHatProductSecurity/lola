@@ -13,9 +13,9 @@ from lola.cli.install import (
 from lola.cli.mod import mod
 
 __all__ = [
-    'install_cmd',
-    'uninstall_cmd',
-    'update_cmd',
-    'list_installed_cmd',
-    'mod',
+    "install_cmd",
+    "uninstall_cmd",
+    "update_cmd",
+    "list_installed_cmd",
+    "mod",
 ]

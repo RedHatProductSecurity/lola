@@ -9,6 +9,8 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+
 from lola.config import (
     INSTALLED_FILE,
     get_assistant_command_path,
@@ -24,7 +26,8 @@ from lola.core.generator import (
     update_gemini_md,
 )
 from lola.models import Installation, InstallationRegistry, Module
-from lola import ui
+
+console = Console()
 
 
 def get_registry() -> InstallationRegistry:
@@ -101,22 +104,22 @@ def install_to_assistant(
     skills_skipped_reason = None
     if module.skills:
         # Gemini CLI can only read skill files within the project workspace
-        if assistant == 'gemini-cli' and scope == 'user':
+        if assistant == "gemini-cli" and scope == "user":
             skills_skipped_reason = "user scope not supported"
 
         # Cursor only supports project-level rules for skills
-        if assistant == 'cursor' and scope == 'user':
+        if assistant == "cursor" and scope == "user":
             skills_skipped_reason = "user scope not supported"
 
         if not skills_skipped_reason:
             try:
                 skill_dest = get_assistant_skill_path(assistant, scope, project_path)
             except ValueError as e:
-                ui.error(str(e))
+                console.print(f"[red]{e}[/red]")
                 skill_dest = None
 
             if skill_dest:
-                if assistant == 'gemini-cli':
+                if assistant == "gemini-cli":
                     # Gemini: Add entries to GEMINI.md file
                     gemini_skills = []
                     for skill_rel in module.skills:
@@ -131,7 +134,9 @@ def install_to_assistant(
                             failed_skills.append(skill_name)
 
                     if gemini_skills:
-                        update_gemini_md(skill_dest, module.name, gemini_skills, project_path)
+                        update_gemini_md(
+                            skill_dest, module.name, gemini_skills, project_path
+                        )
                 else:
                     # Claude/Cursor: Generate individual files
                     for skill_rel in module.skills:
@@ -140,8 +145,10 @@ def install_to_assistant(
                         # Prefix with module name to avoid conflicts
                         prefixed_name = f"{module.name}-{skill_name}"
 
-                        if assistant == 'cursor':
-                            success = generate_cursor_rule(source, skill_dest, prefixed_name, project_path)
+                        if assistant == "cursor":
+                            success = generate_cursor_rule(
+                                source, skill_dest, prefixed_name, project_path
+                            )
                         else:  # claude-code
                             dest = skill_dest / prefixed_name
                             success = generate_claude_skill(source, dest)
@@ -156,20 +163,26 @@ def install_to_assistant(
         try:
             command_dest = get_assistant_command_path(assistant, scope, project_path)
         except ValueError as e:
-            ui.error(f"Commands: {e}")
+            console.print(f"[red]Commands: {e}[/red]")
             command_dest = None
 
         if command_dest:
-            commands_dir = local_module_path / 'commands'
+            commands_dir = local_module_path / "commands"
             for cmd_name in module.commands:
-                source = commands_dir / f'{cmd_name}.md'
+                source = commands_dir / f"{cmd_name}.md"
 
-                if assistant == 'gemini-cli':
-                    success = generate_gemini_command(source, command_dest, cmd_name, module.name)
-                elif assistant == 'cursor':
-                    success = generate_cursor_command(source, command_dest, cmd_name, module.name)
+                if assistant == "gemini-cli":
+                    success = generate_gemini_command(
+                        source, command_dest, cmd_name, module.name
+                    )
+                elif assistant == "cursor":
+                    success = generate_cursor_command(
+                        source, command_dest, cmd_name, module.name
+                    )
                 else:  # claude-code
-                    success = generate_claude_command(source, command_dest, cmd_name, module.name)
+                    success = generate_claude_command(
+                        source, command_dest, cmd_name, module.name
+                    )
 
                 if success:
                     installed_commands.append(cmd_name)
@@ -178,23 +191,36 @@ def install_to_assistant(
 
     # Print compact summary for this assistant
     if skills_skipped_reason:
-        ui.assistant_summary(assistant, skipped_reason=skills_skipped_reason)
+        console.print(
+            f"  [bold]{assistant}[/bold] [yellow]skipped[/yellow] [dim]({skills_skipped_reason})[/dim]"
+        )
     elif installed_skills or installed_commands:
-        ui.assistant_summary(assistant, skills=installed_skills, commands=installed_commands)
+        # Build summary
+        parts = []
+        if installed_skills:
+            parts.append(
+                f"{len(installed_skills)} skill{'s' if len(installed_skills) != 1 else ''}"
+            )
+        if installed_commands:
+            parts.append(
+                f"{len(installed_commands)} command{'s' if len(installed_commands) != 1 else ''}"
+            )
+        summary = ", ".join(parts)
+        console.print(f"  [green]{assistant}[/green] [dim]({summary})[/dim]")
 
         # In verbose mode, list all items after the summary
         if verbose:
             for skill in installed_skills:
-                ui.item_result(skill, ok=True, indent=2)
+                console.print(f"    [green]{skill}[/green]")
             for cmd in installed_commands:
-                ui.item_result(f"/{module.name}-{cmd}", ok=True, indent=2)
+                console.print(f"    [green]/{module.name}-{cmd}[/green]")
 
         # Show failures (always show failures, not just in verbose mode)
         if failed_skills or failed_commands:
             for skill in failed_skills:
-                ui.item_result(skill, ok=False, note="source not found", indent=2)
+                console.print(f"    [red]{skill}[/red] [dim](source not found)[/dim]")
             for cmd in failed_commands:
-                ui.item_result(cmd, ok=False, note="source not found", indent=2)
+                console.print(f"    [red]{cmd}[/red] [dim](source not found)[/dim]")
 
     # Record installation
     if installed_skills or installed_commands:

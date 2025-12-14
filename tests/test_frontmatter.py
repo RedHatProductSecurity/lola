@@ -1,10 +1,5 @@
 """Tests for the frontmatter module."""
 
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from lola import frontmatter as fm
 
 
@@ -21,9 +16,9 @@ argument-hint: "<arg>"
 Body content here.
 """
         metadata, body = fm.parse(content)
-        assert metadata['description'] == 'Test description'
-        assert metadata['argument-hint'] == '<arg>'
-        assert 'Body content here.' in body
+        assert metadata["description"] == "Test description"
+        assert metadata["argument-hint"] == "<arg>"
+        assert "Body content here." in body
 
     def test_parse_without_frontmatter(self):
         """Parse content without frontmatter."""
@@ -42,8 +37,8 @@ argument-hint: "[--flag] [--other]"
 Content.
 """
         metadata, body = fm.parse(content)
-        assert metadata['description'] == 'Test command'
-        assert metadata['argument-hint'] == '[--flag] [--other]'
+        assert metadata["description"] == "Test command"
+        assert metadata["argument-hint"] == "[--flag] [--other]"
 
     def test_parse_empty_frontmatter(self):
         """Parse content with empty frontmatter."""
@@ -54,7 +49,7 @@ Body.
 """
         metadata, body = fm.parse(content)
         assert metadata == {}
-        assert 'Body.' in body
+        assert "Body." in body
 
 
 class TestParseFile:
@@ -71,9 +66,9 @@ description: A test file
 Content here.
 """)
         metadata, body = fm.parse_file(test_file)
-        assert metadata['name'] == 'test'
-        assert metadata['description'] == 'A test file'
-        assert 'Content here.' in body
+        assert metadata["name"] == "test"
+        assert metadata["description"] == "A test file"
+        assert "Content here." in body
 
     def test_parse_file_not_exists(self, tmp_path):
         """Parse a file that doesn't exist."""
@@ -105,7 +100,7 @@ Command instructions.
         cmd_file.write_text("Just content, no frontmatter.")
         errors = fm.validate_command(cmd_file)
         assert len(errors) == 1
-        assert 'Missing frontmatter' in errors[0]
+        assert "Missing frontmatter" in errors[0]
 
     def test_missing_description(self, tmp_path):
         """Validate command with missing description."""
@@ -118,7 +113,7 @@ Content.
 """)
         errors = fm.validate_command(cmd_file)
         assert len(errors) == 1
-        assert 'description' in errors[0].lower()
+        assert "description" in errors[0].lower()
 
     def test_unquoted_brackets_parsed_as_array(self, tmp_path):
         """Unquoted brackets are parsed as YAML array (not string)."""
@@ -134,7 +129,7 @@ Content.
         # This is valid YAML, just not what the user intended
         metadata = fm.get_metadata(cmd_file)
         # The value is parsed as a list, not a string
-        assert isinstance(metadata.get('argument-hint'), list)
+        assert isinstance(metadata.get("argument-hint"), list)
 
 
 class TestGetDescription:
@@ -150,7 +145,7 @@ description: My description
 Content.
 """)
         desc = fm.get_description(test_file)
-        assert desc == 'My description'
+        assert desc == "My description"
 
     def test_get_description_missing(self, tmp_path):
         """Get description from file without description."""
@@ -186,6 +181,6 @@ version: 1.0.0
 Content.
 """)
         metadata = fm.get_metadata(test_file)
-        assert metadata['name'] == 'myskill'
-        assert metadata['description'] == 'A skill'
-        assert metadata['version'] == '1.0.0'
+        assert metadata["name"] == "myskill"
+        assert metadata["description"] == "A skill"
+        assert metadata["version"] == "1.0.0"

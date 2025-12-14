@@ -4,10 +4,13 @@ main:
 """
 
 import click
-from lola.layout import console
+from rich.console import Console
+
 from lola import __version__
+from lola.cli.install import install_cmd, list_installed_cmd, uninstall_cmd, update_cmd
 from lola.cli.mod import mod
-from lola.cli.install import install_cmd, uninstall_cmd, update_cmd, list_installed_cmd
+
+console = Console()
 
 
 def ver():
@@ -16,7 +19,7 @@ def ver():
 
 
 @click.group(invoke_without_command=True, no_args_is_help=True)
-@click.option('-v', '--version', is_flag=True, help="Show version")
+@click.option("-v", "--version", is_flag=True, help="Show version")
 @click.pass_context
 def main(ctx, version):
     """
@@ -50,5 +53,5 @@ main.add_command(update_cmd)
 main.add_command(list_installed_cmd)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

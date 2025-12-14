@@ -50,4 +50,12 @@ exclude_lines = [
 dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
+    "pre-commit>=4.0.0",
+    "basedpyright>=1.22.0",
+    "ruff>=0.8.0",
 ]
+
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+include = ["src"]

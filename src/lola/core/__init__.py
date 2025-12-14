@@ -24,16 +24,16 @@ from lola.core.generator import (
 
 __all__ = [
     # Installer
-    'copy_module_to_local',
-    'install_to_assistant',
-    'get_registry',
+    "copy_module_to_local",
+    "install_to_assistant",
+    "get_registry",
     # Generator
-    'generate_claude_skill',
-    'generate_cursor_rule',
-    'generate_claude_command',
-    'generate_cursor_command',
-    'generate_gemini_command',
-    'get_skill_description',
-    'update_gemini_md',
-    'remove_gemini_skills',
+    "generate_claude_skill",
+    "generate_cursor_rule",
+    "generate_claude_command",
+    "generate_cursor_command",
+    "generate_gemini_command",
+    "get_skill_description",
+    "update_gemini_md",
+    "remove_gemini_skills",
 ]

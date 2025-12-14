@@ -1,14 +1,9 @@
 """Tests for the core/generator module."""
 
-from pathlib import Path
-
-import pytest
-
 from lola.core.generator import (
     get_skill_description,
     generate_claude_skill,
     generate_claude_command,
-    generate_cursor_command,
     generate_gemini_command,
     update_gemini_md,
     remove_gemini_skills,

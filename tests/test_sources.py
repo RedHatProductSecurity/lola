@@ -2,7 +2,6 @@
 
 import tarfile
 import zipfile
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -116,7 +115,7 @@ class TestZipSourceHandler:
     def test_can_handle_existing_zip(self, tmp_path):
         """Handle existing zip files."""
         zip_file = tmp_path / "test.zip"
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("test.txt", "content")
         assert self.handler.can_handle(str(zip_file)) is True
 
@@ -138,7 +137,7 @@ class TestZipSourceHandler:
         source_dir.mkdir()
         zip_file = source_dir / "mymodule.zip"
 
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("mymodule/file.txt", "content")
 
         dest_dir = tmp_path / "dest"
@@ -155,8 +154,11 @@ class TestZipSourceHandler:
         source_dir.mkdir()
         zip_file = source_dir / "archive.zip"
 
-        with zipfile.ZipFile(zip_file, 'w') as zf:
-            zf.writestr("nested/mymodule/myskill/SKILL.md", "---\ndescription: test\n---\n# Skill")
+        with zipfile.ZipFile(zip_file, "w") as zf:
+            zf.writestr(
+                "nested/mymodule/myskill/SKILL.md",
+                "---\ndescription: test\n---\n# Skill",
+            )
 
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
@@ -177,28 +179,28 @@ class TestTarSourceHandler:
     def test_can_handle_tar(self, tmp_path):
         """Handle .tar files."""
         tar_file = tmp_path / "test.tar"
-        with tarfile.open(tar_file, 'w') as tf:
+        with tarfile.open(tar_file, "w"):
             pass  # Empty tar
         assert self.handler.can_handle(str(tar_file)) is True
 
     def test_can_handle_tar_gz(self, tmp_path):
         """Handle .tar.gz files."""
         tar_file = tmp_path / "test.tar.gz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz"):
             pass
         assert self.handler.can_handle(str(tar_file)) is True
 
     def test_can_handle_tgz(self, tmp_path):
         """Handle .tgz files."""
         tar_file = tmp_path / "test.tgz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz"):
             pass
         assert self.handler.can_handle(str(tar_file)) is True
 
     def test_can_handle_tar_bz2(self, tmp_path):
         """Handle .tar.bz2 files."""
         tar_file = tmp_path / "test.tar.bz2"
-        with tarfile.open(tar_file, 'w:bz2') as tf:
+        with tarfile.open(tar_file, "w:bz2"):
             pass
         assert self.handler.can_handle(str(tar_file)) is True
 
@@ -218,7 +220,7 @@ class TestTarSourceHandler:
         (content_dir / "file.txt").write_text("content")
 
         tar_file = source_dir / "mymodule.tar.gz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz") as tf:
             tf.add(content_dir, arcname="mymodule")
 
         dest_dir = tmp_path / "dest"
@@ -351,14 +353,14 @@ class TestDetectSourceType:
     def test_detect_zip(self, tmp_path):
         """Detect zip source type."""
         zip_file = tmp_path / "test.zip"
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("test.txt", "content")
         assert detect_source_type(str(zip_file)) == "zip"
 
     def test_detect_tar(self, tmp_path):
         """Detect tar source type."""
         tar_file = tmp_path / "test.tar.gz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz"):
             pass
         assert detect_source_type(str(tar_file)) == "tar"
 
@@ -405,7 +407,7 @@ class TestFetchModule:
         source_dir.mkdir()
         zip_file = source_dir / "mymodule.zip"
 
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("mymodule/file.txt", "content")
 
         dest_dir = tmp_path / "dest"
@@ -439,8 +441,8 @@ class TestSourceInfo:
 
         info = load_source_info(module_path)
         assert info is not None
-        assert info['source'] == "https://example.com/repo.git"
-        assert info['type'] == "git"
+        assert info["source"] == "https://example.com/repo.git"
+        assert info["type"] == "git"
 
     def test_save_local_path_resolves(self, tmp_path):
         """Local paths are resolved to absolute paths."""
@@ -453,7 +455,7 @@ class TestSourceInfo:
         save_source_info(module_path, str(source_dir), "folder")
 
         info = load_source_info(module_path)
-        assert info['source'] == str(source_dir.resolve())
+        assert info["source"] == str(source_dir.resolve())
 
     def test_load_nonexistent(self, tmp_path):
         """Load returns None for nonexistent module."""
@@ -534,8 +536,8 @@ class TestUpdateModule:
         # Write invalid source info
         source_file = module_path / SOURCE_FILE
         source_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(source_file, 'w') as f:
-            yaml.dump({'source': None, 'type': None}, f)
+        with open(source_file, "w") as f:
+            yaml.dump({"source": None, "type": None}, f)
 
         success, message = update_module(module_path)
 
@@ -549,8 +551,8 @@ class TestUpdateModule:
 
         source_file = module_path / SOURCE_FILE
         source_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(source_file, 'w') as f:
-            yaml.dump({'source': 'something', 'type': 'unknowntype'}, f)
+        with open(source_file, "w") as f:
+            yaml.dump({"source": "something", "type": "unknowntype"}, f)
 
         success, message = update_module(module_path)
 
@@ -590,7 +592,7 @@ class TestUpdateModule:
         source_dir.mkdir()
         zip_file = source_dir / "mymodule.zip"
 
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("mymodule/file.txt", "v1")
 
         # Create destination and initial copy
@@ -602,7 +604,7 @@ class TestUpdateModule:
         save_source_info(module_path, str(zip_file), "zip")
 
         # Update zip
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             zf.writestr("mymodule/file.txt", "v2")
             zf.writestr("mymodule/new.txt", "new content")
 
@@ -623,7 +625,7 @@ class TestUpdateModule:
         (content_dir / "file.txt").write_text("v1")
 
         tar_file = source_dir / "mymodule.tar.gz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz") as tf:
             tf.add(content_dir, arcname="mymodule")
 
         # Create destination and initial copy
@@ -636,7 +638,7 @@ class TestUpdateModule:
 
         # Update tar
         (content_dir / "file.txt").write_text("v2")
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz") as tf:
             tf.add(content_dir, arcname="mymodule")
 
         # Update module
@@ -674,7 +676,7 @@ class TestDownloadFile:
         """Download file successfully."""
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch('lola.sources.urlopen') as mock_urlopen:
+        with patch("lola.sources.urlopen") as mock_urlopen:
             mock_response = MagicMock()
             mock_response.__enter__ = MagicMock(return_value=mock_response)
             mock_response.__exit__ = MagicMock(return_value=False)
@@ -691,7 +693,7 @@ class TestDownloadFile:
 
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch('lola.sources.urlopen') as mock_urlopen:
+        with patch("lola.sources.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = URLError("Connection failed")
 
             with pytest.raises(RuntimeError, match="Failed to download"):
@@ -701,7 +703,7 @@ class TestDownloadFile:
         """Raise error on generic failure."""
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch('lola.sources.urlopen') as mock_urlopen:
+        with patch("lola.sources.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = Exception("Generic error")
 
             with pytest.raises(RuntimeError, match="Download error"):
@@ -720,7 +722,7 @@ class TestGitSourceHandlerFetch:
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stderr="")
 
             # Mock the directory creation that git clone would do
@@ -728,7 +730,7 @@ class TestGitSourceHandlerFetch:
             repo_dir.mkdir()
             (repo_dir / ".git").mkdir()
 
-            result = self.handler.fetch("https://github.com/user/repo.git", dest_dir)
+            self.handler.fetch("https://github.com/user/repo.git", dest_dir)
 
         assert mock_run.called
         assert "git" in mock_run.call_args[0][0]
@@ -739,14 +741,14 @@ class TestGitSourceHandlerFetch:
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stderr="")
 
             # Mock directory creation
             repo_dir = dest_dir / "myrepo"
             repo_dir.mkdir()
 
-            result = self.handler.fetch("https://github.com/user/myrepo.git", dest_dir)
+            self.handler.fetch("https://github.com/user/myrepo.git", dest_dir)
 
         # Check the destination path passed to git clone
         call_args = mock_run.call_args[0][0]
@@ -758,8 +760,10 @@ class TestGitSourceHandlerFetch:
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
 
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stderr="fatal: repository not found")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1, stderr="fatal: repository not found"
+            )
 
             with pytest.raises(RuntimeError, match="Git clone failed"):
                 self.handler.fetch("https://github.com/user/nonexistent.git", dest_dir)
@@ -781,7 +785,7 @@ class TestGitSourceHandlerFetch:
             (repo_dir / ".git").mkdir(exist_ok=True)
             return MagicMock(returncode=0, stderr="")
 
-        with patch('subprocess.run', side_effect=mock_clone):
+        with patch("subprocess.run", side_effect=mock_clone):
             self.handler.fetch("https://github.com/user/repo.git", dest_dir)
 
         # Old file should be gone (directory was removed before clone)
@@ -797,7 +801,7 @@ class TestZipSlipPrevention:
 
         # Create a malicious zip with path traversal
         zip_file = tmp_path / "malicious.zip"
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with zipfile.ZipFile(zip_file, "w") as zf:
             # This creates an entry that tries to escape
             zf.writestr("../../../etc/passwd", "malicious content")
 
@@ -829,7 +833,7 @@ class TestTarSourceHandlerAdvanced:
 
         # Create tar
         tar_file = source_dir / "archive.tar.gz"
-        with tarfile.open(tar_file, 'w:gz') as tf:
+        with tarfile.open(tar_file, "w:gz") as tf:
             tf.add(source_dir / "nested", arcname="nested")
 
         dest_dir = tmp_path / "dest"
@@ -845,8 +849,13 @@ class TestTarSourceHandlerAdvanced:
         source_dir = tmp_path / "source"
         source_dir.mkdir()
 
-        for ext, mode in [('.tar', 'w'), ('.tar.gz', 'w:gz'), ('.tgz', 'w:gz'),
-                          ('.tar.bz2', 'w:bz2'), ('.tar.xz', 'w:xz')]:
+        for ext, mode in [
+            (".tar", "w"),
+            (".tar.gz", "w:gz"),
+            (".tgz", "w:gz"),
+            (".tar.bz2", "w:bz2"),
+            (".tar.xz", "w:xz"),
+        ]:
             content_dir = source_dir / "content"
             content_dir.mkdir(exist_ok=True)
             (content_dir / "file.txt").write_text("content")
