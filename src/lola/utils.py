@@ -20,11 +20,11 @@ def get_local_modules_path(project_path: Optional[str]) -> Path:
     Get the path to .lola/modules/ for a given scope.
 
     Args:
-        project_path: Project path for project scope, None for user scope
+        project_path: Project path (required)
 
     Returns:
         Path to .lola/modules/
     """
-    if project_path:
-        return Path(project_path) / ".lola" / "modules"
-    return Path.home() / ".lola" / "modules"
+    if not project_path:
+        raise ValueError("Project path is required (project-scope only)")
+    return Path(project_path) / ".lola" / "modules"

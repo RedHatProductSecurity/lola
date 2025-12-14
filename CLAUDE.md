@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Lola
 
-Lola is an AI Skills Package Manager that lets you write AI context/skills once and install them to multiple AI assistants (Claude Code, Cursor, Gemini CLI). Skills are portable modules with a SKILL.md file that get converted to each assistant's native format.
+Lola is an AI Skills Package Manager that lets you write AI context/skills once and install them to multiple AI assistants (Claude Code, Cursor, Gemini CLI, OpenCode). Skills are portable modules with a SKILL.md file that get converted to each assistant's native format.
 
 ## Development Commands
 
@@ -13,10 +13,14 @@ Lola is an AI Skills Package Manager that lets you write AI context/skills once 
 uv pip install -e .
 
 # Run tests
-pytest                     # All tests
+pytest                        # All tests
 pytest tests/test_cli_mod.py  # Single test file
-pytest -k test_add         # Tests matching pattern
-pytest --cov=src/lola      # With coverage
+pytest -k test_add            # Tests matching pattern
+pytest --cov=src/lola         # With coverage
+
+# Run linting and type checking
+ruff check src tests
+basedpyright src
 
 # Run the CLI
 lola --help
@@ -29,69 +33,57 @@ lola install <module> -a claude-code
 ### Core Data Flow
 
 1. **Module Registration**: `lola mod add <source>` fetches modules (from git, zip, tar, or folder) to `~/.lola/modules/`
-2. **Installation**: `lola install <module>` copies modules to project's `.lola/modules/` and generates assistant-specific files:
-   - Claude Code: `.claude/skills/<module>-<skill>/SKILL.md` (native format, no conversion)
-   - Cursor: `.cursor/rules/<module>-<skill>.mdc` (converted with frontmatter rewrite)
-   - Gemini CLI: `GEMINI.md` (entries appended to managed section between markers)
+2. **Installation**: `lola install <module>` copies modules to project's `.lola/modules/` and generates assistant-specific files
 3. **Updates**: `lola update` regenerates assistant files from source modules
 
 ### Key Source Files
 
 - `src/lola/main.py` - CLI entry point, registers all commands
 - `src/lola/cli/mod.py` - Module management: add, rm, ls, info, init, update
-- `src/lola/cli/install.py` - Install/uninstall commands, generates assistant-specific files
-- `src/lola/models.py` - Data models: Module, Skill, Installation, InstallationRegistry
-- `src/lola/config.py` - Paths and assistant configurations (LOLA_HOME, MODULES_DIR, ASSISTANTS dict)
-- `src/lola/converters.py` - Skill format conversion (skill_to_cursor_mdc, parse_skill_frontmatter)
-- `src/lola/command_converters.py` - Command format conversion (command_to_gemini for TOML)
-- `src/lola/sources.py` - Source fetching (git clone, zip/tar extraction, folder copy)
-- `src/lola/frontmatter.py` - YAML frontmatter parsing shared by converters
+- `src/lola/cli/install.py` - Install/uninstall/update commands
+- `src/lola/models.py` - Data models: Module, Skill, Command, Agent, Installation, InstallationRegistry
+- `src/lola/config.py` - Global paths (LOLA_HOME, MODULES_DIR, INSTALLED_FILE)
+- `src/lola/targets.py` - Assistant definitions and file generators (ASSISTANTS dict, generate_* functions)
+- `src/lola/parsers.py` - Source fetching (SourceHandler classes) and skill/command parsing
+- `src/lola/frontmatter.py` - YAML frontmatter parsing
 
 ### Module Structure
 
-Modules live in `~/.lola/modules/<name>/` with:
+Modules use auto-discovery. Skills, commands, and agents are discovered from directory structure:
+
 ```
-.lola/module.yml    # manifest with type: lola/module, version, skills list
-<skill-name>/
-  SKILL.md          # skill definition with YAML frontmatter (name, description)
-  scripts/          # optional supporting files
-```
-
-### SKILL.md Format
-
-Skills require YAML frontmatter with `description` field:
-```markdown
----
-name: skill-name
-description: When to use this skill
----
-
-# Skill content...
+my-module/
+  skills/              # Skills directory (required for skills)
+    skill-name/
+      SKILL.md         # Required: skill definition with frontmatter
+      scripts/         # Optional: supporting files
+  commands/            # Slash commands (*.md files)
+  agents/              # Subagents (*.md files)
 ```
 
-### Slash Commands
+### Target Assistants
 
-Modules can include slash commands in `commands/` directory. Each command is a markdown file with frontmatter:
-- `$ARGUMENTS` - placeholder for all arguments as a single string
-- `$1`, `$2`, etc. - positional argument placeholders
+Defined in `targets.py` ASSISTANTS dict. Each assistant has different output formats:
 
-Commands are converted to assistant-native formats:
-- Claude/Cursor: Markdown pass-through to `.claude/commands/` or `.cursor/commands/`
-- Gemini: TOML format with `{{args}}` substitution to `.gemini/commands/`
+| Assistant | Skills | Commands | Agents |
+|-----------|--------|----------|--------|
+| claude-code | `.claude/skills/<module>-<skill>/SKILL.md` | `.claude/commands/<module>-<cmd>.md` | `.claude/agents/<module>-<agent>.md` |
+| cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` | `.cursor/agents/<module>-<agent>.md` |
+| gemini-cli | `GEMINI.md` (managed section) | `.gemini/commands/<module>-<cmd>.toml` | N/A |
+| opencode | `.opencode/skills/<module>-<skill>.md` | `.opencode/commands/<module>-<cmd>.md` | `.opencode/agents/<module>-<agent>.md` |
 
-### Installation Registry
+### Source Handlers
 
-`~/.lola/installed.yml` tracks all installations with module name, assistant, scope, project path, and installed skills.
-
-### Assistant Scope Limitations
-
-- Claude Code: supports both user and project scope
-- Cursor: project scope only for skills (commands work in both scopes)
-- Gemini CLI: project scope only for skills (commands work in both scopes)
+`parsers.py` uses strategy pattern for fetching modules:
+- `GitSourceHandler` - git clone with depth 1
+- `ZipSourceHandler` / `ZipUrlSourceHandler` - local/remote zip files
+- `TarSourceHandler` / `TarUrlSourceHandler` - local/remote tar archives
+- `FolderSourceHandler` - local directory copy
 
 ### Testing Patterns
 
 Tests use Click's `CliRunner` for CLI testing. Key fixtures in `tests/conftest.py`:
-- `mock_lola_home` - patches LOLA_HOME and MODULES_DIR to temp directory
-- `sample_module` - creates a complete test module with skill and command
+- `mock_lola_home` - patches LOLA_HOME, MODULES_DIR, INSTALLED_FILE to temp directory
+- `sample_module` - creates test module with skill, command, and agent
 - `registered_module` - sample_module copied into mock_lola_home
+- `mock_assistant_paths` - creates mock assistant output directories

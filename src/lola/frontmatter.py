@@ -128,6 +128,40 @@ def validate_skill(skill_file: Path) -> list[str]:
     return errors
 
 
+def validate_agent(agent_file: Path) -> list[str]:
+    """
+    Validate the YAML frontmatter in an agent .md file.
+
+    Args:
+        agent_file: Path to the agent .md file
+
+    Returns:
+        List of warning/error messages (empty if valid)
+    """
+    errors = []
+
+    try:
+        content = agent_file.read_text()
+    except Exception as e:
+        return [f"Cannot read file: {e}"]
+
+    if not content.startswith("---"):
+        errors.append("Missing YAML frontmatter (required)")
+        return errors
+
+    try:
+        post = frontmatter.loads(content)
+        metadata = post.metadata
+    except Exception as e:
+        errors.append(f"Error: Invalid YAML frontmatter - {e}")
+        return errors
+
+    if not metadata.get("description"):
+        errors.append("Missing required 'description' field in frontmatter")
+
+    return errors
+
+
 def get_metadata(file_path: Path) -> dict:
     """
     Get just the frontmatter metadata from a file.

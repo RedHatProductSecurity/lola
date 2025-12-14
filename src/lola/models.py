@@ -11,6 +11,8 @@ import yaml
 from lola.config import SKILL_FILE
 from lola import frontmatter as fm
 
+SKILLS_DIRNAME = "skills"
+
 
 @dataclass
 class Skill:
@@ -63,9 +65,6 @@ class Command:
         )
 
 
-VALID_AGENT_MODELS = {"inherit", "sonnet", "opus", "haiku"}
-
-
 @dataclass
 class Agent:
     """Represents a subagent within a module."""
@@ -73,18 +72,15 @@ class Agent:
     name: str
     path: Path
     description: Optional[str] = None
-    model: Optional[str] = None  # inherit, sonnet, opus, haiku
 
     @classmethod
     def from_path(cls, agent_path: Path) -> "Agent":
         """Load an agent from its file path."""
         description = None
-        model = None
 
         if agent_path.exists():
             metadata = fm.get_metadata(agent_path)
             description = metadata.get("description")
-            model = metadata.get("model")
 
         # Agent name derived from filename (without .md extension)
         name = agent_path.stem
@@ -93,7 +89,6 @@ class Agent:
             name=name,
             path=agent_path,
             description=description,
-            model=model,
         )
 
 
@@ -106,28 +101,28 @@ class Module:
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
-    version: str = "0.1.0"
-    description: str = ""
 
     @classmethod
     def from_path(cls, module_path: Path) -> Optional["Module"]:
         """
         Load a module from its directory path.
 
-        Auto-discovers skills (folders containing SKILL.md), commands
-        (.md files in commands/ folder), and agents (.md files in agents/ folder).
+        Auto-discovers:
+        - skills (folders containing SKILL.md) under skills/<skill_name>/
+        - commands (.md files in commands/ folder)
+        - agents (.md files in agents/ folder)
         """
         if not module_path.exists() or not module_path.is_dir():
             return None
 
-        # Auto-discover skills: subdirs containing SKILL.md
         skills = []
-        for subdir in module_path.iterdir():
-            # Skip hidden directories and special folders
-            if subdir.name.startswith(".") or subdir.name in ("commands", "agents"):
-                continue
-            if subdir.is_dir() and (subdir / SKILL_FILE).exists():
-                skills.append(subdir.name)
+        skills_root = module_path / SKILLS_DIRNAME
+        if skills_root.exists() and skills_root.is_dir():
+            for subdir in skills_root.iterdir():
+                if subdir.name.startswith("."):
+                    continue
+                if subdir.is_dir() and (subdir / SKILL_FILE).exists():
+                    skills.append(subdir.name)
 
         # Auto-discover commands: .md files in commands/
         commands = []
@@ -155,9 +150,14 @@ class Module:
             agents=sorted(agents),
         )
 
+    def _skills_root_dir(self) -> Path:
+        """Get the directory that contains skill folders."""
+        return self.path / SKILLS_DIRNAME
+
     def get_skill_paths(self) -> list[Path]:
         """Get the full paths to all skills in this module."""
-        return [self.path / skill for skill in self.skills]
+        root = self._skills_root_dir()
+        return [root / skill for skill in self.skills]
 
     def get_command_paths(self) -> list[Path]:
         """Get the full paths to all commands in this module."""
@@ -179,15 +179,16 @@ class Module:
         errors = []
 
         # Check each skill exists and has SKILL.md with valid frontmatter
+        skills_root = self._skills_root_dir()
         for skill_rel in self.skills:
-            skill_path = self.path / skill_rel
+            skill_path = skills_root / skill_rel
             if not skill_path.exists():
                 errors.append(f"Skill directory not found: {skill_rel}")
             elif not (skill_path / SKILL_FILE).exists():
                 errors.append(f"Missing {SKILL_FILE} in skill: {skill_rel}")
             else:
                 # Validate SKILL.md frontmatter
-                skill_errors = validate_skill_frontmatter(skill_path / SKILL_FILE)
+                skill_errors = fm.validate_skill(skill_path / SKILL_FILE)
                 for err in skill_errors:
                     errors.append(f"{skill_rel}/{SKILL_FILE}: {err}")
 
@@ -198,7 +199,7 @@ class Module:
             if not cmd_path.exists():
                 errors.append(f"Command file not found: commands/{cmd_name}.md")
             else:
-                cmd_errors = validate_command_frontmatter(cmd_path)
+                cmd_errors = fm.validate_command(cmd_path)
                 for err in cmd_errors:
                     errors.append(f"commands/{cmd_name}.md: {err}")
 
@@ -209,144 +210,11 @@ class Module:
             if not agent_path.exists():
                 errors.append(f"Agent file not found: agents/{agent_name}.md")
             else:
-                agent_errors = validate_agent_frontmatter(agent_path)
+                agent_errors = fm.validate_agent(agent_path)
                 for err in agent_errors:
                     errors.append(f"agents/{agent_name}.md: {err}")
 
         return len(errors) == 0, errors
-
-
-def validate_skill_frontmatter(skill_file: Path) -> list[str]:
-    """
-    Validate the YAML frontmatter in a SKILL.md file.
-
-    Args:
-        skill_file: Path to the SKILL.md file
-
-    Returns:
-        List of error messages (empty if valid)
-    """
-    errors = []
-
-    try:
-        content = skill_file.read_text()
-    except Exception as e:
-        return [f"Cannot read file: {e}"]
-
-    if not content.startswith("---"):
-        errors.append("Missing YAML frontmatter (file should start with '---')")
-        return errors
-
-    # Find the closing ---
-    lines = content.split("\n")
-    end_idx = None
-    for i, line in enumerate(lines[1:], 1):
-        if line.strip() == "---":
-            end_idx = i
-            break
-
-    if end_idx is None:
-        errors.append("Unclosed YAML frontmatter (missing closing '---')")
-        return errors
-
-    frontmatter_text = "\n".join(lines[1:end_idx])
-
-    # Try to parse as YAML
-    try:
-        frontmatter = yaml.safe_load(frontmatter_text) or {}
-    except yaml.YAMLError as e:
-        # Extract useful error info
-        error_msg = str(e)
-        if "mapping values are not allowed" in error_msg:
-            errors.append(
-                "Invalid YAML: values containing colons must be quoted. "
-                'Example: description: "Text with: colons"'
-            )
-        else:
-            errors.append(f"Invalid YAML frontmatter: {error_msg}")
-        return errors
-
-    # Check required fields
-    if not frontmatter.get("description"):
-        errors.append("Missing required field: 'description'")
-
-    return errors
-
-
-def validate_command_frontmatter(command_file: Path) -> list[str]:
-    """
-    Validate the YAML frontmatter in a command .md file.
-
-    Args:
-        command_file: Path to the command .md file
-
-    Returns:
-        List of error messages (empty if valid)
-    """
-    return fm.validate_command(command_file)
-
-
-def validate_agent_frontmatter(agent_file: Path) -> list[str]:
-    """
-    Validate the YAML frontmatter in an agent .md file.
-
-    Args:
-        agent_file: Path to the agent .md file
-
-    Returns:
-        List of error messages (empty if valid)
-    """
-    errors = []
-
-    try:
-        content = agent_file.read_text()
-    except Exception as e:
-        return [f"Cannot read file: {e}"]
-
-    if not content.startswith("---"):
-        errors.append("Missing YAML frontmatter (file should start with '---')")
-        return errors
-
-    # Find the closing ---
-    lines = content.split("\n")
-    end_idx = None
-    for i, line in enumerate(lines[1:], 1):
-        if line.strip() == "---":
-            end_idx = i
-            break
-
-    if end_idx is None:
-        errors.append("Unclosed YAML frontmatter (missing closing '---')")
-        return errors
-
-    frontmatter_text = "\n".join(lines[1:end_idx])
-
-    # Try to parse as YAML
-    try:
-        frontmatter = yaml.safe_load(frontmatter_text) or {}
-    except yaml.YAMLError as e:
-        error_msg = str(e)
-        if "mapping values are not allowed" in error_msg:
-            errors.append(
-                "Invalid YAML: values containing colons must be quoted. "
-                'Example: description: "Text with: colons"'
-            )
-        else:
-            errors.append(f"Invalid YAML frontmatter: {error_msg}")
-        return errors
-
-    # Check required fields
-    if not frontmatter.get("description"):
-        errors.append("Missing required field: 'description'")
-
-    # Validate model field if present
-    model = frontmatter.get("model")
-    if model and model not in VALID_AGENT_MODELS:
-        errors.append(
-            f"Invalid model '{model}'. Must be one of: {', '.join(sorted(VALID_AGENT_MODELS))}"
-        )
-
-    return errors
 
 
 @dataclass

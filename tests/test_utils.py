@@ -76,16 +76,18 @@ class TestGetLocalModulesPath:
         assert path == project / ".lola" / "modules"
 
     def test_user_scope(self):
-        """Get modules path for user scope (None project_path)."""
-        path = get_local_modules_path(None)
+        """User scope is not supported (project-only)."""
+        import pytest
 
-        assert path == Path.home() / ".lola" / "modules"
+        with pytest.raises(ValueError, match="Project path is required"):
+            get_local_modules_path(None)
 
     def test_empty_string_treated_as_falsy(self):
-        """Empty string project_path uses user scope."""
-        path = get_local_modules_path("")
+        """Empty string is not a valid project path."""
+        import pytest
 
-        assert path == Path.home() / ".lola" / "modules"
+        with pytest.raises(ValueError, match="Project path is required"):
+            get_local_modules_path("")
 
     def test_returns_path_object(self, tmp_path):
         """Returns a Path object."""

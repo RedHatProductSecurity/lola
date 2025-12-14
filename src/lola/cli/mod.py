@@ -11,10 +11,10 @@ import click
 from rich.console import Console
 from rich.tree import Tree
 
-from lola.config import MODULES_DIR, INSTALLED_FILE, get_assistant_skill_path
-from lola.core.generator import remove_gemini_skills
+from lola.config import MODULES_DIR, INSTALLED_FILE
 from lola.models import Module, InstallationRegistry
-from lola.sources import (
+from lola.targets import get_assistant_skill_path, remove_gemini_skills
+from lola.parsers import (
     fetch_module,
     detect_source_type,
     save_source_info,
@@ -174,7 +174,6 @@ def add_module(source: str, module_name: str):
     console.print()
     console.print(f"[green]Added {module.name}[/green]")
     console.print(f"  [dim]Path:[/dim] {module_path}")
-    console.print(f"  [dim]Version:[/dim] {module.version}")
     console.print(f"  [dim]Skills:[/dim] {len(module.skills)}")
     console.print(f"  [dim]Commands:[/dim] {len(module.commands)}")
     console.print(f"  [dim]Agents:[/dim] {len(module.agents)}")
@@ -323,9 +322,7 @@ Use $ARGUMENTS to reference any arguments passed to the command.
         agents_dir.mkdir(exist_ok=True)
 
         agent_content = f"""---
-name: {final_agent_name}
 description: Description of what this agent does and when to use it
-model: inherit
 ---
 
 Instructions for the {final_agent_name.replace('-', ' ').title()} agent.
@@ -530,11 +527,7 @@ def module_info(module_name: str):
 
     console.print(f"[bold cyan]{module.name}[/bold cyan]")
     console.print()
-    console.print(f"  [dim]Version:[/dim] {module.version}")
     console.print(f"  [dim]Path:[/dim] {module.path}")
-
-    if module.description:
-        console.print(f"  [dim]Description:[/dim] {module.description}")
 
     console.print()
     console.print("[bold]Skills[/bold]")
@@ -544,8 +537,7 @@ def module_info(module_name: str):
     else:
         from lola.frontmatter import parse_file
 
-        for skill_rel in module.skills:
-            skill_path = module.path / skill_rel
+        for skill_rel, skill_path in zip(module.skills, module.get_skill_paths()):
             if skill_path.exists():
                 console.print(f"  [green]{skill_rel}[/green]")
                 skill_file = skill_path / "SKILL.md"
@@ -564,7 +556,7 @@ def module_info(module_name: str):
     if not module.commands:
         console.print("  [dim](none)[/dim]")
     else:
-        from lola.command_converters import parse_command_frontmatter
+        from lola.parsers import parse_command_frontmatter
 
         commands_dir = module.path / "commands"
         for cmd_name in module.commands:
@@ -593,14 +585,11 @@ def module_info(module_name: str):
             agent_path = agents_dir / f"{agent_name}.md"
             if agent_path.exists():
                 console.print(f"  [green]@{module.name}-{agent_name}[/green]")
-                # Show description and model from frontmatter
+                # Show description from frontmatter
                 frontmatter, _ = fm_parse_file(agent_path)
                 desc = frontmatter.get("description", "")
-                model = frontmatter.get("model", "")
                 if desc:
                     console.print(f"    [dim]{desc[:60]}[/dim]")
-                if model:
-                    console.print(f"    [dim]model: {model}[/dim]")
             else:
                 console.print(f"  [red]{agent_name}[/red] [dim](not found)[/dim]")
 
@@ -654,7 +643,6 @@ def update_module_cmd(module_name: str | None):
             # Show updated module info
             module = Module.from_path(module_path)
             if module:
-                console.print(f"  [dim]Version:[/dim] {module.version}")
                 console.print(f"  [dim]Skills:[/dim] {len(module.skills)}")
 
             console.print()

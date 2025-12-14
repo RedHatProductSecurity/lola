@@ -1,6 +1,6 @@
 """Tests for the core/generator module."""
 
-from lola.core.generator import (
+from lola.targets import (
     get_skill_description,
     generate_claude_skill,
     generate_claude_command,

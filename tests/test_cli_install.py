@@ -292,8 +292,10 @@ class TestUpdateCmd:
         module_dir = modules_dir / "mymodule"
         module_dir.mkdir()
 
-        # Create skill (auto-discovered via SKILL.md) - skill2 was removed
-        skill_dir = module_dir / "skill1"
+        # Create skills directory with skill (auto-discovered via SKILL.md) - skill2 was removed
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ndescription: Skill 1\n---\nContent")
 
@@ -345,8 +347,10 @@ class TestUpdateCmd:
         module_dir = modules_dir / "mymodule"
         module_dir.mkdir()
 
-        # Create skill (auto-discovered via SKILL.md)
-        skill_dir = module_dir / "skill1"
+        # Create skills directory with skill (auto-discovered via SKILL.md)
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ndescription: Skill 1\n---\nContent")
 

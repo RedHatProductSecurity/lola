@@ -1,11 +1,10 @@
 """Tests for agent support."""
 
 import pytest
-from pathlib import Path
 
-from lola.models import Agent, Module, validate_agent_frontmatter, VALID_AGENT_MODELS
-from lola.config import get_assistant_agent_path, ASSISTANTS
-from lola.core.generator import generate_claude_agent, get_agent_filename
+from lola.models import Agent, Module
+from lola.frontmatter import validate_agent
+from lola.targets import ASSISTANTS, generate_claude_agent, get_agent_filename, get_assistant_agent_path
 
 
 class TestAgentModel:
@@ -97,8 +96,10 @@ class TestModuleWithAgents:
         module_dir = tmp_path / "mixed"
         module_dir.mkdir()
 
-        # Create a skill
-        skill_dir = module_dir / "myskill"
+        # Create a skill in skills/ directory
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "myskill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ndescription: A skill\n---\n")
 
@@ -128,7 +129,7 @@ model: opus
 
 Content.
 """)
-        errors = validate_agent_frontmatter(agent_file)
+        errors = validate_agent(agent_file)
         assert errors == []
 
     def test_missing_description(self, tmp_path):
@@ -140,43 +141,15 @@ model: sonnet
 
 Content.
 """)
-        errors = validate_agent_frontmatter(agent_file)
+        errors = validate_agent(agent_file)
         assert len(errors) == 1
         assert "description" in errors[0].lower()
-
-    def test_invalid_model(self, tmp_path):
-        """Validate agent with invalid model."""
-        agent_file = tmp_path / "agent.md"
-        agent_file.write_text("""---
-description: Test agent
-model: invalid-model
----
-
-Content.
-""")
-        errors = validate_agent_frontmatter(agent_file)
-        assert len(errors) == 1
-        assert "invalid model" in errors[0].lower()
-
-    def test_all_valid_models(self, tmp_path):
-        """All valid models should pass validation."""
-        for model in VALID_AGENT_MODELS:
-            agent_file = tmp_path / f"agent-{model}.md"
-            agent_file.write_text(f"""---
-description: Test agent
-model: {model}
----
-
-Content.
-""")
-            errors = validate_agent_frontmatter(agent_file)
-            assert errors == [], f"Model '{model}' should be valid"
 
     def test_missing_frontmatter(self, tmp_path):
         """Validate agent without frontmatter."""
         agent_file = tmp_path / "agent.md"
         agent_file.write_text("Just content, no frontmatter.")
-        errors = validate_agent_frontmatter(agent_file)
+        errors = validate_agent(agent_file)
         assert len(errors) >= 1
         assert "frontmatter" in errors[0].lower()
 
@@ -185,20 +158,13 @@ class TestAgentConfig:
     """Tests for agent configuration."""
 
     def test_claude_code_has_agent_paths(self):
-        """Claude Code config includes agent paths."""
-        assert "agents_user" in ASSISTANTS["claude-code"]
+        """Claude Code config includes project-scope agent paths."""
         assert "agents_project" in ASSISTANTS["claude-code"]
 
     def test_other_assistants_no_agent_paths(self):
-        """Cursor and Gemini don't have agent paths yet."""
-        assert "agents_user" not in ASSISTANTS["cursor"]
-        assert "agents_user" not in ASSISTANTS["gemini-cli"]
-
-    def test_get_assistant_agent_path_claude_user(self):
-        """Get Claude Code user agent path."""
-        path = get_assistant_agent_path("claude-code", "user")
-        assert path.name == "agents"
-        assert ".claude" in str(path)
+        """Cursor has agents; Gemini doesn't."""
+        assert "agents_project" in ASSISTANTS["cursor"]
+        assert "agents_project" not in ASSISTANTS["gemini-cli"]
 
     def test_get_assistant_agent_path_claude_project(self, tmp_path):
         """Get Claude Code project agent path."""
@@ -207,11 +173,11 @@ class TestAgentConfig:
 
     def test_get_assistant_agent_path_unsupported(self):
         """Unsupported assistants raise ValueError."""
-        with pytest.raises(ValueError, match="does not support agents"):
-            get_assistant_agent_path("cursor", "user")
+        with pytest.raises(ValueError, match="Only project scope is supported"):
+            get_assistant_agent_path("claude-code", "user")
 
         with pytest.raises(ValueError, match="does not support agents"):
-            get_assistant_agent_path("gemini-cli", "user")
+            get_assistant_agent_path("gemini-cli", "project", "/tmp")
 
 
 class TestAgentGenerator:

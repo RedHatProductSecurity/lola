@@ -11,28 +11,26 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from lola.config import (
+from lola.config import MODULES_DIR
+from lola.targets import get_command_filename
+from lola.targets import (
     ASSISTANTS,
-    MODULES_DIR,
+    copy_module_to_local,
+    generate_claude_agent,
+    generate_claude_command,
+    generate_claude_skill,
+    generate_cursor_agent,
+    generate_cursor_command,
+    generate_cursor_rule,
+    generate_gemini_command,
+    generate_opencode_agent,
     get_assistant_agent_path,
     get_assistant_command_path,
     get_assistant_skill_path,
-)
-from lola.command_converters import get_command_filename
-from lola.core.installer import (
-    copy_module_to_local,
-    get_registry,
-    install_to_assistant,
-)
-from lola.core.generator import (
-    generate_claude_agent,
-    generate_claude_skill,
-    generate_cursor_rule,
-    generate_claude_command,
-    generate_cursor_command,
-    generate_gemini_command,
     get_agent_filename,
+    get_registry,
     get_skill_description,
+    install_to_assistant,
     remove_gemini_skills,
     update_gemini_md,
 )
@@ -326,8 +324,8 @@ def uninstall_cmd(
                         if verbose:
                             console.print(f"  [green]Removed {cmd_file}[/green]")
 
-        # Remove agent files (claude-code only)
-        if inst.agents and inst.assistant == "claude-code":
+        # Remove agent files
+        if inst.agents:
             try:
                 agent_dest = get_assistant_agent_path(
                     inst.assistant, inst.scope, inst.project_path
@@ -570,8 +568,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                                         f"      [yellow]- /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
                                     )
 
-                # Remove orphaned agent files (claude-code only)
-                if orphaned_agents and inst.assistant == "claude-code":
+                # Remove orphaned agent files
+                if orphaned_agents:
                     try:
                         agent_dest = get_assistant_agent_path(
                             inst.assistant, inst.scope, inst.project_path
@@ -694,23 +692,35 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                                         f"      [red]{cmd_name}[/red] [dim](source not found)[/dim]"
                                     )
 
-                # Update agents - only claude-code supports agents
-                if global_module.agents and inst.assistant == "claude-code":
+                # Update agents
+                if global_module.agents:
                     try:
                         agent_dest = get_assistant_agent_path(
                             inst.assistant, inst.scope, inst.project_path
                         )
                     except ValueError:
-                        console.print("    [red]Cannot determine agent path[/red]")
+                        # Assistant doesn't support agents
                         agent_dest = None
 
                     if agent_dest:
                         agents_dir = source_module / "agents"
                         for agent_name in global_module.agents:
                             source = agents_dir / f"{agent_name}.md"
-                            success = generate_claude_agent(
-                                source, agent_dest, agent_name, inst.module_name
-                            )
+
+                            if inst.assistant == "claude-code":
+                                success = generate_claude_agent(
+                                    source, agent_dest, agent_name, inst.module_name
+                                )
+                            elif inst.assistant == "cursor":
+                                success = generate_cursor_agent(
+                                    source, agent_dest, agent_name, inst.module_name
+                                )
+                            elif inst.assistant == "opencode":
+                                success = generate_opencode_agent(
+                                    source, agent_dest, agent_name, inst.module_name
+                                )
+                            else:
+                                success = False
 
                             if success:
                                 agents_ok += 1

@@ -48,8 +48,10 @@ def sample_module(tmp_path):
     module_dir = tmp_path / "sample-module"
     module_dir.mkdir()
 
-    # Create skill directory (auto-discovered by SKILL.md presence)
-    skill_dir = module_dir / "skill1"
+    # Create skill directory (preferred structure: skills/<name>/SKILL.md)
+    skills_dir = module_dir / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "skill1"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("""---
 description: A test skill

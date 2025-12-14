@@ -3,11 +3,7 @@
 from unittest.mock import patch, MagicMock
 
 
-from lola.core.installer import (
-    get_registry,
-    copy_module_to_local,
-    install_to_assistant,
-)
+from lola.targets import get_registry, copy_module_to_local, install_to_assistant
 from lola.models import Module, InstallationRegistry
 
 
@@ -16,7 +12,7 @@ class TestGetRegistry:
 
     def test_returns_registry(self, tmp_path):
         """Returns an InstallationRegistry."""
-        with patch("lola.core.installer.INSTALLED_FILE", tmp_path / "installed.yml"):
+        with patch("lola.config.INSTALLED_FILE", tmp_path / "installed.yml"):
             registry = get_registry()
 
         assert isinstance(registry, InstallationRegistry)
@@ -120,8 +116,10 @@ class TestInstallToAssistant:
 
         # Create skill directories (auto-discovered via SKILL.md)
         if skills:
+            skills_root = module_dir / "skills"
+            skills_root.mkdir()
             for skill in skills:
-                skill_dir = module_dir / skill
+                skill_dir = skills_root / skill
                 skill_dir.mkdir()
                 (skill_dir / "SKILL.md").write_text(f"""---
 description: {skill} description
@@ -146,8 +144,8 @@ Do {cmd}.
 
         return Module.from_path(module_dir)
 
-    def test_install_claude_code_user_skills(self, tmp_path):
-        """Install skills to claude-code user scope."""
+    def test_install_claude_code_project_skills(self, tmp_path):
+        """Install skills to claude-code project scope."""
         module = self.create_test_module(tmp_path, skills=["skill1"])
 
         local_modules = tmp_path / ".lola" / "modules"
@@ -155,17 +153,17 @@ Do {cmd}.
         skill_dest = tmp_path / "skills"
 
         with (
-            patch("lola.core.installer.console", self.console_mock),
+            patch("lola.targets.console", self.console_mock),
             patch(
-                "lola.core.installer.get_assistant_skill_path", return_value=skill_dest
+                "lola.targets.get_assistant_skill_path", return_value=skill_dest
             ),
-            patch("lola.core.installer.get_assistant_command_path", return_value=None),
+            patch("lola.targets.get_assistant_command_path", return_value=None),
         ):
             count = install_to_assistant(
                 module=module,
                 assistant="claude-code",
-                scope="user",
-                project_path=None,
+                scope="project",
+                project_path=str(tmp_path),
                 local_modules=local_modules,
                 registry=registry,
             )
@@ -183,18 +181,18 @@ Do {cmd}.
         command_dest = tmp_path / "commands"
 
         with (
-            patch("lola.core.installer.console", self.console_mock),
-            patch("lola.core.installer.get_assistant_skill_path", return_value=None),
+            patch("lola.targets.console", self.console_mock),
+            patch("lola.targets.get_assistant_skill_path", return_value=None),
             patch(
-                "lola.core.installer.get_assistant_command_path",
+                "lola.targets.get_assistant_command_path",
                 return_value=command_dest,
             ),
         ):
             count = install_to_assistant(
                 module=module,
                 assistant="claude-code",
-                scope="user",
-                project_path=None,
+                scope="project",
+                project_path=str(tmp_path),
                 local_modules=local_modules,
                 registry=registry,
             )
@@ -202,56 +200,6 @@ Do {cmd}.
         assert count == 1
         # Check command was installed
         assert (command_dest / "testmod-cmd1.md").exists()
-
-    def test_install_gemini_cli_user_skills_skipped(self, tmp_path):
-        """Gemini CLI user scope skills are skipped."""
-        module = self.create_test_module(tmp_path, skills=["skill1"])
-
-        local_modules = tmp_path / ".lola" / "modules"
-        registry = InstallationRegistry(tmp_path / "installed.yml")
-
-        with (
-            patch("lola.core.installer.console", self.console_mock),
-            patch("lola.core.installer.get_assistant_skill_path") as skill_path_mock,
-            patch("lola.core.installer.get_assistant_command_path", return_value=None),
-        ):
-            count = install_to_assistant(
-                module=module,
-                assistant="gemini-cli",
-                scope="user",
-                project_path=None,
-                local_modules=local_modules,
-                registry=registry,
-            )
-
-        # Skills should be skipped, not installed
-        assert count == 0
-        skill_path_mock.assert_not_called()
-
-    def test_install_cursor_user_skills_skipped(self, tmp_path):
-        """Cursor user scope skills are skipped."""
-        module = self.create_test_module(tmp_path, skills=["skill1"])
-
-        local_modules = tmp_path / ".lola" / "modules"
-        registry = InstallationRegistry(tmp_path / "installed.yml")
-
-        with (
-            patch("lola.core.installer.console", self.console_mock),
-            patch("lola.core.installer.get_assistant_skill_path") as skill_path_mock,
-            patch("lola.core.installer.get_assistant_command_path", return_value=None),
-        ):
-            count = install_to_assistant(
-                module=module,
-                assistant="cursor",
-                scope="user",
-                project_path=None,
-                local_modules=local_modules,
-                registry=registry,
-            )
-
-        # Skills should be skipped
-        assert count == 0
-        skill_path_mock.assert_not_called()
 
     def test_install_records_installation(self, tmp_path):
         """Installation is recorded in registry."""
@@ -263,20 +211,20 @@ Do {cmd}.
         command_dest = tmp_path / "commands"
 
         with (
-            patch("lola.core.installer.console", self.console_mock),
+            patch("lola.targets.console", self.console_mock),
             patch(
-                "lola.core.installer.get_assistant_skill_path", return_value=skill_dest
+                "lola.targets.get_assistant_skill_path", return_value=skill_dest
             ),
             patch(
-                "lola.core.installer.get_assistant_command_path",
+                "lola.targets.get_assistant_command_path",
                 return_value=command_dest,
             ),
         ):
             install_to_assistant(
                 module=module,
                 assistant="claude-code",
-                scope="user",
-                project_path=None,
+                scope="project",
+                project_path=str(tmp_path),
                 local_modules=local_modules,
                 registry=registry,
             )
@@ -285,7 +233,7 @@ Do {cmd}.
         installations = registry.find("testmod")
         assert len(installations) == 1
         assert installations[0].assistant == "claude-code"
-        assert installations[0].scope == "user"
+        assert installations[0].scope == "project"
         assert "testmod-skill1" in installations[0].skills
         assert "cmd1" in installations[0].commands
 

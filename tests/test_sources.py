@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import yaml
 
-from lola.sources import (
+from lola.parsers import (
     download_file,
     validate_module_name,
     GitSourceHandler,
@@ -676,7 +676,7 @@ class TestDownloadFile:
         """Download file successfully."""
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch("lola.sources.urlopen") as mock_urlopen:
+        with patch("lola.parsers.urlopen") as mock_urlopen:
             mock_response = MagicMock()
             mock_response.__enter__ = MagicMock(return_value=mock_response)
             mock_response.__exit__ = MagicMock(return_value=False)
@@ -693,7 +693,7 @@ class TestDownloadFile:
 
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch("lola.sources.urlopen") as mock_urlopen:
+        with patch("lola.parsers.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = URLError("Connection failed")
 
             with pytest.raises(RuntimeError, match="Failed to download"):
@@ -703,7 +703,7 @@ class TestDownloadFile:
         """Raise error on generic failure."""
         dest_path = tmp_path / "downloaded.txt"
 
-        with patch("lola.sources.urlopen") as mock_urlopen:
+        with patch("lola.parsers.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = Exception("Generic error")
 
             with pytest.raises(RuntimeError, match="Download error"):

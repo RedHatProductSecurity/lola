@@ -220,7 +220,6 @@ class TestModInfo:
 
         assert result.exit_code == 0
         assert "sample-module" in result.output
-        assert "0.1.0" in result.output  # default version with auto-discovery
 
 
 class TestListRegisteredModules:
@@ -433,7 +432,7 @@ class TestModInfoAdvanced:
 
     def test_info_with_source_info(self, cli_runner, sample_module, tmp_path):
         """Show source info in module details."""
-        from lola.sources import save_source_info
+        from lola.parsers import save_source_info
 
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
@@ -511,7 +510,7 @@ class TestModUpdate:
 
     def test_update_specific_module(self, cli_runner, sample_module, tmp_path):
         """Update a specific module from folder source."""
-        from lola.sources import save_source_info
+        from lola.parsers import save_source_info
 
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
@@ -532,7 +531,7 @@ class TestModUpdate:
 
     def test_update_all_modules(self, cli_runner, sample_module, tmp_path):
         """Update all registered modules."""
-        from lola.sources import save_source_info
+        from lola.parsers import save_source_info
 
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)

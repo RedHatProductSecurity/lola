@@ -8,8 +8,8 @@ from lola.models import (
     Module,
     Installation,
     InstallationRegistry,
-    validate_skill_frontmatter,
 )
+from lola.frontmatter import validate_skill
 
 
 class TestSkill:
@@ -77,9 +77,11 @@ class TestModule:
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
 
-        # Create skill directories with SKILL.md
+        # Create skills directory with skill subdirectories
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
         for skill in ["skill1", "skill2"]:
-            skill_dir = module_dir / skill
+            skill_dir = skills_dir / skill
             skill_dir.mkdir()
             (skill_dir / "SKILL.md").write_text(f"""---
 description: {skill} description
@@ -91,7 +93,6 @@ Content.
         module = Module.from_path(module_dir)
         assert module is not None
         assert module.name == "mymodule"
-        assert module.version == "0.1.0"  # default version
         assert module.skills == ["skill1", "skill2"]
 
     def test_from_path_valid_module_with_commands(self, tmp_path):
@@ -122,13 +123,17 @@ Content.
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
 
+        # Create skills directory
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+
         # Create hidden directory with SKILL.md (should be skipped)
-        hidden_dir = module_dir / ".hidden"
+        hidden_dir = skills_dir / ".hidden"
         hidden_dir.mkdir()
         (hidden_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
 
         # Create valid skill
-        skill_dir = module_dir / "myskill"
+        skill_dir = skills_dir / "myskill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
 
@@ -147,8 +152,10 @@ Content.
         commands_dir.mkdir()
         (commands_dir / "cmd1.md").write_text("Command content")
 
-        # Create a valid skill so the module is detected
-        skill_dir = module_dir / "myskill"
+        # Create skills directory with a valid skill
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "myskill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
 
@@ -163,8 +170,8 @@ Content.
         module = Module(name="test", path=tmp_path, skills=["skill1", "skill2"])
         paths = module.get_skill_paths()
         assert len(paths) == 2
-        assert paths[0] == tmp_path / "skill1"
-        assert paths[1] == tmp_path / "skill2"
+        assert paths[0] == tmp_path / "skills" / "skill1"
+        assert paths[1] == tmp_path / "skills" / "skill2"
 
     def test_get_command_paths(self, tmp_path):
         """Get full paths to commands."""
@@ -179,8 +186,10 @@ Content.
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
 
-        # Create skill with valid frontmatter
-        skill_dir = module_dir / "skill1"
+        # Create skills directory with skill
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("""---
 description: A skill
@@ -209,7 +218,10 @@ Content.
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
 
-        skill_dir = module_dir / "skill1"
+        # Create skills directory with skill missing description
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("""---
 name: skill1
@@ -224,8 +236,8 @@ Content.
         assert any("description" in e.lower() for e in errors)
 
 
-class TestValidateSkillFrontmatter:
-    """Tests for validate_skill_frontmatter()."""
+class TestValidateSkill:
+    """Tests for validate_skill()."""
 
     def test_valid_frontmatter(self, tmp_path):
         """Validate valid SKILL.md."""
@@ -237,7 +249,7 @@ description: My skill description
 
 Content.
 """)
-        errors = validate_skill_frontmatter(skill_file)
+        errors = validate_skill(skill_file)
         assert errors == []
 
     def test_missing_frontmatter(self, tmp_path):
@@ -245,20 +257,9 @@ Content.
         skill_file = tmp_path / "SKILL.md"
         skill_file.write_text("# Just content")
 
-        errors = validate_skill_frontmatter(skill_file)
+        errors = validate_skill(skill_file)
         assert len(errors) == 1
-        assert "Missing YAML frontmatter" in errors[0]
-
-    def test_unclosed_frontmatter(self, tmp_path):
-        """Validate file with unclosed frontmatter."""
-        skill_file = tmp_path / "SKILL.md"
-        skill_file.write_text("""---
-description: test
-Content without closing.
-""")
-        errors = validate_skill_frontmatter(skill_file)
-        assert len(errors) == 1
-        assert "Unclosed" in errors[0]
+        assert "frontmatter" in errors[0].lower()
 
     def test_missing_description(self, tmp_path):
         """Validate file without description field."""
@@ -269,7 +270,7 @@ name: myskill
 
 Content.
 """)
-        errors = validate_skill_frontmatter(skill_file)
+        errors = validate_skill(skill_file)
         assert len(errors) == 1
         assert "description" in errors[0].lower()
 

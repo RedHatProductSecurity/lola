@@ -1,17 +1,15 @@
 """Tests for converter modules."""
 
-from lola.converters import (
+from lola.parsers import (
     parse_skill_frontmatter,
     skill_to_claude,
     skill_to_cursor_mdc,
 )
-from lola.command_converters import (
+from lola.parsers import (
     parse_command_frontmatter,
     has_positional_args,
-    convert_to_gemini_args,
-    command_to_gemini,
-    get_command_filename,
 )
+from lola.targets import convert_to_gemini_args, command_to_gemini, get_command_filename
 
 
 class TestSkillConverters:
