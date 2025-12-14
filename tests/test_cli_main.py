@@ -63,9 +63,9 @@ class TestMainSubcommands:
         assert result.exit_code == 0
         assert 'Regenerate assistant files' in result.output
 
-    def test_installed_subcommand_help(self, cli_runner):
-        """Show installed subcommand help."""
-        result = cli_runner.invoke(main, ['installed', '--help'])
+    def test_list_subcommand_help(self, cli_runner):
+        """Show list subcommand help."""
+        result = cli_runner.invoke(main, ['list', '--help'])
         assert result.exit_code == 0
         assert 'List all installed modules' in result.output
 

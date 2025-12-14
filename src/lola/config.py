@@ -15,9 +15,6 @@ MODULES_DIR = LOLA_HOME / 'modules'
 # Installation tracking file
 INSTALLED_FILE = LOLA_HOME / 'installed.yml'
 
-# Module manifest filename (inside each module)
-MODULE_MANIFEST = '.lola/module.yml'
-
 # Skill definition filename
 SKILL_FILE = 'SKILL.md'
 

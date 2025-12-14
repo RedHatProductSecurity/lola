@@ -18,7 +18,7 @@ from urllib.error import URLError
 
 import yaml
 
-from lola.config import MODULE_MANIFEST
+from lola.config import SKILL_FILE
 
 
 def download_file(url: str, dest_path: Path) -> None:
@@ -195,9 +195,17 @@ class ZipSourceHandler(SourceHandler):
         return final_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
-        """Find directory containing .lola/module.yml."""
-        for path in root.rglob(MODULE_MANIFEST):
+        """Find directory containing skills (SKILL.md) or commands."""
+        # First, try to find a SKILL.md anywhere
+        for path in root.rglob(SKILL_FILE):
+            # Return the parent of the skill folder (the module)
             return path.parent.parent
+
+        # Or look for a commands/ directory with .md files
+        for path in root.rglob('commands'):
+            if path.is_dir() and list(path.glob('*.md')):
+                return path.parent
+
         return None
 
     def _safe_extract(self, zf: zipfile.ZipFile, dest: Path) -> None:
@@ -267,9 +275,17 @@ class TarSourceHandler(SourceHandler):
         return final_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
-        """Find directory containing .lola/module.yml."""
-        for path in root.rglob(MODULE_MANIFEST):
+        """Find directory containing skills (SKILL.md) or commands."""
+        # First, try to find a SKILL.md anywhere
+        for path in root.rglob(SKILL_FILE):
+            # Return the parent of the skill folder (the module)
             return path.parent.parent
+
+        # Or look for a commands/ directory with .md files
+        for path in root.rglob('commands'):
+            if path.is_dir() and list(path.glob('*.md')):
+                return path.parent
+
         return None
 
 
@@ -336,9 +352,17 @@ class ZipUrlSourceHandler(SourceHandler):
         return final_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
-        """Find directory containing .lola/module.yml."""
-        for path in root.rglob(MODULE_MANIFEST):
+        """Find directory containing skills (SKILL.md) or commands."""
+        # First, try to find a SKILL.md anywhere
+        for path in root.rglob(SKILL_FILE):
+            # Return the parent of the skill folder (the module)
             return path.parent.parent
+
+        # Or look for a commands/ directory with .md files
+        for path in root.rglob('commands'):
+            if path.is_dir() and list(path.glob('*.md')):
+                return path.parent
+
         return None
 
 
@@ -405,9 +429,17 @@ class TarUrlSourceHandler(SourceHandler):
         return final_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
-        """Find directory containing .lola/module.yml."""
-        for path in root.rglob(MODULE_MANIFEST):
+        """Find directory containing skills (SKILL.md) or commands."""
+        # First, try to find a SKILL.md anywhere
+        for path in root.rglob(SKILL_FILE):
+            # Return the parent of the skill folder (the module)
             return path.parent.parent
+
+        # Or look for a commands/ directory with .md files
+        for path in root.rglob('commands'):
+            if path.is_dir() and list(path.glob('*.md')):
+                return path.parent
+
         return None
 
 

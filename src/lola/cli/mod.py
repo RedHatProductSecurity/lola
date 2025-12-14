@@ -124,9 +124,9 @@ def add_module(source: str, module_name: str):
     # Validate module structure
     module = Module.from_path(module_path)
     if not module:
-        ui.warning("No valid .lola/module.yml found")
+        ui.warning("No skills or commands found")
         ui.kv("Path", str(module_path))
-        ui.hint("Create a .lola/module.yml to define skills for installation")
+        ui.hint("Add skill folders with SKILL.md or commands/*.md files")
         return
 
     is_valid, errors = module.validate()
@@ -160,15 +160,10 @@ def add_module(source: str, module_name: str):
 @mod.command(name='init')
 @click.argument('name', required=False, default=None)
 @click.option(
-    '-d', '--description',
-    default='',
-    help='Module description'
-)
-@click.option(
     '-s', '--skill',
     'skill_name',
-    default=None,
-    help='Name for the initial skill (default: module name)'
+    default='example-skill',
+    help='Name for the initial skill'
 )
 @click.option(
     '--no-skill',
@@ -178,25 +173,30 @@ def add_module(source: str, module_name: str):
 @click.option(
     '-c', '--command',
     'command_name',
-    default=None,
+    default='example-command',
     help='Name for an initial slash command'
 )
-def init_module(name: str | None, description: str, skill_name: str, no_skill: bool, command_name: str):
+@click.option(
+    '--no-command',
+    is_flag=True,
+    help='Do not create an initial command'
+)
+def init_module(name: str | None, skill_name: str, no_skill: bool, command_name: str, no_command: bool):
     """
     Initialize a new lola module.
 
-    Creates the .lola/module.yml configuration file in the current directory
-    or in a new subdirectory if NAME is provided. By default, creates an
-    initial skill with the same name as the module.
+    Creates a module folder structure with skills and commands that are
+    auto-discovered. Skills are folders containing SKILL.md files, and
+    commands are .md files in the commands/ folder.
 
     \b
     Examples:
         lola mod init                           # Use current folder name
         lola mod init my-skills                 # Create my-skills/ subdirectory
-        lola mod init -d "My custom skills"
         lola mod init -s code-review            # Custom skill name
         lola mod init --no-skill                # Skip initial skill
-        lola mod init -c review-pr              # Create initial command
+        lola mod init -c review-pr              # Custom command name
+        lola mod init --no-command              # Skip initial command
     """
     if name:
         # Create a new subdirectory
@@ -211,42 +211,18 @@ def init_module(name: str | None, description: str, skill_name: str, no_skill: b
         module_dir = Path.cwd()
         module_name = module_dir.name
 
-    lola_dir = module_dir / '.lola'
-    if lola_dir.exists():
-        ui.error("Module already initialized (.lola/ exists)")
-        raise SystemExit(1)
-
-    lola_dir.mkdir()
-
-    # Determine skill name (default to module name unless --no-skill)
+    # Apply --no-skill and --no-command flags
     if no_skill:
         skill_name = None
-    elif skill_name is None:
-        skill_name = module_name
-
-    # Create module.yml
-    skills_list = []
-    if skill_name:
-        skills_list.append(skill_name)
-
-    commands_list = []
-    if command_name:
-        commands_list.append(command_name)
-
-    module_yml = {
-        'type': 'lola/module',
-        'version': '0.1.0',
-        'description': description or f'{module_name} module',
-        'skills': skills_list,
-        'commands': commands_list,
-    }
-
-    import yaml
-    (lola_dir / 'module.yml').write_text(yaml.dump(module_yml, default_flow_style=False, sort_keys=False))
+    if no_command:
+        command_name = None
 
     # Create initial skill if requested
     if skill_name:
         skill_dir = module_dir / skill_name
+        if skill_dir.exists():
+            ui.error(f"Skill directory already exists: {skill_dir}")
+            raise SystemExit(1)
         skill_dir.mkdir()
 
         skill_content = f'''---
@@ -271,7 +247,7 @@ Provide examples of the skill in action.
     # Create initial command if requested
     if command_name:
         commands_dir = module_dir / 'commands'
-        commands_dir.mkdir()
+        commands_dir.mkdir(exist_ok=True)
 
         command_content = f'''---
 description: Description of what this command does
@@ -301,8 +277,8 @@ Use $ARGUMENTS to reference any arguments passed to the command.
     if command_name:
         steps.append(f"Edit commands/{command_name}.md with your command prompt")
     if not skill_name and not command_name:
-        steps.append("Create skill directories with SKILL.md files or commands/ directory")
-        steps.append("Add skill/command names to .lola/module.yml")
+        steps.append("Create skill directories with SKILL.md files")
+        steps.append("Create commands/ directory with .md files for slash commands")
     steps.append(f"lola mod add {module_dir}")
 
     ui.next_steps(steps)
@@ -463,7 +439,7 @@ def module_info(module_name: str):
 
     module = Module.from_path(module_path)
     if not module:
-        ui.warning(f"No valid .lola/module.yml found in '{module_name}'")
+        ui.warning(f"No skills or commands found in '{module_name}'")
         ui.kv("Path", str(module_path))
         return
 

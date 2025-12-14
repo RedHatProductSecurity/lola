@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import yaml
 
-from lola.config import MODULE_MANIFEST, SKILL_FILE
+from lola.config import SKILL_FILE
 from lola import frontmatter as fm
 
 
@@ -80,27 +80,39 @@ class Module:
         """
         Load a module from its directory path.
 
-        Expects a .lola/module.yml file in the module directory.
+        Auto-discovers skills (folders containing SKILL.md) and commands
+        (.md files in commands/ folder).
         """
-        manifest_path = module_path / MODULE_MANIFEST
-
-        if not manifest_path.exists():
+        if not module_path.exists() or not module_path.is_dir():
             return None
 
-        with open(manifest_path, 'r') as f:
-            data = yaml.safe_load(f) or {}
+        # Auto-discover skills: subdirs containing SKILL.md
+        skills = []
+        for subdir in module_path.iterdir():
+            # Skip hidden directories and special folders
+            if subdir.name.startswith('.') or subdir.name == 'commands':
+                continue
+            if subdir.is_dir() and (subdir / SKILL_FILE).exists():
+                skills.append(subdir.name)
 
-        # Validate module type
-        if data.get('type') != 'lola/module':
+        # Auto-discover commands: .md files in commands/
+        commands = []
+        commands_dir = module_path / 'commands'
+        if commands_dir.exists() and commands_dir.is_dir():
+            for cmd_file in commands_dir.glob('*.md'):
+                commands.append(cmd_file.stem)
+
+        # Only valid if has at least one skill or command
+        if not skills and not commands:
             return None
 
         return cls(
             name=module_path.name,
             path=module_path,
-            version=data.get('version', '0.1.0'),
-            skills=data.get('skills', []),
-            commands=data.get('commands', []),
-            description=data.get('description'),
+            version="0.1.0",
+            skills=sorted(skills),
+            commands=sorted(commands),
+            description=None,
         )
 
     def get_skill_paths(self) -> list[Path]:
@@ -120,11 +132,6 @@ class Module:
             Tuple of (is_valid, list of error messages)
         """
         errors = []
-
-        # Check manifest exists
-        manifest = self.path / MODULE_MANIFEST
-        if not manifest.exists():
-            errors.append(f"Missing manifest: {MODULE_MANIFEST}")
 
         # Check each skill exists and has SKILL.md with valid frontmatter
         for skill_rel in self.skills:

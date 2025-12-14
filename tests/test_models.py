@@ -76,50 +76,91 @@ Do something.
 class TestModule:
     """Tests for Module dataclass."""
 
-    def test_from_path_valid_module(self, tmp_path):
-        """Load valid module from path."""
+    def test_from_path_valid_module_with_skills(self, tmp_path):
+        """Load valid module with auto-discovered skills."""
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
 
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'description': 'Test module',
-            'skills': ['skill1', 'skill2'],
-            'commands': ['cmd1'],
-        }
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
+        # Create skill directories with SKILL.md
+        for skill in ['skill1', 'skill2']:
+            skill_dir = module_dir / skill
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_text(f"""---
+description: {skill} description
+---
+
+Content.
+""")
 
         module = Module.from_path(module_dir)
         assert module is not None
         assert module.name == "mymodule"
-        assert module.version == "1.0.0"
-        assert module.description == "Test module"
+        assert module.version == "0.1.0"  # default version
         assert module.skills == ['skill1', 'skill2']
+
+    def test_from_path_valid_module_with_commands(self, tmp_path):
+        """Load valid module with auto-discovered commands."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create commands directory
+        commands_dir = module_dir / "commands"
+        commands_dir.mkdir()
+        (commands_dir / "cmd1.md").write_text("Command content")
+        (commands_dir / "cmd2.md").write_text("Command content")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert module.commands == ['cmd1', 'cmd2']
+
+    def test_from_path_empty_directory(self, tmp_path):
+        """Return None when directory has no skills or commands."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        module = Module.from_path(module_dir)
+        assert module is None
+
+    def test_from_path_skips_hidden_directories(self, tmp_path):
+        """Skip hidden directories when discovering skills."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create hidden directory with SKILL.md (should be skipped)
+        hidden_dir = module_dir / ".hidden"
+        hidden_dir.mkdir()
+        (hidden_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
+
+        # Create valid skill
+        skill_dir = module_dir / "myskill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert module.skills == ['myskill']
+        assert '.hidden' not in module.skills
+
+    def test_from_path_skips_commands_folder_as_skill(self, tmp_path):
+        """Don't treat commands folder as a skill even if it has SKILL.md."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create commands directory with a command file
+        commands_dir = module_dir / "commands"
+        commands_dir.mkdir()
+        (commands_dir / "cmd1.md").write_text("Command content")
+
+        # Create a valid skill so the module is detected
+        skill_dir = module_dir / "myskill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert 'commands' not in module.skills
+        assert module.skills == ['myskill']
         assert module.commands == ['cmd1']
-
-    def test_from_path_no_manifest(self, tmp_path):
-        """Return None when no manifest exists."""
-        module_dir = tmp_path / "mymodule"
-        module_dir.mkdir()
-
-        module = Module.from_path(module_dir)
-        assert module is None
-
-    def test_from_path_wrong_type(self, tmp_path):
-        """Return None when manifest has wrong type."""
-        module_dir = tmp_path / "mymodule"
-        module_dir.mkdir()
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
-
-        manifest = {'type': 'wrong/type', 'version': '1.0.0'}
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
-
-        module = Module.from_path(module_dir)
-        assert module is None
 
     def test_get_skill_paths(self, tmp_path):
         """Get full paths to skills."""
@@ -149,18 +190,8 @@ class TestModule:
         """Validate a correctly structured module."""
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
 
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'skills': ['skill1'],
-            'commands': ['cmd1'],
-        }
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
-
-        # Create skill
+        # Create skill with valid frontmatter
         skill_dir = module_dir / "skill1"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("""---
@@ -170,7 +201,7 @@ description: A skill
 Content.
 """)
 
-        # Create command
+        # Create command with valid frontmatter
         cmd_dir = module_dir / "commands"
         cmd_dir.mkdir()
         (cmd_dir / "cmd1.md").write_text("""---
@@ -185,47 +216,24 @@ Content.
         assert is_valid is True
         assert errors == []
 
-    def test_validate_missing_skill(self, tmp_path):
-        """Validate module with missing skill directory."""
+    def test_validate_skill_missing_description(self, tmp_path):
+        """Validate module with skill missing description in frontmatter."""
         module_dir = tmp_path / "mymodule"
         module_dir.mkdir()
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
-
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'skills': ['nonexistent'],
-        }
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
-
-        module = Module.from_path(module_dir)
-        is_valid, errors = module.validate()
-        assert is_valid is False
-        assert any('not found' in e for e in errors)
-
-    def test_validate_missing_skill_md(self, tmp_path):
-        """Validate module with skill directory but no SKILL.md."""
-        module_dir = tmp_path / "mymodule"
-        module_dir.mkdir()
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
-
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'skills': ['skill1'],
-        }
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
 
         skill_dir = module_dir / "skill1"
         skill_dir.mkdir()
-        # No SKILL.md file
+        (skill_dir / "SKILL.md").write_text("""---
+name: skill1
+---
+
+Content.
+""")
 
         module = Module.from_path(module_dir)
         is_valid, errors = module.validate()
         assert is_valid is False
-        assert any('SKILL.md' in e for e in errors)
+        assert any('description' in e.lower() for e in errors)
 
 
 class TestValidateSkillFrontmatter:

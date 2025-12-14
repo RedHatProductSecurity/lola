@@ -47,7 +47,7 @@ main.add_command(mod)
 main.add_command(install_cmd)
 main.add_command(uninstall_cmd)
 main.add_command(update_cmd)
-main.add_command(list_installed_cmd, name='installed')
+main.add_command(list_installed_cmd)
 
 
 if __name__ == '__main__':

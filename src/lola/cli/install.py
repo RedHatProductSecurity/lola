@@ -48,26 +48,28 @@ from lola import ui
 @click.option(
     '-s', '--scope',
     type=click.Choice(['user', 'project']),
-    default='user',
-    help='Installation scope (user or project)'
+    default='project',
+    help='Installation scope'
 )
 @click.option(
     '-v', '--verbose',
     is_flag=True,
     help='Show detailed output for each skill and command'
 )
-@click.argument('project_path', required=False, default=None)
+@click.argument('project_path', required=False, default="./")
 def install_cmd(module_name: str, assistant: Optional[str], scope: str, verbose: bool, project_path: Optional[str]):
     """
     Install a module's skills to AI assistants.
 
     If no assistant is specified, installs to all assistants.
+    If no project path is specified, installs to the current directory.
 
     \b
     Examples:
-        lola install my-module                              # All assistants
-        lola install my-module -a claude-code               # Specific assistant
-        lola install my-module -s project ./my-project      # Project scope
+        lola install my-module                              # All assistants in the current directory
+        lola install my-module -a claude-code               # Specific assistant in the current directory
+        lola install my-module -s user                      # User scope (in the user's home directory)
+        lola install my-module -s project ./my-project      # Project scope (in the specified project directory)
     """
     ensure_lola_dirs()
 

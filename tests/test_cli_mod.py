@@ -201,7 +201,7 @@ class TestModInfo:
 
         assert result.exit_code == 0
         assert 'sample-module' in result.output
-        assert '1.0.0' in result.output
+        assert '0.1.0' in result.output  # default version with auto-discovery
 
 
 class TestListRegisteredModules:
@@ -233,14 +233,14 @@ class TestListRegisteredModules:
         assert len(result) == 1
         assert result[0].name == 'sample-module'
 
-    def test_ignores_invalid_modules(self, tmp_path):
-        """Ignore directories without valid module.yml."""
+    def test_ignores_empty_directories(self, tmp_path):
+        """Ignore directories without skills or commands."""
         modules_dir = tmp_path / '.lola' / 'modules'
         modules_dir.mkdir(parents=True)
 
-        # Create invalid module (no manifest)
-        invalid_dir = modules_dir / 'invalid'
-        invalid_dir.mkdir()
+        # Create empty module (no skills or commands)
+        empty_dir = modules_dir / 'empty'
+        empty_dir.mkdir()
 
         with patch('lola.cli.mod.MODULES_DIR', modules_dir), \
              patch('lola.cli.mod.ensure_lola_dirs'):
@@ -269,7 +269,9 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert 'Initialized module' in result.output
-            assert (tmp_path / '.lola' / 'module.yml').exists()
+            # Default skill and command should be created
+            assert (tmp_path / 'example-skill' / 'SKILL.md').exists()
+            assert (tmp_path / 'commands' / 'example-command.md').exists()
         finally:
             os.chdir(original_dir)
 
@@ -284,9 +286,9 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert 'my-new-module' in result.output
-            assert (tmp_path / 'my-new-module' / '.lola' / 'module.yml').exists()
-            # Default skill should be created
-            assert (tmp_path / 'my-new-module' / 'my-new-module' / 'SKILL.md').exists()
+            # Default skill and command should be created
+            assert (tmp_path / 'my-new-module' / 'example-skill' / 'SKILL.md').exists()
+            assert (tmp_path / 'my-new-module' / 'commands' / 'example-command.md').exists()
         finally:
             os.chdir(original_dir)
 
@@ -300,9 +302,12 @@ class TestModInit:
             result = cli_runner.invoke(mod, ['init', 'mymod', '--no-skill'])
 
             assert result.exit_code == 0
-            assert (tmp_path / 'mymod' / '.lola' / 'module.yml').exists()
+            # Module directory should exist
+            assert (tmp_path / 'mymod').exists()
             # No skill directory should exist
-            assert not (tmp_path / 'mymod' / 'mymod').exists()
+            assert not (tmp_path / 'mymod' / 'example-skill').exists()
+            # But command should still be created
+            assert (tmp_path / 'mymod' / 'commands' / 'example-command.md').exists()
         finally:
             os.chdir(original_dir)
 
@@ -349,18 +354,19 @@ class TestModInit:
         finally:
             os.chdir(original_dir)
 
-    def test_init_already_initialized(self, cli_runner, tmp_path):
-        """Fail when .lola/ already exists."""
+    def test_init_skill_already_exists(self, cli_runner, tmp_path):
+        """Fail when default skill directory already exists."""
         import os
         original_dir = os.getcwd()
 
         try:
             os.chdir(tmp_path)
-            (tmp_path / '.lola').mkdir()
+            # Create the default skill directory
+            (tmp_path / 'example-skill').mkdir()
             result = cli_runner.invoke(mod, ['init'])
 
             assert result.exit_code == 1
-            assert 'already initialized' in result.output
+            assert 'already exists' in result.output
         finally:
             os.chdir(original_dir)
 
@@ -409,21 +415,21 @@ class TestModInfoAdvanced:
         assert 'Source' in result.output
         assert 'git' in result.output
 
-    def test_info_invalid_module(self, cli_runner, tmp_path):
-        """Show warning for invalid module structure."""
+    def test_info_empty_module(self, cli_runner, tmp_path):
+        """Show warning for empty module (no skills or commands)."""
         modules_dir = tmp_path / '.lola' / 'modules'
         modules_dir.mkdir(parents=True)
 
-        # Create invalid module (no proper manifest)
-        invalid = modules_dir / 'invalid'
-        invalid.mkdir()
+        # Create empty module (no skills or commands)
+        empty = modules_dir / 'empty'
+        empty.mkdir()
 
         with patch('lola.cli.mod.MODULES_DIR', modules_dir), \
              patch('lola.cli.mod.ensure_lola_dirs'):
-            result = cli_runner.invoke(mod, ['info', 'invalid'])
+            result = cli_runner.invoke(mod, ['info', 'empty'])
 
         assert result.exit_code == 0
-        assert 'No valid .lola/module.yml' in result.output
+        assert 'No skills or commands found' in result.output
 
 
 class TestModUpdate:

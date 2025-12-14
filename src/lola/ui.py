@@ -175,9 +175,6 @@ def module_tree(name: str, skills: list[str] = None, commands: list[str] = None)
     """Print a module structure as a tree."""
     tree = Tree(f"[cyan]{name}/[/cyan]")
 
-    lola = tree.add("[dim].lola/[/dim]")
-    lola.add("[dim]module.yml[/dim]")
-
     if skills:
         for skill in skills:
             skill_node = tree.add(f"[green]{skill}/[/green]")

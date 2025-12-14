@@ -149,16 +149,14 @@ class TestZipSourceHandler:
         assert result.exists()
         assert (result / "file.txt").exists()
 
-    def test_fetch_zip_with_module_manifest(self, tmp_path):
-        """Fetch zip that contains module manifest."""
+    def test_fetch_zip_with_skill(self, tmp_path):
+        """Fetch zip that contains a skill (SKILL.md)."""
         source_dir = tmp_path / "source"
         source_dir.mkdir()
         zip_file = source_dir / "archive.zip"
 
-        manifest = {'type': 'lola/module', 'version': '1.0.0'}
         with zipfile.ZipFile(zip_file, 'w') as zf:
-            zf.writestr("nested/mymodule/.lola/module.yml", yaml.dump(manifest))
-            zf.writestr("nested/mymodule/SKILL.md", "# Skill content")
+            zf.writestr("nested/mymodule/myskill/SKILL.md", "---\ndescription: test\n---\n# Skill")
 
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
@@ -166,7 +164,7 @@ class TestZipSourceHandler:
         result = self.handler.fetch(str(zip_file), dest_dir)
 
         assert result.exists()
-        assert (result / ".lola" / "module.yml").exists()
+        assert (result / "myskill" / "SKILL.md").exists()
 
 
 class TestTarSourceHandler:
@@ -817,19 +815,17 @@ class TestTarSourceHandlerAdvanced:
         """Set up handler for tests."""
         self.handler = TarSourceHandler()
 
-    def test_fetch_tar_with_module_manifest(self, tmp_path):
-        """Fetch tar that contains module manifest."""
+    def test_fetch_tar_with_skill(self, tmp_path):
+        """Fetch tar that contains a skill (SKILL.md)."""
         source_dir = tmp_path / "source"
         source_dir.mkdir()
 
-        # Create module structure
+        # Create module structure with skill
         module_dir = source_dir / "nested" / "mymodule"
         module_dir.mkdir(parents=True)
-        lola_dir = module_dir / ".lola"
-        lola_dir.mkdir()
-        manifest = {'type': 'lola/module', 'version': '1.0.0'}
-        (lola_dir / "module.yml").write_text(yaml.dump(manifest))
-        (module_dir / "SKILL.md").write_text("# Skill")
+        skill_dir = module_dir / "myskill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n# Skill")
 
         # Create tar
         tar_file = source_dir / "archive.tar.gz"
@@ -842,7 +838,7 @@ class TestTarSourceHandlerAdvanced:
         result = self.handler.fetch(str(tar_file), dest_dir)
 
         assert result.exists()
-        assert (result / ".lola" / "module.yml").exists()
+        assert (result / "myskill" / "SKILL.md").exists()
 
     def test_fetch_strips_tar_extensions(self, tmp_path):
         """Strip various tar extensions from module name."""

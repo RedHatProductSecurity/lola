@@ -213,23 +213,13 @@ class TestUpdateCmd:
         # Create a module with only one command (cmd1 removed)
         module_dir = modules_dir / 'mymodule'
         module_dir.mkdir()
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'description': 'Test module',
-            'skills': ['skill1'],
-            'commands': ['cmd2'],  # cmd1 was removed
-        }
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
 
-        # Create skill
+        # Create skill (auto-discovered via SKILL.md)
         skill_dir = module_dir / 'skill1'
         skill_dir.mkdir()
         (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
 
-        # Create command
+        # Create command (auto-discovered from commands/*.md)
         commands_dir = module_dir / 'commands'
         commands_dir.mkdir()
         (commands_dir / 'cmd2.md').write_text('---\ndescription: Cmd 2\n---\nContent')
@@ -276,18 +266,8 @@ class TestUpdateCmd:
         # Create a module with only skill1 (skill2 removed)
         module_dir = modules_dir / 'mymodule'
         module_dir.mkdir()
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'description': 'Test module',
-            'skills': ['skill1'],  # skill2 was removed
-            'commands': [],
-        }
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
 
-        # Create skill
+        # Create skill (auto-discovered via SKILL.md) - skill2 was removed
         skill_dir = module_dir / 'skill1'
         skill_dir.mkdir()
         (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
@@ -335,21 +315,13 @@ class TestUpdateCmd:
         # Create a module with fewer items than registry
         module_dir = modules_dir / 'mymodule'
         module_dir.mkdir()
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'description': 'Test module',
-            'skills': ['skill1'],
-            'commands': ['cmd1'],
-        }
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
 
-        # Create skill and command
+        # Create skill (auto-discovered via SKILL.md)
         skill_dir = module_dir / 'skill1'
         skill_dir.mkdir()
         (skill_dir / 'SKILL.md').write_text('---\ndescription: Skill 1\n---\nContent')
+
+        # Create command (auto-discovered from commands/*.md)
         commands_dir = module_dir / 'commands'
         commands_dir.mkdir()
         (commands_dir / 'cmd1.md').write_text('---\ndescription: Cmd 1\n---\nContent')

@@ -8,7 +8,6 @@ from lola.config import (
     LOLA_HOME,
     MODULES_DIR,
     INSTALLED_FILE,
-    MODULE_MANIFEST,
     SKILL_FILE,
     ASSISTANTS,
     SOURCE_TYPES,
@@ -31,10 +30,6 @@ class TestConfigConstants:
     def test_installed_file_under_lola_home(self):
         """INSTALLED_FILE is under LOLA_HOME."""
         assert INSTALLED_FILE.parent == LOLA_HOME
-
-    def test_module_manifest_path(self):
-        """MODULE_MANIFEST has correct path."""
-        assert MODULE_MANIFEST == '.lola/module.yml'
 
     def test_skill_file_name(self):
         """SKILL_FILE has correct name."""

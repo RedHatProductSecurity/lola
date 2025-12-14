@@ -49,19 +49,7 @@ def sample_module(tmp_path):
     module_dir = tmp_path / 'sample-module'
     module_dir.mkdir()
 
-    # Create .lola/module.yml
-    lola_dir = module_dir / '.lola'
-    lola_dir.mkdir()
-    manifest = {
-        'type': 'lola/module',
-        'version': '1.0.0',
-        'description': 'A sample test module',
-        'skills': ['skill1'],
-        'commands': ['cmd1'],
-    }
-    (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
-
-    # Create skill directory
+    # Create skill directory (auto-discovered by SKILL.md presence)
     skill_dir = module_dir / 'skill1'
     skill_dir.mkdir()
     (skill_dir / 'SKILL.md').write_text("""---
@@ -73,7 +61,7 @@ description: A test skill
 This is a test skill.
 """)
 
-    # Create command file
+    # Create command file (auto-discovered from commands/*.md)
     commands_dir = module_dir / 'commands'
     commands_dir.mkdir()
     (commands_dir / 'cmd1.md').write_text("""---

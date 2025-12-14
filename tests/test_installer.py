@@ -122,18 +122,7 @@ class TestInstallToAssistant:
         module_dir = tmp_path / 'modules' / name
         module_dir.mkdir(parents=True)
 
-        # Create .lola/module.yml
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        manifest = {
-            'type': 'lola/module',
-            'version': '1.0.0',
-            'skills': skills or [],
-            'commands': commands or [],
-        }
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
-
-        # Create skill directories
+        # Create skill directories (auto-discovered via SKILL.md)
         if skills:
             for skill in skills:
                 skill_dir = module_dir / skill
@@ -147,7 +136,7 @@ description: {skill} description
 Content.
 """)
 
-        # Create command files
+        # Create command files (auto-discovered from commands/*.md)
         if commands:
             commands_dir = module_dir / 'commands'
             commands_dir.mkdir()
@@ -289,65 +278,6 @@ Do {cmd}.
         assert 'testmod-skill1' in installations[0].skills
         assert 'cmd1' in installations[0].commands
 
-    def test_install_missing_skill_source(self, tmp_path):
-        """Handle missing skill source gracefully."""
-        # Create module without actual skill directory
-        module_dir = tmp_path / 'modules' / 'testmod'
-        module_dir.mkdir(parents=True)
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        manifest = {'type': 'lola/module', 'version': '1.0.0', 'skills': ['missing']}
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
-
-        module = Module.from_path(module_dir)
-
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
-        skill_dest = tmp_path / 'skills'
-
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path', return_value=skill_dest), \
-             patch('lola.core.installer.get_assistant_command_path', return_value=None):
-
-            count = install_to_assistant(
-                module=module,
-                assistant='claude-code',
-                scope='user',
-                project_path=None,
-                local_modules=local_modules,
-                registry=registry,
-            )
-
-        assert count == 0
-
-    def test_install_missing_command_source(self, tmp_path):
-        """Handle missing command source gracefully."""
-        # Create module without actual command file
-        module_dir = tmp_path / 'modules' / 'testmod'
-        module_dir.mkdir(parents=True)
-        lola_dir = module_dir / '.lola'
-        lola_dir.mkdir()
-        (module_dir / 'commands').mkdir()  # Empty commands dir
-        manifest = {'type': 'lola/module', 'version': '1.0.0', 'commands': ['missing']}
-        (lola_dir / 'module.yml').write_text(yaml.dump(manifest))
-
-        module = Module.from_path(module_dir)
-
-        local_modules = tmp_path / '.lola' / 'modules'
-        registry = InstallationRegistry(tmp_path / 'installed.yml')
-        command_dest = tmp_path / 'commands'
-
-        with patch('lola.core.installer.ui', self.ui_mock), \
-             patch('lola.core.installer.get_assistant_skill_path', return_value=None), \
-             patch('lola.core.installer.get_assistant_command_path', return_value=command_dest):
-
-            count = install_to_assistant(
-                module=module,
-                assistant='claude-code',
-                scope='user',
-                project_path=None,
-                local_modules=local_modules,
-                registry=registry,
-            )
-
-        assert count == 0
+    # Note: test_install_missing_skill_source and test_install_missing_command_source
+    # were removed because with auto-discovery, skills and commands are only
+    # discovered if they actually exist. There's no manifest to list non-existent items.
