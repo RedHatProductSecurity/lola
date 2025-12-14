@@ -14,6 +14,7 @@ from rich.console import Console
 from lola.config import (
     ASSISTANTS,
     MODULES_DIR,
+    get_assistant_agent_path,
     get_assistant_command_path,
     get_assistant_skill_path,
 )
@@ -24,11 +25,13 @@ from lola.core.installer import (
     install_to_assistant,
 )
 from lola.core.generator import (
+    generate_claude_agent,
     generate_claude_skill,
     generate_cursor_rule,
     generate_claude_command,
     generate_cursor_command,
     generate_gemini_command,
+    get_agent_filename,
     get_skill_description,
     remove_gemini_skills,
     update_gemini_md,
@@ -112,9 +115,9 @@ def install_cmd(
             console.print(f"  [red]{err}[/red]")
         raise SystemExit(1)
 
-    if not module.skills and not module.commands:
+    if not module.skills and not module.commands and not module.agents:
         console.print(
-            f"[yellow]Module '{module_name}' has no skills or commands defined[/yellow]"
+            f"[yellow]Module '{module_name}' has no skills, commands, or agents defined[/yellow]"
         )
         return
 
@@ -227,12 +230,15 @@ def uninstall_cmd(
         assistants = [i.assistant for i in insts]
         skill_count = len(insts[0].skills) if insts[0].skills else 0
         cmd_count = len(insts[0].commands) if insts[0].commands else 0
+        agent_count = len(insts[0].agents) if insts[0].agents else 0
 
         parts = []
         if skill_count:
             parts.append(f"{skill_count} skill{'s' if skill_count != 1 else ''}")
         if cmd_count:
             parts.append(f"{cmd_count} command{'s' if cmd_count != 1 else ''}")
+        if agent_count:
+            parts.append(f"{agent_count} agent{'s' if agent_count != 1 else ''}")
 
         summary = ", ".join(parts) if parts else "no items"
         console.print(f"  [dim]{project}[/dim]")
@@ -320,6 +326,27 @@ def uninstall_cmd(
                         if verbose:
                             console.print(f"  [green]Removed {cmd_file}[/green]")
 
+        # Remove agent files (claude-code only)
+        if inst.agents and inst.assistant == "claude-code":
+            try:
+                agent_dest = get_assistant_agent_path(
+                    inst.assistant, inst.scope, inst.project_path
+                )
+            except ValueError:
+                agent_dest = None
+
+            if agent_dest:
+                for agent_name in inst.agents:
+                    filename = get_agent_filename(
+                        inst.assistant, module_name, agent_name
+                    )
+                    agent_file = agent_dest / filename
+                    if agent_file.exists():
+                        agent_file.unlink()
+                        removed_count += 1
+                        if verbose:
+                            console.print(f"  [green]Removed {agent_file}[/green]")
+
         # For project scope, also remove the project-local module copy
         if inst.scope == "project" and inst.project_path:
             local_modules = get_local_modules_path(inst.project_path)
@@ -392,264 +419,345 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         console.print("[yellow]No installations to update[/yellow]")
         return
 
-    console.print(f"Updating {len(installations)} installation(s)...")
+    # Group installations by module name for cleaner display
+    by_module = {}
+    for inst in installations:
+        if inst.module_name not in by_module:
+            by_module[inst.module_name] = []
+        by_module[inst.module_name].append(inst)
+
+    module_word = "module" if len(by_module) == 1 else "modules"
+    console.print(f"\n[bold]Updating {len(by_module)} {module_word}[/bold]")
     console.print()
 
     # Track stale installations and errors
     stale_installations = []
 
-    for inst in installations:
-        # Check if project path still exists for project-scoped installations
-        if inst.scope == "project" and inst.project_path:
-            if not Path(inst.project_path).exists():
-                console.print(
-                    f"[red]{inst.module_name} ({inst.assistant}): project path no longer exists[/red]"
-                )
-                console.print(
-                    f"[dim]Run 'lola uninstall {inst.module_name}' to remove this stale entry[/dim]"
-                )
-                stale_installations.append(inst)
-                continue
+    for mod_name, mod_installations in by_module.items():
+        console.print(f"[bold]{mod_name}[/bold]")
 
-        # Get the global module to refresh from
-        global_module_path = MODULES_DIR / inst.module_name
-        if not global_module_path.exists():
-            console.print(f"[red]{inst.module_name}: not found in registry[/red]")
-            console.print(
-                f"[dim]Run 'lola mod add <source>' to re-add, or 'lola uninstall {inst.module_name}' to remove[/dim]"
-            )
-            continue
+        # Group by (scope, path) for display
+        by_scope_path = {}
+        for inst in mod_installations:
+            key = (inst.scope, inst.project_path)
+            if key not in by_scope_path:
+                by_scope_path[key] = []
+            by_scope_path[key].append(inst)
 
-        global_module = Module.from_path(global_module_path)
-        if not global_module:
-            console.print(
-                f"[red]{inst.module_name}: invalid module (no .lola/module.yml)[/red]"
-            )
-            continue
+        for (scope, project_path), scope_insts in by_scope_path.items():
+            console.print(f"  [dim]scope:[/dim] {scope}")
+            if project_path:
+                console.print(f'  [dim]path:[/dim] "{project_path}"')
 
-        # Validate module structure and skill files
-        is_valid, errors = global_module.validate()
-        if not is_valid:
-            console.print(
-                f"[red]{inst.module_name} ({inst.assistant}): validation errors[/red]"
-            )
-            for err in errors:
-                console.print(f"    [red]{err}[/red]")
-            continue
+            for inst in scope_insts:
+                # Check if project path still exists for project-scoped installations
+                if inst.scope == "project" and inst.project_path:
+                    if not Path(inst.project_path).exists():
+                        console.print(
+                            f"    [red]{inst.assistant}: project path no longer exists[/red]"
+                        )
+                        stale_installations.append(inst)
+                        continue
 
-        local_modules = get_local_modules_path(inst.project_path)
+                # Get the global module to refresh from
+                global_module_path = MODULES_DIR / inst.module_name
+                if not global_module_path.exists():
+                    console.print(f"    [red]{inst.assistant}: module not found in registry[/red]")
+                    continue
 
-        # Refresh the local copy from global module
-        source_module = copy_module_to_local(global_module, local_modules)
-
-        try:
-            skill_dest = get_assistant_skill_path(
-                inst.assistant, inst.scope, inst.project_path
-            )
-        except ValueError:
-            console.print(
-                f"[red]Cannot determine path for {inst.assistant}/{inst.scope}[/red]"
-            )
-            continue
-
-        # Compute current skills and commands from the module (with prefixes)
-        current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
-        current_commands = set(global_module.commands)
-
-        # Find orphaned skills (in registry but not in module)
-        orphaned_skills = set(inst.skills) - current_skills
-        orphaned_commands = set(inst.commands) - current_commands
-
-        # Track results for this installation
-        skills_ok = 0
-        skills_failed = 0
-        commands_ok = 0
-        commands_failed = 0
-        orphans_removed = 0
-
-        # Remove orphaned skill files
-        if orphaned_skills:
-            try:
-                skill_dest = get_assistant_skill_path(
-                    inst.assistant, inst.scope, inst.project_path
-                )
-            except ValueError:
-                skill_dest = None
-
-            if skill_dest:
-                for skill in orphaned_skills:
-                    removed = False
-                    if inst.assistant == "cursor":
-                        orphan_file = skill_dest / f"{skill}.mdc"
-                        if orphan_file.exists():
-                            orphan_file.unlink()
-                            removed = True
-                    elif inst.assistant == "claude-code":
-                        orphan_dir = skill_dest / skill
-                        if orphan_dir.exists():
-                            shutil.rmtree(orphan_dir)
-                            removed = True
-                    # Gemini skills are handled by update_gemini_md which rebuilds the whole section
-
-                    if removed:
-                        orphans_removed += 1
-                        if verbose:
-                            console.print(
-                                f"    [yellow]- {skill}[/yellow] [dim](orphaned)[/dim]"
-                            )
-
-        # Remove orphaned command files
-        if orphaned_commands:
-            try:
-                command_dest = get_assistant_command_path(
-                    inst.assistant, inst.scope, inst.project_path
-                )
-            except ValueError:
-                command_dest = None
-
-            if command_dest:
-                for cmd_name in orphaned_commands:
-                    filename = get_command_filename(
-                        inst.assistant, inst.module_name, cmd_name
+                global_module = Module.from_path(global_module_path)
+                if not global_module:
+                    console.print(
+                        f"    [red]{inst.assistant}: invalid module[/red]"
                     )
-                    orphan_file = command_dest / filename
-                    if orphan_file.exists():
-                        orphan_file.unlink()
-                        orphans_removed += 1
-                        if verbose:
-                            console.print(
-                                f"    [yellow]- /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
+                    continue
+
+                # Validate module structure and skill files
+                is_valid, errors = global_module.validate()
+                if not is_valid:
+                    console.print(
+                        f"    [red]{inst.assistant}: validation errors[/red]"
+                    )
+                    for err in errors:
+                        console.print(f"      [red]{err}[/red]")
+                    continue
+
+                local_modules = get_local_modules_path(inst.project_path)
+
+                # Refresh the local copy from global module
+                source_module = copy_module_to_local(global_module, local_modules)
+
+                try:
+                    skill_dest = get_assistant_skill_path(
+                        inst.assistant, inst.scope, inst.project_path
+                    )
+                except ValueError:
+                    console.print(
+                        f"    [red]{inst.assistant}: cannot determine path[/red]"
+                    )
+                    continue
+
+                # Compute current skills, commands, and agents from the module (with prefixes)
+                current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
+                current_commands = set(global_module.commands)
+                current_agents = set(global_module.agents)
+
+                # Find orphaned items (in registry but not in module)
+                orphaned_skills = set(inst.skills) - current_skills
+                orphaned_commands = set(inst.commands) - current_commands
+                orphaned_agents = set(inst.agents) - current_agents
+
+                # Track results for this installation
+                skills_ok = 0
+                skills_failed = 0
+                commands_ok = 0
+                commands_failed = 0
+                agents_ok = 0
+                agents_failed = 0
+                orphans_removed = 0
+
+                # Remove orphaned skill files
+                if orphaned_skills:
+                    try:
+                        skill_dest = get_assistant_skill_path(
+                            inst.assistant, inst.scope, inst.project_path
+                        )
+                    except ValueError:
+                        skill_dest = None
+
+                    if skill_dest:
+                        for skill in orphaned_skills:
+                            removed = False
+                            if inst.assistant == "cursor":
+                                orphan_file = skill_dest / f"{skill}.mdc"
+                                if orphan_file.exists():
+                                    orphan_file.unlink()
+                                    removed = True
+                            elif inst.assistant == "claude-code":
+                                orphan_dir = skill_dest / skill
+                                if orphan_dir.exists():
+                                    shutil.rmtree(orphan_dir)
+                                    removed = True
+                            # Gemini skills are handled by update_gemini_md which rebuilds the whole section
+
+                            if removed:
+                                orphans_removed += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [yellow]- {skill}[/yellow] [dim](orphaned)[/dim]"
+                                    )
+
+                # Remove orphaned command files
+                if orphaned_commands:
+                    try:
+                        command_dest = get_assistant_command_path(
+                            inst.assistant, inst.scope, inst.project_path
+                        )
+                    except ValueError:
+                        command_dest = None
+
+                    if command_dest:
+                        for cmd_name in orphaned_commands:
+                            filename = get_command_filename(
+                                inst.assistant, inst.module_name, cmd_name
                             )
+                            orphan_file = command_dest / filename
+                            if orphan_file.exists():
+                                orphan_file.unlink()
+                                orphans_removed += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [yellow]- /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
+                                    )
 
-        # Update skills - iterate over CURRENT module skills, not old registry
-        if global_module.skills:
-            try:
-                skill_dest = get_assistant_skill_path(
-                    inst.assistant, inst.scope, inst.project_path
-                )
-            except ValueError:
-                console.print("[red]Cannot determine skill path[/red]")
-                skill_dest = None
+                # Remove orphaned agent files (claude-code only)
+                if orphaned_agents and inst.assistant == "claude-code":
+                    try:
+                        agent_dest = get_assistant_agent_path(
+                            inst.assistant, inst.scope, inst.project_path
+                        )
+                    except ValueError:
+                        agent_dest = None
 
-            if skill_dest:
-                if inst.assistant == "gemini-cli":
-                    # Gemini: Update entries in GEMINI.md
-                    gemini_skills = []
-                    for original_skill in global_module.skills:
-                        prefixed_skill = f"{inst.module_name}-{original_skill}"
-                        source = source_module / original_skill
-                        if source.exists():
-                            description = get_skill_description(source)
-                            gemini_skills.append((original_skill, description, source))
-                            skills_ok += 1
-                            if verbose:
-                                console.print(f"    [green]{prefixed_skill}[/green]")
-                        else:
-                            skills_failed += 1
-                            if verbose:
-                                console.print(
-                                    f"    [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                    if agent_dest:
+                        for agent_name in orphaned_agents:
+                            filename = get_agent_filename(
+                                inst.assistant, inst.module_name, agent_name
+                            )
+                            orphan_file = agent_dest / filename
+                            if orphan_file.exists():
+                                orphan_file.unlink()
+                                orphans_removed += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [yellow]- @{inst.module_name}-{agent_name}[/yellow] [dim](orphaned)[/dim]"
+                                    )
+
+                # Update skills - iterate over CURRENT module skills, not old registry
+                if global_module.skills:
+                    try:
+                        skill_dest = get_assistant_skill_path(
+                            inst.assistant, inst.scope, inst.project_path
+                        )
+                    except ValueError:
+                        console.print("    [red]Cannot determine skill path[/red]")
+                        skill_dest = None
+
+                    if skill_dest:
+                        if inst.assistant == "gemini-cli":
+                            # Gemini: Update entries in GEMINI.md
+                            gemini_skills = []
+                            for original_skill in global_module.skills:
+                                prefixed_skill = f"{inst.module_name}-{original_skill}"
+                                source = source_module / original_skill
+                                if source.exists():
+                                    description = get_skill_description(source)
+                                    gemini_skills.append((original_skill, description, source))
+                                    skills_ok += 1
+                                    if verbose:
+                                        console.print(f"      [green]{prefixed_skill}[/green]")
+                                else:
+                                    skills_failed += 1
+                                    if verbose:
+                                        console.print(
+                                            f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                                        )
+                            if gemini_skills:
+                                update_gemini_md(
+                                    skill_dest,
+                                    inst.module_name,
+                                    gemini_skills,
+                                    inst.project_path,
                                 )
-                    if gemini_skills:
-                        update_gemini_md(
-                            skill_dest,
-                            inst.module_name,
-                            gemini_skills,
-                            inst.project_path,
+                        else:
+                            for original_skill in global_module.skills:
+                                prefixed_skill = f"{inst.module_name}-{original_skill}"
+                                source = source_module / original_skill
+
+                                if inst.assistant == "cursor":
+                                    success = generate_cursor_rule(
+                                        source, skill_dest, prefixed_skill, inst.project_path
+                                    )
+                                else:
+                                    dest = skill_dest / prefixed_skill
+                                    success = generate_claude_skill(source, dest)
+
+                                if success:
+                                    skills_ok += 1
+                                    if verbose:
+                                        console.print(f"      [green]{prefixed_skill}[/green]")
+                                else:
+                                    skills_failed += 1
+                                    if verbose:
+                                        console.print(
+                                            f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                                        )
+
+                # Update commands - iterate over CURRENT module commands, not old registry
+                if global_module.commands:
+                    try:
+                        command_dest = get_assistant_command_path(
+                            inst.assistant, inst.scope, inst.project_path
                         )
-                else:
-                    for original_skill in global_module.skills:
-                        prefixed_skill = f"{inst.module_name}-{original_skill}"
-                        source = source_module / original_skill
+                    except ValueError:
+                        console.print("    [red]Cannot determine command path[/red]")
+                        command_dest = None
 
-                        if inst.assistant == "cursor":
-                            success = generate_cursor_rule(
-                                source, skill_dest, prefixed_skill, inst.project_path
-                            )
-                        else:
-                            dest = skill_dest / prefixed_skill
-                            success = generate_claude_skill(source, dest)
+                    if command_dest:
+                        commands_dir = source_module / "commands"
+                        for cmd_name in global_module.commands:
+                            source = commands_dir / f"{cmd_name}.md"
 
-                        if success:
-                            skills_ok += 1
-                            if verbose:
-                                console.print(f"    [green]{prefixed_skill}[/green]")
-                        else:
-                            skills_failed += 1
-                            if verbose:
-                                console.print(
-                                    f"    [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                            if inst.assistant == "gemini-cli":
+                                success = generate_gemini_command(
+                                    source, command_dest, cmd_name, inst.module_name
+                                )
+                            elif inst.assistant == "cursor":
+                                success = generate_cursor_command(
+                                    source, command_dest, cmd_name, inst.module_name
+                                )
+                            else:
+                                success = generate_claude_command(
+                                    source, command_dest, cmd_name, inst.module_name
                                 )
 
-        # Update commands - iterate over CURRENT module commands, not old registry
-        if global_module.commands:
-            try:
-                command_dest = get_assistant_command_path(
-                    inst.assistant, inst.scope, inst.project_path
+                            if success:
+                                commands_ok += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [green]/{inst.module_name}-{cmd_name}[/green]"
+                                    )
+                            else:
+                                commands_failed += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [red]{cmd_name}[/red] [dim](source not found)[/dim]"
+                                    )
+
+                # Update agents - only claude-code supports agents
+                if global_module.agents and inst.assistant == "claude-code":
+                    try:
+                        agent_dest = get_assistant_agent_path(
+                            inst.assistant, inst.scope, inst.project_path
+                        )
+                    except ValueError:
+                        console.print("    [red]Cannot determine agent path[/red]")
+                        agent_dest = None
+
+                    if agent_dest:
+                        agents_dir = source_module / "agents"
+                        for agent_name in global_module.agents:
+                            source = agents_dir / f"{agent_name}.md"
+                            success = generate_claude_agent(
+                                source, agent_dest, agent_name, inst.module_name
+                            )
+
+                            if success:
+                                agents_ok += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [green]@{inst.module_name}-{agent_name}[/green]"
+                                    )
+                            else:
+                                agents_failed += 1
+                                if verbose:
+                                    console.print(
+                                        f"      [red]{agent_name}[/red] [dim](source not found)[/dim]"
+                                    )
+
+                # Update the registry with current skills/commands/agents
+                inst.skills = list(current_skills)
+                inst.commands = list(current_commands)
+                inst.agents = list(current_agents)
+                registry.add(inst)
+
+                # Print summary line for this installation
+                parts = []
+                if skills_ok > 0:
+                    parts.append(f"{skills_ok} {('skill' if skills_ok == 1 else 'skills')}")
+                if commands_ok > 0:
+                    parts.append(
+                        f"{commands_ok} {('command' if commands_ok == 1 else 'commands')}"
+                    )
+                if agents_ok > 0:
+                    parts.append(f"{agents_ok} {('agent' if agents_ok == 1 else 'agents')}")
+
+                summary = ", ".join(parts) if parts else "no items"
+
+                # Build status indicators
+                status_parts = []
+                if skills_failed > 0 or commands_failed > 0 or agents_failed > 0:
+                    status_parts.append(
+                        f"[red]{skills_failed + commands_failed + agents_failed} failed[/red]"
+                    )
+                if orphans_removed > 0:
+                    status_parts.append(f"[yellow]{orphans_removed} orphaned removed[/yellow]")
+
+                status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
+
+                console.print(
+                    f"    [green]{inst.assistant}[/green] [dim]({summary}){status_suffix}[/dim]"
                 )
-            except ValueError:
-                console.print("[red]Cannot determine command path[/red]")
-                command_dest = None
-
-            if command_dest:
-                commands_dir = source_module / "commands"
-                for cmd_name in global_module.commands:
-                    source = commands_dir / f"{cmd_name}.md"
-
-                    if inst.assistant == "gemini-cli":
-                        success = generate_gemini_command(
-                            source, command_dest, cmd_name, inst.module_name
-                        )
-                    elif inst.assistant == "cursor":
-                        success = generate_cursor_command(
-                            source, command_dest, cmd_name, inst.module_name
-                        )
-                    else:
-                        success = generate_claude_command(
-                            source, command_dest, cmd_name, inst.module_name
-                        )
-
-                    if success:
-                        commands_ok += 1
-                        if verbose:
-                            console.print(
-                                f"    [green]/{inst.module_name}-{cmd_name}[/green]"
-                            )
-                    else:
-                        commands_failed += 1
-                        if verbose:
-                            console.print(
-                                f"    [red]{cmd_name}[/red] [dim](source not found)[/dim]"
-                            )
-
-        # Update the registry with current skills/commands
-        inst.skills = list(current_skills)
-        inst.commands = list(current_commands)
-        registry.add(inst)
-
-        # Print summary line for this installation
-        parts = []
-        if skills_ok > 0:
-            parts.append(f"{skills_ok} {('skill' if skills_ok == 1 else 'skills')}")
-        if commands_ok > 0:
-            parts.append(
-                f"{commands_ok} {('command' if commands_ok == 1 else 'commands')}"
-            )
-
-        summary = ", ".join(parts) if parts else "no items"
-
-        # Build status indicators
-        status_parts = []
-        if skills_failed > 0 or commands_failed > 0:
-            status_parts.append(f"[red]{skills_failed + commands_failed} failed[/red]")
-        if orphans_removed > 0:
-            status_parts.append(f"[yellow]{orphans_removed} orphaned removed[/yellow]")
-
-        status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
-
-        console.print(
-            f"  [green]{inst.module_name}[/green] -> {inst.assistant} [dim]({summary}){status_suffix}[/dim]"
-        )
 
     console.print()
     if stale_installations:

@@ -55,7 +55,10 @@ def _count_str(count: int, singular: str) -> str:
 
 
 def _module_tree(
-    name: str, skills: list[str] | None = None, commands: list[str] | None = None
+    name: str,
+    skills: list[str] | None = None,
+    commands: list[str] | None = None,
+    agents: list[str] | None = None,
 ) -> None:
     """Print a module structure as a tree."""
     tree = Tree(f"[cyan]{name}/[/cyan]")
@@ -69,6 +72,11 @@ def _module_tree(
         cmd_node = tree.add("[dim]commands/[/dim]")
         for cmd in commands:
             cmd_node.add(f"[dim]{cmd}.md[/dim]")
+
+    if agents:
+        agent_node = tree.add("[dim]agents/[/dim]")
+        for agent in agents:
+            agent_node.add(f"[dim]{agent}.md[/dim]")
 
     console.print(tree)
 
@@ -169,6 +177,7 @@ def add_module(source: str, module_name: str):
     console.print(f"  [dim]Version:[/dim] {module.version}")
     console.print(f"  [dim]Skills:[/dim] {len(module.skills)}")
     console.print(f"  [dim]Commands:[/dim] {len(module.commands)}")
+    console.print(f"  [dim]Agents:[/dim] {len(module.agents)}")
 
     if module.skills:
         console.print()
@@ -181,6 +190,12 @@ def add_module(source: str, module_name: str):
         console.print("[bold]Commands[/bold]")
         for cmd in module.commands:
             console.print(f"  /{module.name}-{cmd}")
+
+    if module.agents:
+        console.print()
+        console.print("[bold]Agents[/bold]")
+        for agent in module.agents:
+            console.print(f"  @{module.name}-{agent}")
 
     console.print()
     console.print("[bold]Next steps:[/bold]")
@@ -205,19 +220,29 @@ def add_module(source: str, module_name: str):
     help="Name for an initial slash command",
 )
 @click.option("--no-command", is_flag=True, help="Do not create an initial command")
+@click.option(
+    "-g",
+    "--agent",
+    "agent_name",
+    default=None,
+    help="Name for an initial agent",
+)
+@click.option("--no-agent", is_flag=True, help="Do not create an initial agent")
 def init_module(
     name: str | None,
     skill_name: str,
     no_skill: bool,
     command_name: str,
     no_command: bool,
+    agent_name: str | None,
+    no_agent: bool,
 ):
     """
     Initialize a new lola module.
 
-    Creates a module folder structure with skills and commands that are
-    auto-discovered. Skills are folders containing SKILL.md files, and
-    commands are .md files in the commands/ folder.
+    Creates a module folder structure with skills, commands, and agents that are
+    auto-discovered. Skills are folders containing SKILL.md files, commands are
+    .md files in the commands/ folder, and agents are .md files in the agents/ folder.
 
     \b
     Examples:
@@ -227,6 +252,7 @@ def init_module(
         lola mod init --no-skill                # Skip initial skill
         lola mod init -c review-pr              # Custom command name
         lola mod init --no-command              # Skip initial command
+        lola mod init -g my-agent               # Add an initial agent
     """
     if name:
         # Create a new subdirectory
@@ -288,6 +314,26 @@ Use $ARGUMENTS to reference any arguments passed to the command.
 """
         (commands_dir / f"{final_command_name}.md").write_text(command_content)
 
+    # Apply --no-agent flag
+    final_agent_name: str | None = None if no_agent else agent_name
+
+    # Create initial agent if requested
+    if final_agent_name:
+        agents_dir = module_dir / "agents"
+        agents_dir.mkdir(exist_ok=True)
+
+        agent_content = f"""---
+name: {final_agent_name}
+description: Description of what this agent does and when to use it
+model: inherit
+---
+
+Instructions for the {final_agent_name.replace('-', ' ').title()} agent.
+
+Describe the agent's purpose, capabilities, and guidelines here.
+"""
+        (agents_dir / f"{final_agent_name}.md").write_text(agent_content)
+
     console.print(f"[green]Initialized module {module_name}[/green]")
     console.print(f"  [dim]Path:[/dim] {module_dir}")
 
@@ -297,6 +343,7 @@ Use $ARGUMENTS to reference any arguments passed to the command.
         module_name,
         skills=[final_skill_name] if final_skill_name else None,
         commands=[final_command_name] if final_command_name else None,
+        agents=[final_agent_name] if final_agent_name else None,
     )
 
     steps = []
@@ -304,9 +351,12 @@ Use $ARGUMENTS to reference any arguments passed to the command.
         steps.append(f"Edit {final_skill_name}/SKILL.md with your skill content")
     if final_command_name:
         steps.append(f"Edit commands/{final_command_name}.md with your command prompt")
-    if not final_skill_name and not final_command_name:
+    if final_agent_name:
+        steps.append(f"Edit agents/{final_agent_name}.md with your agent instructions")
+    if not final_skill_name and not final_command_name and not final_agent_name:
         steps.append("Create skill directories with SKILL.md files")
         steps.append("Create commands/ directory with .md files for slash commands")
+        steps.append("Create agents/ directory with .md files for agents")
     steps.append(f"lola mod add {module_dir}")
 
     console.print()
@@ -437,7 +487,8 @@ def list_modules(verbose: bool):
 
         skills_str = _count_str(len(module.skills), "skill")
         cmds_str = _count_str(len(module.commands), "command")
-        console.print(f"  [dim]{skills_str}, {cmds_str}[/dim]")
+        agents_str = _count_str(len(module.agents), "agent")
+        console.print(f"  [dim]{skills_str}, {cmds_str}, {agents_str}[/dim]")
 
         if verbose:
             if module.skills:
@@ -448,6 +499,10 @@ def list_modules(verbose: bool):
                 console.print("  [bold]Commands:[/bold]")
                 for cmd in module.commands:
                     console.print(f"    /{module.name}-{cmd}")
+            if module.agents:
+                console.print("  [bold]Agents:[/bold]")
+                for agent in module.agents:
+                    console.print(f"    @{module.name}-{agent}")
 
         console.print()
 
@@ -524,6 +579,30 @@ def module_info(module_name: str):
                     console.print(f"    [dim]{desc[:60]}[/dim]")
             else:
                 console.print(f"  [red]{cmd_name}[/red] [dim](not found)[/dim]")
+
+    console.print()
+    console.print("[bold]Agents[/bold]")
+
+    if not module.agents:
+        console.print("  [dim](none)[/dim]")
+    else:
+        from lola.frontmatter import parse_file as fm_parse_file
+
+        agents_dir = module.path / "agents"
+        for agent_name in module.agents:
+            agent_path = agents_dir / f"{agent_name}.md"
+            if agent_path.exists():
+                console.print(f"  [green]@{module.name}-{agent_name}[/green]")
+                # Show description and model from frontmatter
+                frontmatter, _ = fm_parse_file(agent_path)
+                desc = frontmatter.get("description", "")
+                model = frontmatter.get("model", "")
+                if desc:
+                    console.print(f"    [dim]{desc[:60]}[/dim]")
+                if model:
+                    console.print(f"    [dim]model: {model}[/dim]")
+            else:
+                console.print(f"  [red]{agent_name}[/red] [dim](not found)[/dim]")
 
     # Source info
     source_info = load_source_info(module.path)

@@ -13,15 +13,18 @@ from rich.console import Console
 
 from lola.config import (
     INSTALLED_FILE,
+    get_assistant_agent_path,
     get_assistant_command_path,
     get_assistant_skill_path,
 )
 from lola.core.generator import (
+    generate_claude_agent,
     generate_claude_skill,
     generate_cursor_rule,
     generate_claude_command,
     generate_cursor_command,
     generate_gemini_command,
+    get_agent_filename,
     get_skill_description,
     update_gemini_md,
 )
@@ -97,8 +100,10 @@ def install_to_assistant(
 
     installed_skills = []
     installed_commands = []
+    installed_agents = []
     failed_skills = []
     failed_commands = []
+    failed_agents = []
 
     # Skills have scope restrictions for some assistants
     skills_skipped_reason = None
@@ -189,12 +194,36 @@ def install_to_assistant(
                 else:
                     failed_commands.append(cmd_name)
 
+    # Agents - currently only claude-code supports them
+    agents_skipped_reason = None
+    if module.agents:
+        if assistant != "claude-code":
+            agents_skipped_reason = "not supported"
+        else:
+            try:
+                agent_dest = get_assistant_agent_path(assistant, scope, project_path)
+            except ValueError as e:
+                console.print(f"[red]Agents: {e}[/red]")
+                agent_dest = None
+
+            if agent_dest:
+                agents_dir = local_module_path / "agents"
+                for agent_name in module.agents:
+                    source = agents_dir / f"{agent_name}.md"
+                    success = generate_claude_agent(
+                        source, agent_dest, agent_name, module.name
+                    )
+                    if success:
+                        installed_agents.append(agent_name)
+                    else:
+                        failed_agents.append(agent_name)
+
     # Print compact summary for this assistant
     if skills_skipped_reason:
         console.print(
             f"  [bold]{assistant}[/bold] [yellow]skipped[/yellow] [dim]({skills_skipped_reason})[/dim]"
         )
-    elif installed_skills or installed_commands:
+    elif installed_skills or installed_commands or installed_agents:
         # Build summary
         parts = []
         if installed_skills:
@@ -205,6 +234,10 @@ def install_to_assistant(
             parts.append(
                 f"{len(installed_commands)} command{'s' if len(installed_commands) != 1 else ''}"
             )
+        if installed_agents:
+            parts.append(
+                f"{len(installed_agents)} agent{'s' if len(installed_agents) != 1 else ''}"
+            )
         summary = ", ".join(parts)
         console.print(f"  [green]{assistant}[/green] [dim]({summary})[/dim]")
 
@@ -214,16 +247,26 @@ def install_to_assistant(
                 console.print(f"    [green]{skill}[/green]")
             for cmd in installed_commands:
                 console.print(f"    [green]/{module.name}-{cmd}[/green]")
+            for agent in installed_agents:
+                console.print(f"    [green]@{module.name}-{agent}[/green]")
 
         # Show failures (always show failures, not just in verbose mode)
-        if failed_skills or failed_commands:
+        if failed_skills or failed_commands or failed_agents:
             for skill in failed_skills:
                 console.print(f"    [red]{skill}[/red] [dim](source not found)[/dim]")
             for cmd in failed_commands:
                 console.print(f"    [red]{cmd}[/red] [dim](source not found)[/dim]")
+            for agent in failed_agents:
+                console.print(f"    [red]{agent}[/red] [dim](source not found)[/dim]")
+    elif agents_skipped_reason and module.agents:
+        # Only show skip message if we have agents but they couldn't be installed
+        if not module.skills and not module.commands:
+            console.print(
+                f"  [bold]{assistant}[/bold] [yellow]skipped[/yellow] [dim](agents {agents_skipped_reason})[/dim]"
+            )
 
     # Record installation
-    if installed_skills or installed_commands:
+    if installed_skills or installed_commands or installed_agents:
         installation = Installation(
             module_name=module.name,
             assistant=assistant,
@@ -231,7 +274,8 @@ def install_to_assistant(
             project_path=project_path,
             skills=installed_skills,
             commands=installed_commands,
+            agents=installed_agents,
         )
         registry.add(installation)
 
-    return len(installed_skills) + len(installed_commands)
+    return len(installed_skills) + len(installed_commands) + len(installed_agents)

@@ -199,6 +199,53 @@ def generate_gemini_command(
 
 
 # =============================================================================
+# Agent Generators
+# =============================================================================
+
+
+def get_agent_filename(assistant: str, module_name: str, agent_name: str) -> str:
+    """
+    Get the appropriate agent filename for an assistant.
+
+    Args:
+        assistant: Name of the AI assistant
+        module_name: Name of the module (for prefixing)
+        agent_name: Name of the agent
+
+    Returns:
+        Filename like 'module-agent.md'
+    """
+    return f"{module_name}-{agent_name}.md"
+
+
+def generate_claude_agent(
+    source_path: Path, dest_dir: Path, agent_name: str, module_name: str
+) -> bool:
+    """
+    Generate Claude agent file from source.
+
+    Args:
+        source_path: Path to source agent file (.md)
+        dest_dir: Path to .claude/agents/
+        agent_name: Name of the agent
+        module_name: Name of the module (for prefixing)
+
+    Returns:
+        True if successful
+    """
+    if not source_path.exists():
+        return False
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Pass through the agent file (Claude Code uses markdown with frontmatter)
+    content = source_path.read_text()
+    filename = get_agent_filename("claude-code", module_name, agent_name)
+    (dest_dir / filename).write_text(content)
+    return True
+
+
+# =============================================================================
 # Gemini MD Helpers
 # =============================================================================
 

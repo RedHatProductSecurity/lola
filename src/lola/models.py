@@ -63,6 +63,40 @@ class Command:
         )
 
 
+VALID_AGENT_MODELS = {"inherit", "sonnet", "opus", "haiku"}
+
+
+@dataclass
+class Agent:
+    """Represents a subagent within a module."""
+
+    name: str
+    path: Path
+    description: Optional[str] = None
+    model: Optional[str] = None  # inherit, sonnet, opus, haiku
+
+    @classmethod
+    def from_path(cls, agent_path: Path) -> "Agent":
+        """Load an agent from its file path."""
+        description = None
+        model = None
+
+        if agent_path.exists():
+            metadata = fm.get_metadata(agent_path)
+            description = metadata.get("description")
+            model = metadata.get("model")
+
+        # Agent name derived from filename (without .md extension)
+        name = agent_path.stem
+
+        return cls(
+            name=name,
+            path=agent_path,
+            description=description,
+            model=model,
+        )
+
+
 @dataclass
 class Module:
     """Represents a lola module."""
@@ -71,6 +105,7 @@ class Module:
     path: Path
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
+    agents: list[str] = field(default_factory=list)
     version: str = "0.1.0"
     description: str = ""
 
@@ -79,8 +114,8 @@ class Module:
         """
         Load a module from its directory path.
 
-        Auto-discovers skills (folders containing SKILL.md) and commands
-        (.md files in commands/ folder).
+        Auto-discovers skills (folders containing SKILL.md), commands
+        (.md files in commands/ folder), and agents (.md files in agents/ folder).
         """
         if not module_path.exists() or not module_path.is_dir():
             return None
@@ -89,7 +124,7 @@ class Module:
         skills = []
         for subdir in module_path.iterdir():
             # Skip hidden directories and special folders
-            if subdir.name.startswith(".") or subdir.name == "commands":
+            if subdir.name.startswith(".") or subdir.name in ("commands", "agents"):
                 continue
             if subdir.is_dir() and (subdir / SKILL_FILE).exists():
                 skills.append(subdir.name)
@@ -101,8 +136,15 @@ class Module:
             for cmd_file in commands_dir.glob("*.md"):
                 commands.append(cmd_file.stem)
 
-        # Only valid if has at least one skill or command
-        if not skills and not commands:
+        # Auto-discover agents: .md files in agents/
+        agents = []
+        agents_dir = module_path / "agents"
+        if agents_dir.exists() and agents_dir.is_dir():
+            for agent_file in agents_dir.glob("*.md"):
+                agents.append(agent_file.stem)
+
+        # Only valid if has at least one skill, command, or agent
+        if not skills and not commands and not agents:
             return None
 
         return cls(
@@ -110,6 +152,7 @@ class Module:
             path=module_path,
             skills=sorted(skills),
             commands=sorted(commands),
+            agents=sorted(agents),
         )
 
     def get_skill_paths(self) -> list[Path]:
@@ -120,6 +163,11 @@ class Module:
         """Get the full paths to all commands in this module."""
         commands_dir = self.path / "commands"
         return [commands_dir / f"{cmd}.md" for cmd in self.commands]
+
+    def get_agent_paths(self) -> list[Path]:
+        """Get the full paths to all agents in this module."""
+        agents_dir = self.path / "agents"
+        return [agents_dir / f"{agent}.md" for agent in self.agents]
 
     def validate(self) -> tuple[bool, list[str]]:
         """
@@ -153,6 +201,17 @@ class Module:
                 cmd_errors = validate_command_frontmatter(cmd_path)
                 for err in cmd_errors:
                     errors.append(f"commands/{cmd_name}.md: {err}")
+
+        # Check each agent exists and has valid frontmatter
+        agents_dir = self.path / "agents"
+        for agent_name in self.agents:
+            agent_path = agents_dir / f"{agent_name}.md"
+            if not agent_path.exists():
+                errors.append(f"Agent file not found: agents/{agent_name}.md")
+            else:
+                agent_errors = validate_agent_frontmatter(agent_path)
+                for err in agent_errors:
+                    errors.append(f"agents/{agent_name}.md: {err}")
 
         return len(errors) == 0, errors
 
@@ -227,6 +286,69 @@ def validate_command_frontmatter(command_file: Path) -> list[str]:
     return fm.validate_command(command_file)
 
 
+def validate_agent_frontmatter(agent_file: Path) -> list[str]:
+    """
+    Validate the YAML frontmatter in an agent .md file.
+
+    Args:
+        agent_file: Path to the agent .md file
+
+    Returns:
+        List of error messages (empty if valid)
+    """
+    errors = []
+
+    try:
+        content = agent_file.read_text()
+    except Exception as e:
+        return [f"Cannot read file: {e}"]
+
+    if not content.startswith("---"):
+        errors.append("Missing YAML frontmatter (file should start with '---')")
+        return errors
+
+    # Find the closing ---
+    lines = content.split("\n")
+    end_idx = None
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            end_idx = i
+            break
+
+    if end_idx is None:
+        errors.append("Unclosed YAML frontmatter (missing closing '---')")
+        return errors
+
+    frontmatter_text = "\n".join(lines[1:end_idx])
+
+    # Try to parse as YAML
+    try:
+        frontmatter = yaml.safe_load(frontmatter_text) or {}
+    except yaml.YAMLError as e:
+        error_msg = str(e)
+        if "mapping values are not allowed" in error_msg:
+            errors.append(
+                "Invalid YAML: values containing colons must be quoted. "
+                'Example: description: "Text with: colons"'
+            )
+        else:
+            errors.append(f"Invalid YAML frontmatter: {error_msg}")
+        return errors
+
+    # Check required fields
+    if not frontmatter.get("description"):
+        errors.append("Missing required field: 'description'")
+
+    # Validate model field if present
+    model = frontmatter.get("model")
+    if model and model not in VALID_AGENT_MODELS:
+        errors.append(
+            f"Invalid model '{model}'. Must be one of: {', '.join(sorted(VALID_AGENT_MODELS))}"
+        )
+
+    return errors
+
+
 @dataclass
 class Installation:
     """Represents an installed module."""
@@ -237,6 +359,7 @@ class Installation:
     project_path: Optional[str] = None
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
+    agents: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for YAML serialization."""
@@ -246,6 +369,7 @@ class Installation:
             "scope": self.scope,
             "skills": self.skills,
             "commands": self.commands,
+            "agents": self.agents,
         }
         if self.project_path:
             result["project_path"] = self.project_path
@@ -261,6 +385,7 @@ class Installation:
             project_path=data.get("project_path"),
             skills=data.get("skills", []),
             commands=data.get("commands", []),
+            agents=data.get("agents", []),
         )
 
 

@@ -70,6 +70,18 @@ description: A test command
 Do something with $ARGUMENTS.
 """)
 
+    # Create agent file (auto-discovered from agents/*.md)
+    agents_dir = module_dir / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "agent1.md").write_text("""---
+name: agent1
+description: A test agent
+model: inherit
+---
+
+Instructions for the test agent.
+""")
+
     return module_dir
 
 
@@ -91,6 +103,7 @@ def mock_assistant_paths(tmp_path):
         "claude-code": {
             "skills": tmp_path / ".claude" / "skills",
             "commands": tmp_path / ".claude" / "commands",
+            "agents": tmp_path / ".claude" / "agents",
         },
         "cursor": {
             "skills": tmp_path / ".cursor" / "rules",
@@ -109,5 +122,7 @@ def mock_assistant_paths(tmp_path):
         else:
             dirs["skills"].parent.mkdir(parents=True, exist_ok=True)
         dirs["commands"].mkdir(parents=True, exist_ok=True)
+        if "agents" in dirs:
+            dirs["agents"].mkdir(parents=True, exist_ok=True)
 
     return paths
