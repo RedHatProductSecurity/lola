@@ -19,3 +19,12 @@ venv/
 
 # OS
 .DS_Store
+
+# jj
+.jj/
+
+# AI assistant files (managed by lola)
+.claude/
+.cursor/
+.gemini/
+GEMINI.md
