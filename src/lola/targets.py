@@ -11,10 +11,11 @@ This module provides:
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import yaml
 from rich.console import Console
@@ -120,6 +121,23 @@ class AssistantTarget(Protocol):
         """Get the filename for an agent."""
         ...
 
+    def get_mcp_path(self, project_path: str) -> Path | None:
+        """Get the MCP config file path for this assistant. Returns None if not supported."""
+        ...
+
+    def generate_mcps(
+        self,
+        mcps: dict[str, dict[str, Any]],
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Generate/merge MCP servers into the config file."""
+        ...
+
+    def remove_mcps(self, dest_path: Path, module_name: str) -> bool:
+        """Remove a module's MCP servers from the config file."""
+        ...
+
 
 # =============================================================================
 # BaseAssistantTarget - shared defaults
@@ -192,6 +210,27 @@ class BaseAssistantTarget:
         project_path: str | None,  # noqa: ARG002
     ) -> bool:
         """Default: batch generation not supported."""
+        return False
+
+    def get_mcp_path(self, project_path: str) -> Path | None:  # noqa: ARG002
+        """Default: MCP not supported. Override in subclasses."""
+        return None
+
+    def generate_mcps(
+        self,
+        mcps: dict[str, dict[str, Any]],  # noqa: ARG002
+        dest_path: Path,  # noqa: ARG002
+        module_name: str,  # noqa: ARG002
+    ) -> bool:
+        """Default: MCP not supported. Override in subclasses."""
+        return False
+
+    def remove_mcps(
+        self,
+        dest_path: Path,  # noqa: ARG002
+        module_name: str,  # noqa: ARG002
+    ) -> bool:
+        """Default: MCP removal not supported. Override in subclasses."""
         return False
 
 
@@ -578,11 +617,106 @@ def _skill_source_dir(local_module_path: Path, skill_name: str) -> Path:
 
 
 # =============================================================================
+# MCP helpers
+# =============================================================================
+
+
+def _merge_mcps_into_file(
+    dest_path: Path,
+    module_name: str,
+    mcps: dict[str, dict[str, Any]],
+) -> bool:
+    """Merge MCP servers into a config file.
+
+    Args:
+        dest_path: Path to config file
+        module_name: Module name for prefixing servers
+        mcps: Dict of server_name -> server_config
+    """
+    # Read existing config
+    if dest_path.exists():
+        try:
+            existing_config = json.loads(dest_path.read_text())
+        except json.JSONDecodeError:
+            existing_config = {}
+    else:
+        existing_config = {}
+
+    # Ensure mcpServers exists
+    if "mcpServers" not in existing_config:
+        existing_config["mcpServers"] = {}
+
+    # Add prefixed servers
+    for name, server_config in mcps.items():
+        prefixed_name = f"{module_name}-{name}"
+        existing_config["mcpServers"][prefixed_name] = server_config
+
+    # Write back
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    dest_path.write_text(json.dumps(existing_config, indent=2) + "\n")
+    return True
+
+
+def _remove_mcps_from_file(
+    dest_path: Path,
+    module_name: str,
+) -> bool:
+    """Remove a module's MCP servers from a config file."""
+    if not dest_path.exists():
+        return True
+
+    try:
+        existing_config = json.loads(dest_path.read_text())
+    except json.JSONDecodeError:
+        return True
+
+    if "mcpServers" not in existing_config:
+        return True
+
+    # Remove servers with module prefix
+    prefix = f"{module_name}-"
+    existing_config["mcpServers"] = {
+        k: v
+        for k, v in existing_config["mcpServers"].items()
+        if not k.startswith(prefix)
+    }
+
+    # Write back (or delete if mcpServers is empty and no other keys)
+    if not existing_config["mcpServers"] and len(existing_config) == 1:
+        dest_path.unlink()
+    else:
+        dest_path.write_text(json.dumps(existing_config, indent=2) + "\n")
+    return True
+
+
+class MCPSupportMixin:
+    """Mixin for targets that support MCP servers.
+
+    Subclasses must define get_mcp_path().
+    """
+
+    def generate_mcps(
+        self,
+        mcps: dict[str, dict[str, Any]],
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Generate/merge MCP servers into the config file."""
+        if not mcps:
+            return False
+        return _merge_mcps_into_file(dest_path, module_name, mcps)
+
+    def remove_mcps(self, dest_path: Path, module_name: str) -> bool:
+        """Remove a module's MCP servers from the config file."""
+        return _remove_mcps_from_file(dest_path, module_name)
+
+
+# =============================================================================
 # Concrete Target Implementations
 # =============================================================================
 
 
-class ClaudeCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
+class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistantTarget):
     """Target for Claude Code assistant."""
 
     name = "claude-code"
@@ -600,6 +734,9 @@ class ClaudeCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
 
     def get_instructions_path(self, project_path: str) -> Path:
         return Path(project_path) / self.INSTRUCTIONS_FILE
+
+    def get_mcp_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".mcp.json"
 
     def generate_skill(
         self,
@@ -659,7 +796,7 @@ class ClaudeCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
         )
 
 
-class CursorTarget(BaseAssistantTarget):
+class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
     """Target for Cursor assistant.
 
     Cursor uses .mdc rule files with alwaysApply: true for instructions,
@@ -677,6 +814,9 @@ class CursorTarget(BaseAssistantTarget):
 
     def get_instructions_path(self, project_path: str) -> Path:
         return Path(project_path) / ".cursor" / "rules"
+
+    def get_mcp_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".cursor" / "mcp.json"
 
     def generate_skill(
         self,
@@ -780,7 +920,7 @@ class CursorTarget(BaseAssistantTarget):
         return False
 
 
-class GeminiTarget(ManagedInstructionsTarget, ManagedSectionTarget):
+class GeminiTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTarget):
     """Target for Gemini CLI assistant."""
 
     name = "gemini-cli"
@@ -793,6 +933,9 @@ class GeminiTarget(ManagedInstructionsTarget, ManagedSectionTarget):
 
     def get_instructions_path(self, project_path: str) -> Path:
         return Path(project_path) / self.INSTRUCTIONS_FILE
+
+    def get_mcp_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".gemini" / "settings.json"
 
     def generate_command(
         self,
@@ -827,7 +970,7 @@ class GeminiTarget(ManagedInstructionsTarget, ManagedSectionTarget):
         return f"{module_name}-{cmd_name}.toml"
 
 
-class OpenCodeTarget(ManagedInstructionsTarget, ManagedSectionTarget):
+class OpenCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTarget):
     """Target for OpenCode assistant.
 
     OpenCode uses AGENTS.md for both skills and instructions (similar to Gemini's GEMINI.md approach).
@@ -846,6 +989,9 @@ class OpenCodeTarget(ManagedInstructionsTarget, ManagedSectionTarget):
 
     def get_instructions_path(self, project_path: str) -> Path:
         return Path(project_path) / self.INSTRUCTIONS_FILE
+
+    def get_mcp_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".opencode" / "mcp.json"
 
     def generate_command(
         self,
@@ -1045,20 +1191,55 @@ def _install_instructions(
     return target.generate_instructions(instructions_source, instructions_dest, module.name)
 
 
+def _install_mcps(
+    target: AssistantTarget,
+    module: Module,
+    local_module_path: Path,
+    project_path: str | None,
+) -> tuple[list[str], list[str]]:
+    """Install MCPs for a target. Returns (installed, failed) lists."""
+    if not module.mcps or not project_path:
+        return [], []
+
+    mcp_dest = target.get_mcp_path(project_path)
+    if not mcp_dest:
+        return [], []
+
+    # Load mcps.json from local module
+    mcps_file = local_module_path / config.MCPS_FILE
+    if not mcps_file.exists():
+        return [], list(module.mcps)
+
+    try:
+        mcps_data = json.loads(mcps_file.read_text())
+        servers = mcps_data.get("mcpServers", {})
+    except json.JSONDecodeError:
+        return [], list(module.mcps)
+
+    # Generate MCPs
+    if target.generate_mcps(servers, mcp_dest, module.name):
+        installed = [f"{module.name}-{name}" for name in servers.keys()]
+        return installed, []
+
+    return [], list(module.mcps)
+
+
 def _print_summary(
     assistant: str,
     installed_skills: list[str],
     installed_commands: list[str],
     installed_agents: list[str],
+    installed_mcps: list[str],
     has_instructions: bool,
     failed_skills: list[str],
     failed_commands: list[str],
     failed_agents: list[str],
+    failed_mcps: list[str],
     module_name: str,
     verbose: bool,
 ) -> None:
     """Print installation summary."""
-    if not (installed_skills or installed_commands or installed_agents or has_instructions):
+    if not (installed_skills or installed_commands or installed_agents or installed_mcps or has_instructions):
         return
 
     parts: list[str] = []
@@ -1068,6 +1249,8 @@ def _print_summary(
         parts.append(f"{len(installed_commands)} command{'s' if len(installed_commands) != 1 else ''}")
     if installed_agents:
         parts.append(f"{len(installed_agents)} agent{'s' if len(installed_agents) != 1 else ''}")
+    if installed_mcps:
+        parts.append(f"{len(installed_mcps)} MCP{'s' if len(installed_mcps) != 1 else ''}")
     if has_instructions:
         parts.append("instructions")
 
@@ -1080,16 +1263,20 @@ def _print_summary(
             console.print(f"    [green]/{module_name}-{cmd}[/green]")
         for agent in installed_agents:
             console.print(f"    [green]@{module_name}-{agent}[/green]")
+        for mcp in installed_mcps:
+            console.print(f"    [green]mcp:{mcp}[/green]")
         if has_instructions:
             console.print("    [green]instructions[/green]")
 
-    if failed_skills or failed_commands or failed_agents:
+    if failed_skills or failed_commands or failed_agents or failed_mcps:
         for skill in failed_skills:
             console.print(f"    [red]{skill}[/red] [dim](source not found)[/dim]")
         for cmd in failed_commands:
             console.print(f"    [red]{cmd}[/red] [dim](source not found)[/dim]")
         for agent in failed_agents:
             console.print(f"    [red]{agent}[/red] [dim](source not found)[/dim]")
+        for mcp in failed_mcps:
+            console.print(f"    [red]{mcp}[/red] [dim](source not found)[/dim]")
 
 
 def install_to_assistant(
@@ -1112,6 +1299,7 @@ def install_to_assistant(
     installed_skills, failed_skills = _install_skills(target, module, local_module_path, project_path)
     installed_commands, failed_commands = _install_commands(target, module, local_module_path, project_path)
     installed_agents, failed_agents = _install_agents(target, module, local_module_path, project_path)
+    installed_mcps, failed_mcps = _install_mcps(target, module, local_module_path, project_path)
     instructions_installed = _install_instructions(target, module, local_module_path, project_path)
 
     _print_summary(
@@ -1119,15 +1307,17 @@ def install_to_assistant(
         installed_skills,
         installed_commands,
         installed_agents,
+        installed_mcps,
         instructions_installed,
         failed_skills,
         failed_commands,
         failed_agents,
+        failed_mcps,
         module.name,
         verbose,
     )
 
-    if installed_skills or installed_commands or installed_agents or instructions_installed:
+    if installed_skills or installed_commands or installed_agents or installed_mcps or instructions_installed:
         registry.add(
             Installation(
                 module_name=module.name,
@@ -1137,8 +1327,9 @@ def install_to_assistant(
                 skills=installed_skills,
                 commands=installed_commands,
                 agents=installed_agents,
+                mcps=installed_mcps,
                 has_instructions=instructions_installed,
             )
         )
 
-    return len(installed_skills) + len(installed_commands) + len(installed_agents) + (1 if instructions_installed else 0)
+    return len(installed_skills) + len(installed_commands) + len(installed_agents) + len(installed_mcps) + (1 if instructions_installed else 0)

@@ -410,6 +410,172 @@ class TestModInit:
         finally:
             os.chdir(original_dir)
 
+    def test_init_creates_mcps_json(self, cli_runner, tmp_path):
+        """Initialize module creates mcps.json by default."""
+        import json
+        import os
+
+        from lola.config import MCPS_FILE
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "mymod"])
+
+            assert result.exit_code == 0
+            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            assert mcps_file.exists()
+
+            # Verify content
+            content = json.loads(mcps_file.read_text())
+            assert "mcpServers" in content
+            assert "example-server" in content["mcpServers"]
+            assert content["mcpServers"]["example-server"]["command"] == "npx"
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_creates_agents_md(self, cli_runner, tmp_path):
+        """Initialize module creates AGENTS.md by default."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "mymod"])
+
+            assert result.exit_code == 0
+            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            assert agents_file.exists()
+
+            # Verify content
+            content = agents_file.read_text()
+            assert "# Mymod" in content
+            assert "## When to Use" in content
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_no_mcps_flag(self, cli_runner, tmp_path):
+        """Initialize module with --no-mcps skips mcps.json."""
+        import os
+
+        from lola.config import MCPS_FILE
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "mymod", "--no-mcps"])
+
+            assert result.exit_code == 0
+            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            assert not mcps_file.exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_no_instructions_flag(self, cli_runner, tmp_path):
+        """Initialize module with --no-instructions skips AGENTS.md."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "mymod", "--no-instructions"])
+
+            assert result.exit_code == 0
+            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            assert not agents_file.exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_both_no_flags(self, cli_runner, tmp_path):
+        """Initialize module with both --no-mcps and --no-instructions."""
+        import os
+
+        from lola.config import MCPS_FILE
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "--no-mcps", "--no-instructions"]
+            )
+
+            assert result.exit_code == 0
+            assert not (tmp_path / "mymod" / MCPS_FILE).exists()
+            assert not (tmp_path / "mymod" / "AGENTS.md").exists()
+            # But other files should still be created
+            assert (tmp_path / "mymod" / "skills" / "example-skill" / "SKILL.md").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_mcps_with_no_skill_command_agent(self, cli_runner, tmp_path):
+        """mcps.json and AGENTS.md created even when --no-skill --no-command --no-agent."""
+        import json
+        import os
+
+        from lola.config import MCPS_FILE
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(
+                mod,
+                [
+                    "init",
+                    "mymod",
+                    "--no-skill",
+                    "--no-command",
+                    "--no-agent",
+                ],
+            )
+
+            assert result.exit_code == 0
+            # mcps.json should be created
+            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            assert mcps_file.exists()
+            content = json.loads(mcps_file.read_text())
+            assert "mcpServers" in content
+
+            # AGENTS.md should be created
+            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            assert agents_file.exists()
+            agents_content = agents_file.read_text()
+            assert "# Mymod" in agents_content
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_agents_md_adapts_to_content(self, cli_runner, tmp_path):
+        """AGENTS.md adapts based on what skills/commands/agents were created."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"]
+            )
+
+            assert result.exit_code == 0
+            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            content = agents_file.read_text()
+
+            # Should mention the skill
+            assert "my-skill" in content.lower() or "My Skill" in content
+            # Should mention the command
+            assert "my-cmd" in content.lower() or "My Cmd" in content
+            assert "mymod-my-cmd" in content
+            # Should mention the agent
+            assert "my-agent" in content.lower() or "My Agent" in content
+            assert "mymod-my-agent" in content
+        finally:
+            os.chdir(original_dir)
+
 
 class TestModListVerbose:
     """Tests for mod ls with verbose flag."""

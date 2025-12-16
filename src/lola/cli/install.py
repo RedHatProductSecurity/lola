@@ -57,6 +57,8 @@ class UpdateResult:
     commands_failed: int = 0
     agents_ok: int = 0
     agents_failed: int = 0
+    mcps_ok: int = 0
+    mcps_failed: int = 0
     instructions_ok: bool = False
     orphans_removed: int = 0
     error: str | None = None
@@ -73,10 +75,12 @@ class UpdateContext:
     current_skills: set[str] = field(default_factory=set)
     current_commands: set[str] = field(default_factory=set)
     current_agents: set[str] = field(default_factory=set)
+    current_mcps: set[str] = field(default_factory=set)
     has_instructions: bool = False
     orphaned_skills: set[str] = field(default_factory=set)
     orphaned_commands: set[str] = field(default_factory=set)
     orphaned_agents: set[str] = field(default_factory=set)
+    orphaned_mcps: set[str] = field(default_factory=set)
 
 
 def _validate_installation_for_update(inst: Installation) -> tuple[bool, str | None]:
@@ -128,15 +132,17 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
     # Refresh the local copy from global module
     source_module = copy_module_to_local(global_module, local_modules)
 
-    # Compute current skills, commands, and agents from the module (with prefixes)
+    # Compute current skills, commands, agents, and mcps from the module (with prefixes)
     current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
     current_commands = set(global_module.commands)
     current_agents = set(global_module.agents)
+    current_mcps = {f"{inst.module_name}-{m}" for m in global_module.mcps}
 
     # Find orphaned items (in registry but not in module)
     orphaned_skills = set(inst.skills) - current_skills
     orphaned_commands = set(inst.commands) - current_commands
     orphaned_agents = set(inst.agents) - current_agents
+    orphaned_mcps = set(inst.mcps) - current_mcps
 
     return UpdateContext(
         inst=inst,
@@ -146,10 +152,12 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
         current_skills=current_skills,
         current_commands=current_commands,
         current_agents=current_agents,
+        current_mcps=current_mcps,
         has_instructions=global_module.has_instructions,
         orphaned_skills=orphaned_skills,
         orphaned_commands=orphaned_commands,
         orphaned_agents=orphaned_agents,
+        orphaned_mcps=orphaned_mcps,
     )
 
 
@@ -210,6 +218,28 @@ def _remove_orphaned_agents(ctx: UpdateContext, verbose: bool) -> int:
                     f"      [yellow]- @{ctx.inst.module_name}-{agent_name}[/yellow] [dim](orphaned)[/dim]"
                 )
     return removed
+
+
+def _remove_orphaned_mcps(ctx: UpdateContext, verbose: bool) -> int:
+    """Remove orphaned MCP servers. Returns count of removed items."""
+    if not ctx.orphaned_mcps:
+        return 0
+
+    mcp_dest = ctx.target.get_mcp_path(ctx.inst.project_path or "")
+    if not mcp_dest:
+        return 0
+
+    # For MCPs, we need to remove individual servers from the config file
+    # The orphaned MCPs are prefixed names, so we pass the module name
+    # and let remove_mcps handle it
+    if ctx.target.remove_mcps(mcp_dest, ctx.inst.module_name):
+        if verbose:
+            for mcp_name in ctx.orphaned_mcps:
+                console.print(
+                    f"      [yellow]- mcp:{mcp_name}[/yellow] [dim](orphaned)[/dim]"
+                )
+        return len(ctx.orphaned_mcps)
+    return 0
 
 
 def _update_skills(
@@ -378,13 +408,50 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
     return success
 
 
+def _update_mcps(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
+    """
+    Update MCPs for an installation.
+
+    Returns (success_count, failed_count).
+    """
+    import json
+    from lola.config import MCPS_FILE
+
+    if not ctx.global_module.mcps or not ctx.inst.project_path:
+        return 0, 0
+
+    mcp_dest = ctx.target.get_mcp_path(ctx.inst.project_path)
+    if not mcp_dest:
+        return 0, 0
+
+    # Load mcps.json from source module
+    mcps_file = ctx.source_module / MCPS_FILE
+    if not mcps_file.exists():
+        return 0, len(ctx.global_module.mcps)
+
+    try:
+        mcps_data = json.loads(mcps_file.read_text())
+        servers = mcps_data.get("mcpServers", {})
+    except json.JSONDecodeError:
+        return 0, len(ctx.global_module.mcps)
+
+    # Generate MCPs
+    if ctx.target.generate_mcps(servers, mcp_dest, ctx.inst.module_name):
+        if verbose:
+            for mcp_name in servers.keys():
+                console.print(f"      [green]mcp:{ctx.inst.module_name}-{mcp_name}[/green]")
+        return len(servers), 0
+
+    return 0, len(ctx.global_module.mcps)
+
+
 def _process_single_installation(
     ctx: UpdateContext, verbose: bool
 ) -> UpdateResult:
     """
     Process a single installation update.
 
-    Removes orphaned items and regenerates all skills, commands, agents, and instructions.
+    Removes orphaned items and regenerates all skills, commands, agents, MCPs, and instructions.
     """
     result = UpdateResult()
     skill_dest = ctx.target.get_skill_path(ctx.inst.project_path or "")
@@ -393,6 +460,7 @@ def _process_single_installation(
     result.orphans_removed += _remove_orphaned_skills(ctx, skill_dest, verbose)
     result.orphans_removed += _remove_orphaned_commands(ctx, verbose)
     result.orphans_removed += _remove_orphaned_agents(ctx, verbose)
+    result.orphans_removed += _remove_orphaned_mcps(ctx, verbose)
 
     # Update skills
     result.skills_ok, result.skills_failed = _update_skills(ctx, skill_dest, verbose)
@@ -402,6 +470,9 @@ def _process_single_installation(
 
     # Update agents
     result.agents_ok, result.agents_failed = _update_agents(ctx, verbose)
+
+    # Update MCPs
+    result.mcps_ok, result.mcps_failed = _update_mcps(ctx, verbose)
 
     # Update instructions
     result.instructions_ok = _update_instructions(ctx, verbose)
@@ -420,6 +491,8 @@ def _format_update_summary(result: UpdateResult) -> str:
         )
     if result.agents_ok > 0:
         parts.append(f"{result.agents_ok} {'agent' if result.agents_ok == 1 else 'agents'}")
+    if result.mcps_ok > 0:
+        parts.append(f"{result.mcps_ok} {'MCP' if result.mcps_ok == 1 else 'MCPs'}")
     if result.instructions_ok:
         parts.append("instructions")
 
@@ -427,7 +500,7 @@ def _format_update_summary(result: UpdateResult) -> str:
 
     # Build status indicators
     status_parts = []
-    total_failed = result.skills_failed + result.commands_failed + result.agents_failed
+    total_failed = result.skills_failed + result.commands_failed + result.agents_failed + result.mcps_failed
     if total_failed > 0:
         status_parts.append(f"[red]{total_failed} failed[/red]")
     if result.orphans_removed > 0:
@@ -598,6 +671,7 @@ def uninstall_cmd(
         skill_count = len(insts[0].skills) if insts[0].skills else 0
         cmd_count = len(insts[0].commands) if insts[0].commands else 0
         agent_count = len(insts[0].agents) if insts[0].agents else 0
+        mcp_count = len(insts[0].mcps) if insts[0].mcps else 0
         has_instructions = insts[0].has_instructions
 
         parts = []
@@ -607,6 +681,8 @@ def uninstall_cmd(
             parts.append(f"{cmd_count} command{'s' if cmd_count != 1 else ''}")
         if agent_count:
             parts.append(f"{agent_count} agent{'s' if agent_count != 1 else ''}")
+        if mcp_count:
+            parts.append(f"{mcp_count} MCP{'s' if mcp_count != 1 else ''}")
         if has_instructions:
             parts.append("instructions")
 
@@ -699,6 +775,14 @@ def uninstall_cmd(
                 removed_count += 1
                 if verbose:
                     console.print(f"  [green]Removed instructions from {instructions_dest}[/green]")
+
+        # Remove MCP servers
+        if inst.mcps:
+            mcp_dest = target.get_mcp_path(inst.project_path)
+            if mcp_dest and target.remove_mcps(mcp_dest, module_name):
+                removed_count += len(inst.mcps)
+                if verbose:
+                    console.print(f"  [green]Removed MCPs from {mcp_dest}[/green]")
 
         # Also remove the project-local module copy
         if inst.scope == "project":
@@ -819,10 +903,11 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 # Process the installation update
                 result = _process_single_installation(ctx, verbose)
 
-                # Update the registry with current skills/commands/agents/instructions
+                # Update the registry with current skills/commands/agents/mcps/instructions
                 inst.skills = list(ctx.current_skills)
                 inst.commands = list(ctx.current_commands)
                 inst.agents = list(ctx.current_agents)
+                inst.mcps = list(ctx.current_mcps)
                 inst.has_instructions = result.instructions_ok
                 registry.add(inst)
 
