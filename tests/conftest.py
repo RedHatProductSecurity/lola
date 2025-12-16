@@ -88,6 +88,63 @@ Instructions for the test agent.
 
 
 @pytest.fixture
+def sample_module_with_instructions(tmp_path):
+    """Create a sample module with AGENTS.md instructions for testing."""
+    module_dir = tmp_path / "sample-module"
+    module_dir.mkdir()
+
+    # Create skill directory
+    skills_dir = module_dir / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "skill1"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("""---
+description: A test skill
+---
+
+# Skill 1
+
+This is a test skill.
+""")
+
+    # Create command file
+    commands_dir = module_dir / "commands"
+    commands_dir.mkdir()
+    (commands_dir / "cmd1.md").write_text("""---
+description: A test command
+---
+
+Do something with $ARGUMENTS.
+""")
+
+    # Create agent file
+    agents_dir = module_dir / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "agent1.md").write_text("""---
+name: agent1
+description: A test agent
+model: inherit
+---
+
+Instructions for the test agent.
+""")
+
+    # Create module instructions
+    (module_dir / "AGENTS.md").write_text("""# Sample Module
+
+This module provides sample skills, commands, and agents for testing.
+
+## When to Use
+
+- **Sample skill**: Use skill1 for sample operations
+- **Sample command**: Use /cmd1 to do something
+- **Sample agent**: Delegate to agent1 for complex tasks
+""")
+
+    return module_dir
+
+
+@pytest.fixture
 def registered_module(mock_lola_home, sample_module):
     """Create and register a module in the mock LOLA_HOME."""
     import shutil
