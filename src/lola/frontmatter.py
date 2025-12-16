@@ -5,6 +5,7 @@ This module provides consistent frontmatter parsing across lola,
 with proper error handling and validation warnings.
 """
 
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -159,6 +160,76 @@ def validate_agent(agent_file: Path) -> list[str]:
 
     if not metadata.get("description"):
         errors.append("Missing required 'description' field in frontmatter")
+
+    return errors
+
+
+def validate_mcps(mcps_file: Path) -> list[str]:
+    """
+    Validate the mcps.json file.
+
+    Args:
+        mcps_file: Path to the mcps.json file
+
+    Returns:
+        List of warning/error messages (empty if valid)
+    """
+    errors = []
+
+    try:
+        content = mcps_file.read_text()
+    except Exception as e:
+        return [f"Cannot read file: {e}"]
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        errors.append(f"Invalid JSON: {e}")
+        return errors
+
+    if not isinstance(data, dict):
+        errors.append("Root must be an object")
+        return errors
+
+    if "mcpServers" not in data:
+        errors.append("Missing required 'mcpServers' key")
+        return errors
+
+    servers = data["mcpServers"]
+    if not isinstance(servers, dict):
+        errors.append("'mcpServers' must be an object")
+        return errors
+
+    for name, config in servers.items():
+        if not isinstance(name, str) or not name:
+            errors.append("Server name must be a non-empty string")
+            continue
+
+        if not isinstance(config, dict):
+            errors.append(f"Server '{name}': config must be an object")
+            continue
+
+        # command is required
+        if "command" not in config:
+            errors.append(f"Server '{name}': missing required 'command' field")
+        elif not isinstance(config["command"], str) or not config["command"]:
+            errors.append(f"Server '{name}': 'command' must be a non-empty string")
+
+        # args is optional but must be a list if present
+        if "args" in config and not isinstance(config["args"], list):
+            errors.append(f"Server '{name}': 'args' must be an array")
+
+        # env is optional but must be an object if present
+        if "env" in config and not isinstance(config["env"], dict):
+            errors.append(f"Server '{name}': 'env' must be an object")
+
+        # Check env values are strings
+        if "env" in config and isinstance(config["env"], dict):
+            for env_key, env_value in config["env"].items():
+                if not isinstance(env_value, str):
+                    errors.append(
+                        f"Server '{name}': env['{env_key}'] must be a string"
+                    )
 
     return errors
 

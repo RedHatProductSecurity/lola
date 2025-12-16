@@ -4,11 +4,12 @@ models:
 """
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from typing import Optional
 import yaml
 
-from lola.config import SKILL_FILE
+from lola.config import MCPS_FILE, SKILL_FILE
 from lola import frontmatter as fm
 from lola.exceptions import ValidationError
 
@@ -97,6 +98,26 @@ class Agent:
         )
 
 
+@dataclass
+class MCPServer:
+    """Represents an MCP server definition within a module."""
+
+    name: str
+    command: str
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, name: str, data: dict) -> "MCPServer":
+        """Create from a dictionary entry in mcps.json."""
+        return cls(
+            name=name,
+            command=data.get("command", ""),
+            args=data.get("args", []),
+            env=data.get("env", {}),
+        )
+
+
 INSTRUCTIONS_FILE = "AGENTS.md"
 
 
@@ -109,6 +130,7 @@ class Module:
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
+    mcps: list[str] = field(default_factory=list)
     has_instructions: bool = False
 
     @classmethod
@@ -151,8 +173,19 @@ class Module:
         instructions_file = module_path / INSTRUCTIONS_FILE
         has_instructions = instructions_file.exists() and instructions_file.stat().st_size > 0
 
-        # Only valid if has at least one skill, command, agent, or instructions
-        if not skills and not commands and not agents and not has_instructions:
+        # Auto-discover MCP servers from mcps.json
+        mcps: list[str] = []
+        mcps_file = module_path / MCPS_FILE
+        if mcps_file.exists():
+            try:
+                data = json.loads(mcps_file.read_text())
+                mcps = sorted(data.get("mcpServers", {}).keys())
+            except (json.JSONDecodeError, OSError):
+                # Ignore malformed mcps.json
+                pass
+
+        # Only valid if has at least one skill, command, agent, mcp, or instructions
+        if not skills and not commands and not agents and not mcps and not has_instructions:
             return None
 
         return cls(
@@ -161,6 +194,7 @@ class Module:
             skills=sorted(skills),
             commands=sorted(commands),
             agents=sorted(agents),
+            mcps=mcps,
             has_instructions=has_instructions,
         )
 
@@ -228,6 +262,16 @@ class Module:
                 for err in agent_errors:
                     errors.append(f"agents/{agent_name}.md: {err}")
 
+        # Check mcps.json if module has MCPs
+        if self.mcps:
+            mcps_file = self.path / MCPS_FILE
+            if not mcps_file.exists():
+                errors.append(f"MCP file not found: {MCPS_FILE}")
+            else:
+                mcp_errors = fm.validate_mcps(mcps_file)
+                for err in mcp_errors:
+                    errors.append(f"{MCPS_FILE}: {err}")
+
         return len(errors) == 0, errors
 
     def validate_or_raise(self) -> None:
@@ -253,6 +297,7 @@ class Installation:
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
+    mcps: list[str] = field(default_factory=list)
     has_instructions: bool = False
 
     def to_dict(self) -> dict:
@@ -264,6 +309,7 @@ class Installation:
             "skills": self.skills,
             "commands": self.commands,
             "agents": self.agents,
+            "mcps": self.mcps,
             "has_instructions": self.has_instructions,
         }
         if self.project_path:
@@ -281,6 +327,7 @@ class Installation:
             skills=data.get("skills", []),
             commands=data.get("commands", []),
             agents=data.get("agents", []),
+            mcps=data.get("mcps", []),
             has_instructions=data.get("has_instructions", False),
         )
 

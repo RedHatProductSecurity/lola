@@ -4,6 +4,7 @@ Module management CLI commands.
 Commands for adding, removing, and managing lola modules.
 """
 
+import json
 import shutil
 from pathlib import Path
 from typing import NoReturn
@@ -12,7 +13,7 @@ import click
 from rich.console import Console
 from rich.tree import Tree
 
-from lola.config import MODULES_DIR, INSTALLED_FILE
+from lola.config import MCPS_FILE, MODULES_DIR, INSTALLED_FILE
 from lola.exceptions import (
     LolaError,
     ModuleNameError,
@@ -74,6 +75,8 @@ def _module_tree(
     skills: list[str] | None = None,
     commands: list[str] | None = None,
     agents: list[str] | None = None,
+    has_mcps: bool = False,
+    has_instructions: bool = False,
 ) -> None:
     """Print a module structure as a tree."""
     tree = Tree(f"[cyan]{name}/[/cyan]")
@@ -93,6 +96,12 @@ def _module_tree(
         agent_node = tree.add("[dim]agents/[/dim]")
         for agent in agents:
             agent_node.add(f"[dim]{agent}.md[/dim]")
+
+    if has_mcps:
+        tree.add("[dim]mcps.json[/dim]")
+
+    if has_instructions:
+        tree.add("[dim]AGENTS.md[/dim]")
 
     console.print(tree)
 
@@ -240,6 +249,8 @@ def add_module(source: str, module_name: str):
     help="Name for an initial agent",
 )
 @click.option("--no-agent", is_flag=True, help="Do not create an initial agent")
+@click.option("--no-mcps", is_flag=True, help="Do not create mcps.json")
+@click.option("--no-instructions", is_flag=True, help="Do not create AGENTS.md")
 def init_module(
     name: str | None,
     skill_name: str,
@@ -248,6 +259,8 @@ def init_module(
     no_command: bool,
     agent_name: str | None,
     no_agent: bool,
+    no_mcps: bool,
+    no_instructions: bool,
 ):
     """
     Initialize a new lola module.
@@ -257,11 +270,12 @@ def init_module(
     .md files in the commands/ folder, and agents are .md files in the agents/ folder.
 
     By default, creates skills/, commands/, and agents/ directories with example
-    content. Use --no-skill, --no-command, or --no-agent to skip creating initial content.
+    content, plus mcps.json and AGENTS.md files. Use --no-skill, --no-command,
+    --no-agent, --no-mcps, or --no-instructions to skip creating initial content.
 
     \b
     Examples:
-        lola mod init                           # Use current folder name, create all directories
+        lola mod init                           # Use current folder name, create all directories and files
         lola mod init my-skills                 # Create my-skills/ subdirectory
         lola mod init -s code-review            # Custom skill name
         lola mod init --no-skill                # Skip initial skill (but still create skills/ dir)
@@ -269,6 +283,8 @@ def init_module(
         lola mod init --no-command              # Skip initial command (but still create commands/ dir)
         lola mod init -g my-agent               # Custom agent name
         lola mod init --no-agent                # Skip initial agent (but still create agents/ dir)
+        lola mod init --no-mcps                 # Skip creating mcps.json
+        lola mod init --no-instructions         # Skip creating AGENTS.md
     """
     if name:
         # Create a new subdirectory
@@ -297,10 +313,11 @@ def init_module(
         skills_dir.mkdir(exist_ok=True)
         skill_dir = skills_dir / final_skill_name
         if skill_dir.exists():
-            _handle_lola_error(PathExistsError(skill_dir, "Skill directory"))
-        skill_dir.mkdir()
+            console.print(f"[yellow]Skill directory already exists, skipping:[/yellow] {skill_dir}")
+        else:
+            skill_dir.mkdir()
 
-        skill_content = f"""---
+            skill_content = f"""---
 name: {final_skill_name}
 description: Description of what this skill does and when to use it.
 ---
@@ -317,7 +334,7 @@ Explain how to use this skill.
 
 Provide examples of the skill in action.
 """
-        (skill_dir / "SKILL.md").write_text(skill_content)
+            (skill_dir / "SKILL.md").write_text(skill_content)
     else:
         # Create empty skills directory if not creating a skill
         skills_dir.mkdir(exist_ok=True)
@@ -325,8 +342,11 @@ Provide examples of the skill in action.
     # Create initial command if requested
     if final_command_name:
         commands_dir.mkdir(exist_ok=True)
-
-        command_content = f"""---
+        command_file = commands_dir / f"{final_command_name}.md"
+        if command_file.exists():
+            console.print(f"[yellow]Command file already exists, skipping:[/yellow] {command_file}")
+        else:
+            command_content = f"""---
 description: Description of what this command does
 argument-hint: "[optional args]"
 ---
@@ -335,7 +355,7 @@ Prompt instructions for the {final_command_name} command.
 
 Use $ARGUMENTS to reference any arguments passed to the command.
 """
-        (commands_dir / f"{final_command_name}.md").write_text(command_content)
+            command_file.write_text(command_content)
     else:
         # Create empty commands directory if not creating a command
         commands_dir.mkdir(exist_ok=True)
@@ -343,8 +363,11 @@ Use $ARGUMENTS to reference any arguments passed to the command.
     # Create initial agent if requested
     if final_agent_name:
         agents_dir.mkdir(exist_ok=True)
-
-        agent_content = f"""---
+        agent_file = agents_dir / f"{final_agent_name}.md"
+        if agent_file.exists():
+            console.print(f"[yellow]Agent file already exists, skipping:[/yellow] {agent_file}")
+        else:
+            agent_content = f"""---
 description: Description of what this agent does and when to use it
 ---
 
@@ -352,10 +375,66 @@ Instructions for the {final_agent_name.replace('-', ' ').title()} agent.
 
 Describe the agent's purpose, capabilities, and guidelines here.
 """
-        (agents_dir / f"{final_agent_name}.md").write_text(agent_content)
+            agent_file.write_text(agent_content)
     else:
         # Create empty agents directory if not creating an agent
         agents_dir.mkdir(exist_ok=True)
+
+    # Create mcps.json if not skipped
+    if not no_mcps:
+        mcps_file = module_dir / MCPS_FILE
+        if mcps_file.exists():
+            console.print(f"[yellow]mcps.json already exists, skipping:[/yellow] {mcps_file}")
+        else:
+            mcps_content = {
+                "mcpServers": {
+                    "example-server": {
+                        "command": "npx",
+                        "args": ["-y", "@modelcontextprotocol/server-example"],
+                        "env": {
+                            "API_KEY": "${API_KEY}",
+                        },
+                    },
+                },
+            }
+            mcps_file.write_text(json.dumps(mcps_content, indent=2) + "\n")
+
+    # Create AGENTS.md if not skipped
+    if not no_instructions:
+        agents_md_file = module_dir / "AGENTS.md"
+        if agents_md_file.exists():
+            console.print(f"[yellow]AGENTS.md already exists, skipping:[/yellow] {agents_md_file}")
+        else:
+            # Build the "When to Use" section based on what was created
+            when_to_use_items = []
+
+            if final_skill_name:
+                when_to_use_items.append(
+                    f"- **{final_skill_name.replace('-', ' ').title()}**: Use the `{final_skill_name}` skill for [describe when to use this skill]"
+                )
+            if final_command_name:
+                when_to_use_items.append(
+                    f"- **{final_command_name.replace('-', ' ').title()}**: Use `/{module_name}-{final_command_name}` to [describe what this command does]"
+                )
+            if final_agent_name:
+                when_to_use_items.append(
+                    f"- **{final_agent_name.replace('-', ' ').title()}**: Delegate to `@{module_name}-{final_agent_name}` for [describe when to use this agent]"
+                )
+
+            if not when_to_use_items:
+                when_to_use_items.append(
+                    "- Add skills, commands, or agents and describe when to use them here"
+                )
+
+            agents_md_content = f"""# {module_name.replace('-', ' ').title()}
+
+Describe what this module provides and its purpose.
+
+## When to Use
+
+{chr(10).join(when_to_use_items)}
+"""
+            agents_md_file.write_text(agents_md_content)
 
     console.print(f"[green]Initialized module {module_name}[/green]")
     console.print(f"  [dim]Path:[/dim] {module_dir}")
@@ -367,6 +446,8 @@ Describe the agent's purpose, capabilities, and guidelines here.
         skills=[final_skill_name] if final_skill_name else None,
         commands=[final_command_name] if final_command_name else None,
         agents=[final_agent_name] if final_agent_name else None,
+        has_mcps=not no_mcps,
+        has_instructions=not no_instructions,
     )
 
     steps = []
@@ -382,6 +463,10 @@ Describe the agent's purpose, capabilities, and guidelines here.
         steps.append(f"Edit agents/{final_agent_name}.md with your agent instructions")
     else:
         steps.append("Add .md files to agents/ for subagents")
+    if not no_mcps:
+        steps.append(f"Edit {MCPS_FILE} to configure MCP servers")
+    if not no_instructions:
+        steps.append("Edit AGENTS.md with module instructions")
     steps.append(f"lola mod add {module_dir}")
 
     console.print()

@@ -17,3 +17,6 @@ INSTALLED_FILE = LOLA_HOME / "installed.yml"
 
 # Skill definition filename
 SKILL_FILE = "SKILL.md"
+
+# MCP servers definition filename
+MCPS_FILE = "mcps.json"
