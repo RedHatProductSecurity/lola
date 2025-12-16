@@ -788,11 +788,13 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         module_name: str,
     ) -> bool:
         filename = self.get_agent_filename(module_name, agent_name)
+        # Claude Code requires 'name' field in agent frontmatter
+        agent_full_name = filename.removesuffix(".md")
         return _generate_agent_with_frontmatter(
             source_path,
             dest_dir,
             filename,
-            {"model": "inherit"},
+            {"name": agent_full_name, "model": "inherit"},
         )
 
 
@@ -955,10 +957,12 @@ class GeminiTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTar
         prompt = _convert_to_gemini_args(body)
 
         description_escaped = description.replace("\\", "\\\\").replace('"', '\\"')
+        # Escape """ sequences in prompt to avoid breaking TOML multi-line strings
+        prompt_escaped = prompt.rstrip().replace('"""', r'\"""')
         toml_lines = [
             f'description = "{description_escaped}"',
             'prompt = """',
-            prompt.rstrip(),
+            prompt_escaped,
             '"""',
         ]
 
