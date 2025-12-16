@@ -48,13 +48,13 @@ lola mod add ~/Downloads/skills.zip
 ### 2. Install skills to your AI assistants
 
 ```bash
-# Install to all assistants (user scope)
+# Install to all assistants in the current directory (project scope, default)
 lola install my-skills
 
-# Install to a specific assistant
+# Install to a specific assistant in the current directory
 lola install my-skills -a claude-code
 
-# Install to a specific project
+# Install to a specific project directory
 lola install my-skills -s project ./my-project
 ```
 
@@ -112,15 +112,18 @@ This creates:
 
 ```
 my-skills/
-  .lola/
-    module.yml       # Module manifest
-  my-skills/
-    SKILL.md         # Initial skill
+  skills/
+    example-skill/
+      SKILL.md         # Initial skill (unless --no-skill)
+  commands/            # Created by default
+    example-command.md # (unless --no-command)
+  agents/              # Created by default
+    example-agent.md   # (unless --no-agent)
 ```
 
 ### 2. Edit the skill
 
-Edit `my-skills/SKILL.md`:
+Edit `skills/example-skill/SKILL.md`:
 
 ```markdown
 ---
@@ -133,18 +136,57 @@ description: Description shown in skill listings
 Instructions for the AI assistant...
 ```
 
-### 3. Add more skills
+### 3. Add supporting files to skills
 
-Create additional skill directories, each with a `SKILL.md`:
+You can add additional files to any skill directory (scripts, templates, examples, etc.). Reference them using relative paths in your `SKILL.md`:
+
+```markdown
+# My Skill
+
+Use the helper script: `./scripts/helper.sh`
+
+Load the template from: `./templates/example.md`
+```
+
+**Path handling:** Use relative paths like `./file` or `./scripts/helper.sh` to reference files in the same skill directory. Each assistant handles these differently:
+
+| Assistant | Skill Location | Supporting Files | Path Behavior |
+|-----------|---------------|------------------|---------------|
+| Claude Code | `.claude/skills/<skill>/SKILL.md` | Copied with skill | Paths work as-is |
+| Cursor | `.cursor/rules/<skill>.mdc` | Stay in `.lola/modules/` | Paths rewritten automatically |
+| Gemini | `GEMINI.md` (references only) | Stay in `.lola/modules/` | Paths work (SKILL.md read from source) |
+| OpenCode | `AGENTS.md` (references only) | Stay in `.lola/modules/` | Paths work (SKILL.md read from source) |
+
+- **Claude Code** copies the entire skill directory, so relative paths like `./scripts/helper.sh` work because the files are alongside `SKILL.md`
+- **Cursor** only copies the skill content to an `.mdc` file, so Lola rewrites `./` paths to point back to `.lola/modules/<module>/skills/<skill>/`
+- **Gemini/OpenCode** don't copy skills—they add entries to `GEMINI.md`/`AGENTS.md` that tell the AI to read the original `SKILL.md` from `.lola/modules/`, so relative paths work from that location
+
+Example skill structure:
 
 ```
 my-skills/
-  .lola/
-    module.yml
-  git-workflow/
-    SKILL.md
-  code-review/
-    SKILL.md
+  skills/
+    example-skill/
+      SKILL.md
+      scripts/
+        helper.sh
+      templates/
+        example.md
+```
+
+### 4. Add more skills
+
+Create additional skill directories under `skills/`, each with a `SKILL.md`:
+
+```
+my-skills/
+  skills/
+    example-skill/
+      SKILL.md
+    git-workflow/
+      SKILL.md
+    code-review/
+      SKILL.md
 ```
 
 ### 4. Add slash commands
@@ -153,10 +195,9 @@ Create a `commands/` directory with markdown files:
 
 ```
 my-skills/
-  .lola/
-    module.yml
-  git-workflow/
-    SKILL.md
+  skills/
+    example-skill/
+      SKILL.md
   commands/
     review-pr.md
     quick-commit.md
@@ -173,21 +214,7 @@ argument-hint: <pr-number>
 Review PR #$ARGUMENTS and provide feedback.
 ```
 
-Update `.lola/module.yml`:
-
-```yaml
-type: lola/module
-version: 0.1.0
-description: My skills collection
-
-skills:
-  - git-workflow
-  - code-review
-
-commands:
-  - review-pr
-  - quick-commit
-```
+> **Note:** Modules use auto-discovery. Skills, commands, and agents are automatically detected from the directory structure. No manifest file is required.
 
 ### 5. Add to registry and install
 
@@ -200,33 +227,19 @@ lola install my-skills
 
 ```
 my-module/
-  .lola/
-    module.yml       # Required: module manifest
-    source.yml       # Auto-generated: tracks source for updates
-  skill-name/
-    SKILL.md         # Required: skill definition
-    scripts/         # Optional: supporting files
-    templates/       # Optional: templates
+  skills/            # Skills directory
+    skill-name/
+      SKILL.md       # Required: skill definition
+      scripts/       # Optional: supporting files
+      templates/     # Optional: templates
   commands/          # Optional: slash commands
     review-pr.md
     quick-commit.md
+  agents/            # Optional: subagents
+    my-agent.md
 ```
 
-### module.yml
-
-```yaml
-type: lola/module
-version: 0.1.0
-description: What this module provides
-
-skills:
-  - skill-one
-  - skill-two
-
-commands:
-  - review-pr
-  - quick-commit
-```
+> **Note:** Modules use auto-discovery. Skills are discovered from `skills/<name>/SKILL.md`, commands from `commands/*.md`, and agents from `agents/*.md`. No manifest file is required.
 
 ### SKILL.md
 
@@ -239,7 +252,13 @@ description: When to use this skill
 # Skill Title
 
 Your instructions, workflows, and guidance for the AI assistant.
+
+Reference supporting files using relative paths:
+- `./scripts/helper.sh` - files in the same skill directory
+- `./templates/example.md` - subdirectories are supported
 ```
+
+**Supporting files:** You can include scripts, templates, examples, or any other files in your skill directory. Use relative paths like `./file` or `./scripts/helper.sh` in your `SKILL.md` to reference them. These paths are automatically rewritten for different assistant types during installation.
 
 ### Command Files
 

@@ -91,7 +91,8 @@ def install_cmd(
 
     module = Module.from_path(module_path)
     if not module:
-        console.print("[red]Invalid module: no .lola/module.yml found[/red]")
+        console.print("[red]Invalid module: no skills, commands, or agents found[/red]")
+        console.print("[dim]Expected structure: skills/<name>/SKILL.md, commands/*.md, or agents/*.md[/dim]")
         raise SystemExit(1)
 
     # Validate module structure and skill files

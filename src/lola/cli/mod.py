@@ -64,8 +64,9 @@ def _module_tree(
     tree = Tree(f"[cyan]{name}/[/cyan]")
 
     if skills:
+        skills_node = tree.add("[dim]skills/[/dim]")
         for skill in skills:
-            skill_node = tree.add(f"[green]{skill}/[/green]")
+            skill_node = skills_node.add(f"[green]{skill}/[/green]")
             skill_node.add("[dim]SKILL.md[/dim]")
 
     if commands:
@@ -223,7 +224,7 @@ def add_module(source: str, module_name: str):
     "-g",
     "--agent",
     "agent_name",
-    default=None,
+    default="example-agent",
     help="Name for an initial agent",
 )
 @click.option("--no-agent", is_flag=True, help="Do not create an initial agent")
@@ -243,15 +244,19 @@ def init_module(
     auto-discovered. Skills are folders containing SKILL.md files, commands are
     .md files in the commands/ folder, and agents are .md files in the agents/ folder.
 
+    By default, creates skills/, commands/, and agents/ directories with example
+    content. Use --no-skill, --no-command, or --no-agent to skip creating initial content.
+
     \b
     Examples:
-        lola mod init                           # Use current folder name
+        lola mod init                           # Use current folder name, create all directories
         lola mod init my-skills                 # Create my-skills/ subdirectory
         lola mod init -s code-review            # Custom skill name
-        lola mod init --no-skill                # Skip initial skill
+        lola mod init --no-skill                # Skip initial skill (but still create skills/ dir)
         lola mod init -c review-pr              # Custom command name
-        lola mod init --no-command              # Skip initial command
-        lola mod init -g my-agent               # Add an initial agent
+        lola mod init --no-command              # Skip initial command (but still create commands/ dir)
+        lola mod init -g my-agent               # Custom agent name
+        lola mod init --no-agent                # Skip initial agent (but still create agents/ dir)
     """
     if name:
         # Create a new subdirectory
@@ -266,13 +271,20 @@ def init_module(
         module_dir = Path.cwd()
         module_name = module_dir.name
 
-    # Apply --no-skill and --no-command flags
+    # Apply --no-skill, --no-command, and --no-agent flags
     final_skill_name: str | None = None if no_skill else skill_name
     final_command_name: str | None = None if no_command else command_name
+    final_agent_name: str | None = None if no_agent else agent_name
+
+    # Create directories by default (even if no initial content)
+    skills_dir = module_dir / "skills"
+    commands_dir = module_dir / "commands"
+    agents_dir = module_dir / "agents"
 
     # Create initial skill if requested
     if final_skill_name:
-        skill_dir = module_dir / final_skill_name
+        skills_dir.mkdir(exist_ok=True)
+        skill_dir = skills_dir / final_skill_name
         if skill_dir.exists():
             console.print(f"[red]Skill directory already exists: {skill_dir}[/red]")
             raise SystemExit(1)
@@ -296,10 +308,12 @@ Explain how to use this skill.
 Provide examples of the skill in action.
 """
         (skill_dir / "SKILL.md").write_text(skill_content)
+    else:
+        # Create empty skills directory if not creating a skill
+        skills_dir.mkdir(exist_ok=True)
 
     # Create initial command if requested
     if final_command_name:
-        commands_dir = module_dir / "commands"
         commands_dir.mkdir(exist_ok=True)
 
         command_content = f"""---
@@ -312,13 +326,12 @@ Prompt instructions for the {final_command_name} command.
 Use $ARGUMENTS to reference any arguments passed to the command.
 """
         (commands_dir / f"{final_command_name}.md").write_text(command_content)
-
-    # Apply --no-agent flag
-    final_agent_name: str | None = None if no_agent else agent_name
+    else:
+        # Create empty commands directory if not creating a command
+        commands_dir.mkdir(exist_ok=True)
 
     # Create initial agent if requested
     if final_agent_name:
-        agents_dir = module_dir / "agents"
         agents_dir.mkdir(exist_ok=True)
 
         agent_content = f"""---
@@ -330,6 +343,9 @@ Instructions for the {final_agent_name.replace('-', ' ').title()} agent.
 Describe the agent's purpose, capabilities, and guidelines here.
 """
         (agents_dir / f"{final_agent_name}.md").write_text(agent_content)
+    else:
+        # Create empty agents directory if not creating an agent
+        agents_dir.mkdir(exist_ok=True)
 
     console.print(f"[green]Initialized module {module_name}[/green]")
     console.print(f"  [dim]Path:[/dim] {module_dir}")
@@ -345,15 +361,17 @@ Describe the agent's purpose, capabilities, and guidelines here.
 
     steps = []
     if final_skill_name:
-        steps.append(f"Edit {final_skill_name}/SKILL.md with your skill content")
+        steps.append(f"Edit skills/{final_skill_name}/SKILL.md with your skill content")
+    else:
+        steps.append("Add skill directories under skills/ with SKILL.md files")
     if final_command_name:
         steps.append(f"Edit commands/{final_command_name}.md with your command prompt")
+    else:
+        steps.append("Add .md files to commands/ for slash commands")
     if final_agent_name:
         steps.append(f"Edit agents/{final_agent_name}.md with your agent instructions")
-    if not final_skill_name and not final_command_name and not final_agent_name:
-        steps.append("Create skill directories with SKILL.md files")
-        steps.append("Create commands/ directory with .md files for slash commands")
-        steps.append("Create agents/ directory with .md files for agents")
+    else:
+        steps.append("Add .md files to agents/ for subagents")
     steps.append(f"lola mod add {module_dir}")
 
     console.print()
