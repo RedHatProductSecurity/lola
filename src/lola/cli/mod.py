@@ -690,6 +690,34 @@ def module_info(module_name: str):
             else:
                 console.print(f"  [red]{agent_name}[/red] [dim](not found)[/dim]")
 
+    console.print()
+    console.print("[bold]MCP Servers[/bold]")
+
+    if not module.mcps:
+        console.print("  [dim](none)[/dim]")
+    else:
+        import json
+        from lola.config import MCPS_FILE
+
+        mcps_file = module.path / MCPS_FILE
+        mcps_data = {}
+        if mcps_file.exists():
+            try:
+                mcps_data = json.loads(mcps_file.read_text()).get("mcpServers", {})
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        for mcp_name in module.mcps:
+            console.print(f"  [green]{mcp_name}[/green]")
+            mcp_info = mcps_data.get(mcp_name, {})
+            cmd = mcp_info.get("command", "")
+            args = mcp_info.get("args", [])
+            if cmd:
+                cmd_str = f"{cmd} {' '.join(args[:2])}"
+                if len(args) > 2:
+                    cmd_str += " ..."
+                console.print(f"    [dim]{cmd_str[:60]}[/dim]")
+
     # Source info
     source_info = load_source_info(module.path)
     if source_info:
