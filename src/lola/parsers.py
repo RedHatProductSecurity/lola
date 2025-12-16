@@ -154,10 +154,12 @@ class ZipSourceHandler(SourceHandler):
         contents = list(tmp_path.iterdir())
         if len(contents) == 1 and contents[0].is_dir():
             return contents[0]
-        # Name doesn't matter here; caller uses module_dir.name
-        # but we still return tmp_path for flat archives.
-        _ = default_name
-        return tmp_path
+        # Flat archive - wrap contents in a directory named after the archive
+        module_dir = tmp_path / default_name
+        module_dir.mkdir()
+        for item in contents:
+            shutil.move(str(item), str(module_dir / item.name))
+        return module_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
         for path in root.rglob(SKILL_FILE):
@@ -217,8 +219,18 @@ class TarSourceHandler(SourceHandler):
         contents = list(tmp_path.iterdir())
         if len(contents) == 1 and contents[0].is_dir():
             return contents[0]
-        _ = filename
-        return tmp_path
+        # Flat archive - wrap contents in a directory named after the archive
+        # Strip common tar extensions to get a clean name
+        stem = filename
+        for ext in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tar"):
+            if stem.lower().endswith(ext):
+                stem = stem[: -len(ext)]
+                break
+        module_dir = tmp_path / stem
+        module_dir.mkdir()
+        for item in contents:
+            shutil.move(str(item), str(module_dir / item.name))
+        return module_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
         for path in root.rglob(SKILL_FILE):
