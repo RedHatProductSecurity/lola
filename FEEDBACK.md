@@ -2,7 +2,7 @@
 
 - [x] Resolve module format inconsistency (Codex #1)
 - [x] Unify competing module concepts (Codex #2) - Already resolved: docs/, modules/ removed
-- [ ] Fix release hygiene and metadata (Codex #3)
+- [x] Fix release hygiene and metadata (Codex #3)
 - [ ] Standardize error handling strategy (Claude #1)
 - [ ] Extract shared ManagedSectionTarget base class (Claude #2)
 - [ ] Refactor large functions into smaller units (Claude #3)

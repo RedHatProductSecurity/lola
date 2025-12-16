@@ -9,8 +9,8 @@ Lola is an AI Skills Package Manager that lets you write AI context/skills once 
 ## Development Commands
 
 ```bash
-# Install in development mode
-uv pip install -e .
+# Install in development mode with dev dependencies
+uv sync --group dev
 
 # Run tests
 pytest                        # All tests
