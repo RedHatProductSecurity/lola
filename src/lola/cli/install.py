@@ -360,7 +360,7 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
             instructions_dest = ctx.target.get_instructions_path(ctx.inst.project_path)
             ctx.target.remove_instructions(instructions_dest, ctx.inst.module_name)
             if verbose:
-                console.print(f"      [yellow]- instructions[/yellow] [dim](removed)[/dim]")
+                console.print("      [yellow]- instructions[/yellow] [dim](removed)[/dim]")
         return False
 
     instructions_source = ctx.source_module / INSTRUCTIONS_FILE

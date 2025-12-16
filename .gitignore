@@ -23,6 +23,13 @@ venv/
 # jj
 .jj/
 
+# Test coverage
+.coverage
+htmlcov/
+
+# Lola project-local cache
+.lola/
+
 # AI assistant files (managed by lola)
 .claude/
 .cursor/

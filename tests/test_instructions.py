@@ -1,19 +1,16 @@
 """Tests for the module instructions feature."""
 
 import shutil
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
-from lola.models import Installation, InstallationRegistry, Module, INSTRUCTIONS_FILE
+from lola.models import Installation, InstallationRegistry, Module
 from lola.targets import (
     ClaudeCodeTarget,
     CursorTarget,
     GeminiTarget,
     OpenCodeTarget,
-    ManagedInstructionsTarget,
 )
 
 
