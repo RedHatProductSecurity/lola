@@ -382,6 +382,10 @@ def load_source_info(module_path: Path) -> Optional[dict]:
 def update_module(module_path: Path) -> str:
     """Update a module from its original source.
 
+    This function fetches into a temporary location first, then atomically
+    swaps the new module into place. This ensures the original module is
+    preserved if the fetch fails.
+
     Returns:
         Success message describing the update.
 
@@ -416,21 +420,50 @@ def update_module(module_path: Path) -> str:
     module_name = module_path.name
     dest_dir = module_path.parent
 
-    if module_path.exists():
-        shutil.rmtree(module_path)
+    # Fetch into a temporary directory first (atomic update pattern)
+    with tempfile.TemporaryDirectory(dir=dest_dir) as tmp_dir:
+        tmp_path = Path(tmp_dir)
 
-    try:
-        new_path = handler.fetch(source, dest_dir)
+        try:
+            new_path = handler.fetch(source, tmp_path)
 
-        if new_path.name != module_name:
-            final_path = dest_dir / module_name
-            if new_path != final_path:
-                new_path.rename(final_path)
-                new_path = final_path
+            # Rename to match expected module name if needed
+            if new_path.name != module_name:
+                renamed_path = tmp_path / module_name
+                new_path.rename(renamed_path)
+                new_path = renamed_path
 
-        save_source_info(new_path, source, source_type)
-        return f"Updated from {source_type} source"
-    except Exception as e:
-        raise SourceError(source, f"Update failed: {e}") from e
+            # Save source info to the new module
+            save_source_info(new_path, source, source_type)
+
+            # Atomic swap: move old module to backup, move new module in place
+            backup_path = dest_dir / f".{module_name}.backup"
+
+            # Remove any stale backup from previous failed updates
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+
+            # Move current module to backup (if it exists)
+            if module_path.exists():
+                module_path.rename(backup_path)
+
+            try:
+                # Move new module into place
+                shutil.move(str(new_path), str(module_path))
+            except Exception:
+                # Restore backup on failure
+                if backup_path.exists():
+                    backup_path.rename(module_path)
+                raise
+
+            # Success - remove backup
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+
+            return f"Updated from {source_type} source"
+        except SourceError:
+            raise
+        except Exception as e:
+            raise SourceError(source, f"Update failed: {e}") from e
 
 
