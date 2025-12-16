@@ -393,7 +393,7 @@ class TestModInit:
             os.chdir(original_dir)
 
     def test_init_skill_already_exists(self, cli_runner, tmp_path):
-        """Fail when default skill directory already exists."""
+        """Warn and skip when default skill directory already exists."""
         import os
 
         original_dir = os.getcwd()
@@ -405,7 +405,8 @@ class TestModInit:
             (tmp_path / "skills" / "example-skill").mkdir()
             result = cli_runner.invoke(mod, ["init"])
 
-            assert result.exit_code == 1
+            # Command should succeed but warn about skipping existing skill
+            assert result.exit_code == 0
             assert "already exists" in result.output
         finally:
             os.chdir(original_dir)

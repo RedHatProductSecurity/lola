@@ -681,3 +681,4 @@ Beta content
         # Should only have one module section
         assert content.count("lola:module:test-module:start") == 1
 
+
