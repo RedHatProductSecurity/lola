@@ -259,3 +259,4 @@ class UnknownAssistantError(ConfigurationError):
         message = f"Unknown assistant: {assistant}. Supported: {supported}"
         super().__init__(message)
 
+

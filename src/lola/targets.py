@@ -51,6 +51,10 @@ class AssistantTarget(Protocol):
         """Get the agent output path. Returns None if agents not supported."""
         ...
 
+    def get_instructions_path(self, project_path: str) -> Path:
+        """Get the instructions file path for this assistant."""
+        ...
+
     def generate_skill(
         self,
         source_path: Path,
@@ -81,8 +85,21 @@ class AssistantTarget(Protocol):
         """Generate agent file for this assistant."""
         ...
 
+    def generate_instructions(
+        self,
+        source_path: Path,
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Generate/update module instructions in the assistant's instruction file."""
+        ...
+
     def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
         """Remove skill file(s) for this assistant."""
+        ...
+
+    def remove_instructions(self, dest_path: Path, module_name: str) -> bool:
+        """Remove a module's instructions from the instruction file."""
         ...
 
     def generate_skills_batch(

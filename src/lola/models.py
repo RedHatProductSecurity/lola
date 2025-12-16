@@ -97,6 +97,9 @@ class Agent:
         )
 
 
+INSTRUCTIONS_FILE = "AGENTS.md"
+
+
 @dataclass
 class Module:
     """Represents a lola module."""
@@ -106,6 +109,7 @@ class Module:
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
+    has_instructions: bool = False
 
     @classmethod
     def from_path(cls, module_path: Path) -> Optional["Module"]:
@@ -143,8 +147,12 @@ class Module:
             for agent_file in agents_dir.glob("*.md"):
                 agents.append(agent_file.stem)
 
-        # Only valid if has at least one skill, command, or agent
-        if not skills and not commands and not agents:
+        # Check for module instructions (AGENTS.md)
+        instructions_file = module_path / INSTRUCTIONS_FILE
+        has_instructions = instructions_file.exists() and instructions_file.stat().st_size > 0
+
+        # Only valid if has at least one skill, command, agent, or instructions
+        if not skills and not commands and not agents and not has_instructions:
             return None
 
         return cls(
@@ -153,6 +161,7 @@ class Module:
             skills=sorted(skills),
             commands=sorted(commands),
             agents=sorted(agents),
+            has_instructions=has_instructions,
         )
 
     def _skills_root_dir(self) -> Path:
@@ -244,6 +253,7 @@ class Installation:
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
+    has_instructions: bool = False
 
     def to_dict(self) -> dict:
         """Convert to dictionary for YAML serialization."""
@@ -254,6 +264,7 @@ class Installation:
             "skills": self.skills,
             "commands": self.commands,
             "agents": self.agents,
+            "has_instructions": self.has_instructions,
         }
         if self.project_path:
             result["project_path"] = self.project_path
@@ -270,6 +281,7 @@ class Installation:
             skills=data.get("skills", []),
             commands=data.get("commands", []),
             agents=data.get("agents", []),
+            has_instructions=data.get("has_instructions", False),
         )
 
 
