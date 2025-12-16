@@ -5,7 +5,7 @@
 - [x] Fix release hygiene and metadata (Codex #3)
 - [ ] Standardize error handling strategy (Claude #1)
 - [x] Extract shared ManagedSectionTarget base class (Claude #2)
-- [ ] Refactor large functions into smaller units (Claude #3)
+- [x] Refactor large functions into smaller units (Claude #3)
 - [x] Fix leaky abstraction in Strategy pattern (Gemini #1)
 - [x] Add tests for concrete target implementations (Gemini #2)
 - [ ] Improve error handling and observability (Gemini #3)

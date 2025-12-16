@@ -8,7 +8,6 @@ This module tests:
 - Helper functions: path rewriting, skill description extraction
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ from lola.targets import (
     ClaudeCodeTarget,
     CursorTarget,
     GeminiTarget,
-    ManagedSectionTarget,
     OpenCodeTarget,
     _convert_to_gemini_args,
     _get_skill_description,

@@ -4,6 +4,7 @@ Install CLI commands.
 Commands for installing, uninstalling, updating, and listing module installations.
 """
 
+from dataclasses import dataclass, field
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -12,8 +13,9 @@ import click
 from rich.console import Console
 
 from lola.config import MODULES_DIR
-from lola.models import Module
+from lola.models import Installation, Module
 from lola.targets import (
+    AssistantTarget,
     TARGETS,
     _get_skill_description,
     _skill_source_dir,
@@ -25,6 +27,362 @@ from lola.targets import (
 from lola.utils import ensure_lola_dirs, get_local_modules_path
 
 console = Console()
+
+
+# =============================================================================
+# Update command helper types and functions
+# =============================================================================
+
+
+@dataclass
+class UpdateResult:
+    """Result of updating a single installation."""
+
+    skills_ok: int = 0
+    skills_failed: int = 0
+    commands_ok: int = 0
+    commands_failed: int = 0
+    agents_ok: int = 0
+    agents_failed: int = 0
+    orphans_removed: int = 0
+    error: str | None = None
+
+
+@dataclass
+class UpdateContext:
+    """Context for update operations on a single installation."""
+
+    inst: Installation
+    global_module: Module
+    source_module: Path
+    target: AssistantTarget
+    current_skills: set[str] = field(default_factory=set)
+    current_commands: set[str] = field(default_factory=set)
+    current_agents: set[str] = field(default_factory=set)
+    orphaned_skills: set[str] = field(default_factory=set)
+    orphaned_commands: set[str] = field(default_factory=set)
+    orphaned_agents: set[str] = field(default_factory=set)
+
+
+def _validate_installation_for_update(inst: Installation) -> tuple[bool, str | None]:
+    """
+    Validate that an installation can be updated.
+
+    Returns (is_valid, error_message).
+    """
+    # Check if project path still exists for project-scoped installations
+    if inst.scope == "project" and inst.project_path:
+        if not Path(inst.project_path).exists():
+            return False, "project path no longer exists"
+
+    # For project scope, project_path is required
+    if inst.scope == "project" and not inst.project_path:
+        return False, "project scope requires project path"
+
+    # Get the global module to refresh from
+    global_module_path = MODULES_DIR / inst.module_name
+    if not global_module_path.exists():
+        return False, "module not found in registry"
+
+    global_module = Module.from_path(global_module_path)
+    if not global_module:
+        return False, "invalid module"
+
+    # Validate module structure and skill files
+    is_valid, errors = global_module.validate()
+    if not is_valid:
+        return False, f"validation errors: {', '.join(errors)}"
+
+    return True, None
+
+
+def _build_update_context(inst: Installation) -> UpdateContext | None:
+    """
+    Build the context needed for updating an installation.
+
+    Returns None if the installation cannot be updated.
+    """
+    global_module_path = MODULES_DIR / inst.module_name
+    global_module = Module.from_path(global_module_path)
+    if not global_module:
+        return None
+
+    local_modules = get_local_modules_path(inst.project_path)
+    target = get_target(inst.assistant)
+
+    # Refresh the local copy from global module
+    source_module = copy_module_to_local(global_module, local_modules)
+
+    # Compute current skills, commands, and agents from the module (with prefixes)
+    current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
+    current_commands = set(global_module.commands)
+    current_agents = set(global_module.agents)
+
+    # Find orphaned items (in registry but not in module)
+    orphaned_skills = set(inst.skills) - current_skills
+    orphaned_commands = set(inst.commands) - current_commands
+    orphaned_agents = set(inst.agents) - current_agents
+
+    return UpdateContext(
+        inst=inst,
+        global_module=global_module,
+        source_module=source_module,
+        target=target,
+        current_skills=current_skills,
+        current_commands=current_commands,
+        current_agents=current_agents,
+        orphaned_skills=orphaned_skills,
+        orphaned_commands=orphaned_commands,
+        orphaned_agents=orphaned_agents,
+    )
+
+
+def _remove_orphaned_skills(
+    ctx: UpdateContext, skill_dest: Path, verbose: bool
+) -> int:
+    """Remove orphaned skill files. Returns count of removed items."""
+    if not ctx.orphaned_skills or ctx.target.uses_managed_section:
+        return 0
+
+    removed = 0
+    for skill in ctx.orphaned_skills:
+        if ctx.target.remove_skill(skill_dest, skill):
+            removed += 1
+            if verbose:
+                console.print(f"      [yellow]- {skill}[/yellow] [dim](orphaned)[/dim]")
+    return removed
+
+
+def _remove_orphaned_commands(ctx: UpdateContext, verbose: bool) -> int:
+    """Remove orphaned command files. Returns count of removed items."""
+    if not ctx.orphaned_commands:
+        return 0
+
+    removed = 0
+    command_dest = ctx.target.get_command_path(ctx.inst.project_path or "")
+    for cmd_name in ctx.orphaned_commands:
+        filename = ctx.target.get_command_filename(ctx.inst.module_name, cmd_name)
+        orphan_file = command_dest / filename
+        if orphan_file.exists():
+            orphan_file.unlink()
+            removed += 1
+            if verbose:
+                console.print(
+                    f"      [yellow]- /{ctx.inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
+                )
+    return removed
+
+
+def _remove_orphaned_agents(ctx: UpdateContext, verbose: bool) -> int:
+    """Remove orphaned agent files. Returns count of removed items."""
+    if not ctx.orphaned_agents:
+        return 0
+
+    agent_dest = ctx.target.get_agent_path(ctx.inst.project_path or "")
+    if not agent_dest:
+        return 0
+
+    removed = 0
+    for agent_name in ctx.orphaned_agents:
+        filename = ctx.target.get_agent_filename(ctx.inst.module_name, agent_name)
+        orphan_file = agent_dest / filename
+        if orphan_file.exists():
+            orphan_file.unlink()
+            removed += 1
+            if verbose:
+                console.print(
+                    f"      [yellow]- @{ctx.inst.module_name}-{agent_name}[/yellow] [dim](orphaned)[/dim]"
+                )
+    return removed
+
+
+def _update_skills(
+    ctx: UpdateContext, skill_dest: Path, verbose: bool
+) -> tuple[int, int]:
+    """
+    Update skills for an installation.
+
+    Returns (success_count, failed_count).
+    """
+    if not ctx.global_module.skills:
+        return 0, 0
+
+    skills_ok = 0
+    skills_failed = 0
+
+    if ctx.target.uses_managed_section:
+        # Managed section targets: Update entries in GEMINI.md/AGENTS.md
+        batch_skills = []
+        for original_skill in ctx.global_module.skills:
+            prefixed_skill = f"{ctx.inst.module_name}-{original_skill}"
+            source = _skill_source_dir(ctx.source_module, original_skill)
+            if source.exists():
+                description = _get_skill_description(source)
+                batch_skills.append((original_skill, description, source))
+                skills_ok += 1
+                if verbose:
+                    console.print(f"      [green]{prefixed_skill}[/green]")
+            else:
+                skills_failed += 1
+                if verbose:
+                    console.print(
+                        f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                    )
+        if batch_skills:
+            ctx.target.generate_skills_batch(
+                skill_dest,
+                ctx.inst.module_name,
+                batch_skills,
+                ctx.inst.project_path,
+            )
+    else:
+        for original_skill in ctx.global_module.skills:
+            prefixed_skill = f"{ctx.inst.module_name}-{original_skill}"
+            source = _skill_source_dir(ctx.source_module, original_skill)
+
+            success = ctx.target.generate_skill(
+                source, skill_dest, prefixed_skill, ctx.inst.project_path
+            )
+
+            if success:
+                skills_ok += 1
+                if verbose:
+                    console.print(f"      [green]{prefixed_skill}[/green]")
+            else:
+                skills_failed += 1
+                if verbose:
+                    console.print(
+                        f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
+                    )
+
+    return skills_ok, skills_failed
+
+
+def _update_commands(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
+    """
+    Update commands for an installation.
+
+    Returns (success_count, failed_count).
+    """
+    if not ctx.global_module.commands:
+        return 0, 0
+
+    commands_ok = 0
+    commands_failed = 0
+
+    command_dest = ctx.target.get_command_path(ctx.inst.project_path or "")
+    commands_dir = ctx.source_module / "commands"
+
+    for cmd_name in ctx.global_module.commands:
+        source = commands_dir / f"{cmd_name}.md"
+        success = ctx.target.generate_command(
+            source, command_dest, cmd_name, ctx.inst.module_name
+        )
+
+        if success:
+            commands_ok += 1
+            if verbose:
+                console.print(f"      [green]/{ctx.inst.module_name}-{cmd_name}[/green]")
+        else:
+            commands_failed += 1
+            if verbose:
+                console.print(
+                    f"      [red]{cmd_name}[/red] [dim](source not found)[/dim]"
+                )
+
+    return commands_ok, commands_failed
+
+
+def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
+    """
+    Update agents for an installation.
+
+    Returns (success_count, failed_count).
+    """
+    if not ctx.global_module.agents or not ctx.target.supports_agents:
+        return 0, 0
+
+    agent_dest = ctx.target.get_agent_path(ctx.inst.project_path or "")
+    if not agent_dest:
+        return 0, 0
+
+    agents_ok = 0
+    agents_failed = 0
+
+    agents_dir = ctx.source_module / "agents"
+    for agent_name in ctx.global_module.agents:
+        source = agents_dir / f"{agent_name}.md"
+        success = ctx.target.generate_agent(
+            source, agent_dest, agent_name, ctx.inst.module_name
+        )
+
+        if success:
+            agents_ok += 1
+            if verbose:
+                console.print(f"      [green]@{ctx.inst.module_name}-{agent_name}[/green]")
+        else:
+            agents_failed += 1
+            if verbose:
+                console.print(
+                    f"      [red]{agent_name}[/red] [dim](source not found)[/dim]"
+                )
+
+    return agents_ok, agents_failed
+
+
+def _process_single_installation(
+    ctx: UpdateContext, verbose: bool
+) -> UpdateResult:
+    """
+    Process a single installation update.
+
+    Removes orphaned items and regenerates all skills, commands, and agents.
+    """
+    result = UpdateResult()
+    skill_dest = ctx.target.get_skill_path(ctx.inst.project_path or "")
+
+    # Remove orphaned items
+    result.orphans_removed += _remove_orphaned_skills(ctx, skill_dest, verbose)
+    result.orphans_removed += _remove_orphaned_commands(ctx, verbose)
+    result.orphans_removed += _remove_orphaned_agents(ctx, verbose)
+
+    # Update skills
+    result.skills_ok, result.skills_failed = _update_skills(ctx, skill_dest, verbose)
+
+    # Update commands
+    result.commands_ok, result.commands_failed = _update_commands(ctx, verbose)
+
+    # Update agents
+    result.agents_ok, result.agents_failed = _update_agents(ctx, verbose)
+
+    return result
+
+
+def _format_update_summary(result: UpdateResult) -> str:
+    """Format the summary string for an update result."""
+    parts = []
+    if result.skills_ok > 0:
+        parts.append(f"{result.skills_ok} {'skill' if result.skills_ok == 1 else 'skills'}")
+    if result.commands_ok > 0:
+        parts.append(
+            f"{result.commands_ok} {'command' if result.commands_ok == 1 else 'commands'}"
+        )
+    if result.agents_ok > 0:
+        parts.append(f"{result.agents_ok} {'agent' if result.agents_ok == 1 else 'agents'}")
+
+    summary = ", ".join(parts) if parts else "no items"
+
+    # Build status indicators
+    status_parts = []
+    total_failed = result.skills_failed + result.commands_failed + result.agents_failed
+    if total_failed > 0:
+        status_parts.append(f"[red]{total_failed} failed[/red]")
+    if result.orphans_removed > 0:
+        status_parts.append(f"[yellow]{result.orphans_removed} orphaned removed[/yellow]")
+
+    status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
+
+    return f"({summary}){status_suffix}"
 
 
 @click.command(name="install")
@@ -367,7 +725,7 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
         return
 
     # Group installations by module name for cleaner display
-    by_module = {}
+    by_module: dict[str, list[Installation]] = {}
     for inst in installations:
         if inst.module_name not in by_module:
             by_module[inst.module_name] = []
@@ -377,14 +735,13 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
     console.print(f"\n[bold]Updating {len(by_module)} {module_word}[/bold]")
     console.print()
 
-    # Track stale installations and errors
-    stale_installations = []
+    stale_installations: list[Installation] = []
 
     for mod_name, mod_installations in by_module.items():
         console.print(f"[bold]{mod_name}[/bold]")
 
         # Group by (scope, path) for display
-        by_scope_path = {}
+        by_scope_path: dict[tuple[str, str | None], list[Installation]] = {}
         for inst in mod_installations:
             key = (inst.scope, inst.project_path)
             if key not in by_scope_path:
@@ -397,232 +754,32 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 console.print(f'  [dim]path:[/dim] "{project_path}"')
 
             for inst in scope_insts:
-                # Check if project path still exists for project-scoped installations
-                if inst.scope == "project" and inst.project_path:
-                    if not Path(inst.project_path).exists():
-                        console.print(
-                            f"    [red]{inst.assistant}: project path no longer exists[/red]"
-                        )
-                        stale_installations.append(inst)
-                        continue
-
-                # Get the global module to refresh from
-                global_module_path = MODULES_DIR / inst.module_name
-                if not global_module_path.exists():
-                    console.print(f"    [red]{inst.assistant}: module not found in registry[/red]")
-                    continue
-
-                global_module = Module.from_path(global_module_path)
-                if not global_module:
-                    console.print(
-                        f"    [red]{inst.assistant}: invalid module[/red]"
-                    )
-                    continue
-
-                # Validate module structure and skill files
-                is_valid, errors = global_module.validate()
+                # Validate installation
+                is_valid, error_msg = _validate_installation_for_update(inst)
                 if not is_valid:
-                    console.print(
-                        f"    [red]{inst.assistant}: validation errors[/red]"
-                    )
-                    for err in errors:
-                        console.print(f"      [red]{err}[/red]")
+                    console.print(f"    [red]{inst.assistant}: {error_msg}[/red]")
+                    if error_msg == "project path no longer exists":
+                        stale_installations.append(inst)
                     continue
 
-                local_modules = get_local_modules_path(inst.project_path)
-                target = get_target(inst.assistant)
+                # Build context for update
+                ctx = _build_update_context(inst)
+                if not ctx:
+                    console.print(f"    [red]{inst.assistant}: failed to build context[/red]")
+                    continue
 
-                # Refresh the local copy from global module
-                source_module = copy_module_to_local(global_module, local_modules)
-
-                skill_dest = target.get_skill_path(inst.project_path)
-
-                # Compute current skills, commands, and agents from the module (with prefixes)
-                current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
-                current_commands = set(global_module.commands)
-                current_agents = set(global_module.agents)
-
-                # Find orphaned items (in registry but not in module)
-                orphaned_skills = set(inst.skills) - current_skills
-                orphaned_commands = set(inst.commands) - current_commands
-                orphaned_agents = set(inst.agents) - current_agents
-
-                # Track results for this installation
-                skills_ok = 0
-                skills_failed = 0
-                commands_ok = 0
-                commands_failed = 0
-                agents_ok = 0
-                agents_failed = 0
-                orphans_removed = 0
-
-                # Remove orphaned skill files (not for managed section targets - they rebuild the whole section)
-                if orphaned_skills and not target.uses_managed_section:
-                    for skill in orphaned_skills:
-                        if target.remove_skill(skill_dest, skill):
-                            orphans_removed += 1
-                            if verbose:
-                                console.print(
-                                    f"      [yellow]- {skill}[/yellow] [dim](orphaned)[/dim]"
-                                )
-
-                # Remove orphaned command files
-                if orphaned_commands:
-                    command_dest = target.get_command_path(inst.project_path)
-                    for cmd_name in orphaned_commands:
-                        filename = target.get_command_filename(inst.module_name, cmd_name)
-                        orphan_file = command_dest / filename
-                        if orphan_file.exists():
-                            orphan_file.unlink()
-                            orphans_removed += 1
-                            if verbose:
-                                console.print(
-                                    f"      [yellow]- /{inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
-                                )
-
-                # Remove orphaned agent files
-                if orphaned_agents:
-                    agent_dest = target.get_agent_path(inst.project_path)
-                    if agent_dest:
-                        for agent_name in orphaned_agents:
-                            filename = target.get_agent_filename(inst.module_name, agent_name)
-                            orphan_file = agent_dest / filename
-                            if orphan_file.exists():
-                                orphan_file.unlink()
-                                orphans_removed += 1
-                                if verbose:
-                                    console.print(
-                                        f"      [yellow]- @{inst.module_name}-{agent_name}[/yellow] [dim](orphaned)[/dim]"
-                                    )
-
-                # Update skills - iterate over CURRENT module skills, not old registry
-                if global_module.skills:
-                    if target.uses_managed_section:
-                        # Managed section targets: Update entries in GEMINI.md/AGENTS.md
-                        batch_skills = []
-                        for original_skill in global_module.skills:
-                            prefixed_skill = f"{inst.module_name}-{original_skill}"
-                            source = _skill_source_dir(source_module, original_skill)
-                            if source.exists():
-                                description = _get_skill_description(source)
-                                batch_skills.append((original_skill, description, source))
-                                skills_ok += 1
-                                if verbose:
-                                    console.print(f"      [green]{prefixed_skill}[/green]")
-                            else:
-                                skills_failed += 1
-                                if verbose:
-                                    console.print(
-                                        f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
-                                    )
-                        if batch_skills:
-                            target.generate_skills_batch(
-                                skill_dest,
-                                inst.module_name,
-                                batch_skills,
-                                inst.project_path,
-                            )
-                    else:
-                        for original_skill in global_module.skills:
-                            prefixed_skill = f"{inst.module_name}-{original_skill}"
-                            source = _skill_source_dir(source_module, original_skill)
-
-                            success = target.generate_skill(
-                                source, skill_dest, prefixed_skill, inst.project_path
-                            )
-
-                            if success:
-                                skills_ok += 1
-                                if verbose:
-                                    console.print(f"      [green]{prefixed_skill}[/green]")
-                            else:
-                                skills_failed += 1
-                                if verbose:
-                                    console.print(
-                                        f"      [red]{original_skill}[/red] [dim](source not found)[/dim]"
-                                    )
-
-                # Update commands - iterate over CURRENT module commands, not old registry
-                if global_module.commands:
-                    command_dest = target.get_command_path(inst.project_path)
-                    commands_dir = source_module / "commands"
-                    for cmd_name in global_module.commands:
-                        source = commands_dir / f"{cmd_name}.md"
-                        success = target.generate_command(
-                            source, command_dest, cmd_name, inst.module_name
-                        )
-
-                        if success:
-                            commands_ok += 1
-                            if verbose:
-                                console.print(
-                                    f"      [green]/{inst.module_name}-{cmd_name}[/green]"
-                                )
-                        else:
-                            commands_failed += 1
-                            if verbose:
-                                console.print(
-                                    f"      [red]{cmd_name}[/red] [dim](source not found)[/dim]"
-                                )
-
-                # Update agents
-                if global_module.agents and target.supports_agents:
-                    agent_dest = target.get_agent_path(inst.project_path)
-
-                    if agent_dest:
-                        agents_dir = source_module / "agents"
-                        for agent_name in global_module.agents:
-                            source = agents_dir / f"{agent_name}.md"
-                            success = target.generate_agent(
-                                source, agent_dest, agent_name, inst.module_name
-                            )
-
-                            if success:
-                                agents_ok += 1
-                                if verbose:
-                                    console.print(
-                                        f"      [green]@{inst.module_name}-{agent_name}[/green]"
-                                    )
-                            else:
-                                agents_failed += 1
-                                if verbose:
-                                    console.print(
-                                        f"      [red]{agent_name}[/red] [dim](source not found)[/dim]"
-                                    )
+                # Process the installation update
+                result = _process_single_installation(ctx, verbose)
 
                 # Update the registry with current skills/commands/agents
-                inst.skills = list(current_skills)
-                inst.commands = list(current_commands)
-                inst.agents = list(current_agents)
+                inst.skills = list(ctx.current_skills)
+                inst.commands = list(ctx.current_commands)
+                inst.agents = list(ctx.current_agents)
                 registry.add(inst)
 
                 # Print summary line for this installation
-                parts = []
-                if skills_ok > 0:
-                    parts.append(f"{skills_ok} {('skill' if skills_ok == 1 else 'skills')}")
-                if commands_ok > 0:
-                    parts.append(
-                        f"{commands_ok} {('command' if commands_ok == 1 else 'commands')}"
-                    )
-                if agents_ok > 0:
-                    parts.append(f"{agents_ok} {('agent' if agents_ok == 1 else 'agents')}")
-
-                summary = ", ".join(parts) if parts else "no items"
-
-                # Build status indicators
-                status_parts = []
-                if skills_failed > 0 or commands_failed > 0 or agents_failed > 0:
-                    status_parts.append(
-                        f"[red]{skills_failed + commands_failed + agents_failed} failed[/red]"
-                    )
-                if orphans_removed > 0:
-                    status_parts.append(f"[yellow]{orphans_removed} orphaned removed[/yellow]")
-
-                status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
-
-                console.print(
-                    f"    [green]{inst.assistant}[/green] [dim]({summary}){status_suffix}[/dim]"
-                )
+                summary = _format_update_summary(result)
+                console.print(f"    [green]{inst.assistant}[/green] [dim]{summary}[/dim]")
 
     console.print()
     if stale_installations:
