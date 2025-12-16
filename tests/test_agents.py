@@ -208,7 +208,8 @@ Instructions.
         output_file = dest_dir / "mymodule-myagent.md"
         assert output_file.exists()
         content = output_file.read_text()
-        assert "name: myagent" in content
+        # Claude Code requires name to match the filename for @agent-name references
+        assert "name: mymodule-myagent" in content
         assert "Instructions." in content
 
     def test_generate_claude_agent_missing_source(self, tmp_path):
