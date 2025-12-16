@@ -6,12 +6,21 @@ Commands for adding, removing, and managing lola modules.
 
 import shutil
 from pathlib import Path
+from typing import NoReturn
 
 import click
 from rich.console import Console
 from rich.tree import Tree
 
 from lola.config import MODULES_DIR, INSTALLED_FILE
+from lola.exceptions import (
+    LolaError,
+    ModuleNameError,
+    ModuleNotFoundError,
+    PathExistsError,
+    SourceError,
+    UnsupportedSourceError,
+)
 from lola.models import Module, InstallationRegistry
 from lola.targets import get_target
 from lola.parsers import (
@@ -25,6 +34,12 @@ from lola.parsers import (
 from lola.utils import ensure_lola_dirs, get_local_modules_path
 
 console = Console()
+
+
+def _handle_lola_error(e: LolaError) -> NoReturn:
+    """Handle a LolaError by printing an error message and exiting."""
+    console.print(f"[red]{e}[/red]")
+    raise SystemExit(1)
 
 
 def list_registered_modules() -> list[Module]:
@@ -122,11 +137,7 @@ def add_module(source: str, module_name: str):
 
     source_type = detect_source_type(source)
     if source_type == "unknown":
-        console.print(f"[red]Cannot determine source type for: {source}[/red]")
-        console.print(
-            "[dim]Supported: git repos, .zip files, .tar/.tar.gz files, or local folders[/dim]"
-        )
-        raise SystemExit(1)
+        _handle_lola_error(UnsupportedSourceError(source))
 
     console.print(f"Adding module from {source_type}...")
 
@@ -134,6 +145,8 @@ def add_module(source: str, module_name: str):
         module_path = fetch_module(source, MODULES_DIR)
         # Save source info for future updates
         save_source_info(module_path, source, source_type)
+    except LolaError as e:
+        _handle_lola_error(e)
     except Exception as e:
         console.print(f"[red]Failed to fetch module: {e}[/red]")
         raise SystemExit(1)
@@ -143,12 +156,11 @@ def add_module(source: str, module_name: str):
         # Validate the provided module name to prevent directory traversal
         try:
             module_name = validate_module_name(module_name)
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
+        except ModuleNameError as e:
             # Clean up the fetched module
             if module_path.exists():
                 shutil.rmtree(module_path)
-            raise SystemExit(1)
+            _handle_lola_error(e)
 
         new_path = MODULES_DIR / module_name
         if new_path.exists():
@@ -262,8 +274,7 @@ def init_module(
         # Create a new subdirectory
         module_dir = Path.cwd() / name
         if module_dir.exists():
-            console.print(f"[red]Directory already exists: {module_dir}[/red]")
-            raise SystemExit(1)
+            _handle_lola_error(PathExistsError(module_dir, "Directory"))
         module_dir.mkdir(parents=True)
         module_name = name
     else:
@@ -286,8 +297,7 @@ def init_module(
         skills_dir.mkdir(exist_ok=True)
         skill_dir = skills_dir / final_skill_name
         if skill_dir.exists():
-            console.print(f"[red]Skill directory already exists: {skill_dir}[/red]")
-            raise SystemExit(1)
+            _handle_lola_error(PathExistsError(skill_dir, "Skill directory"))
         skill_dir.mkdir()
 
         skill_content = f"""---
@@ -397,7 +407,7 @@ def remove_module(module_name: str, force: bool):
     if not module_path.exists():
         console.print(f"[red]Module '{module_name}' not found[/red]")
         console.print("[dim]Use 'lola mod ls' to see available modules[/dim]")
-        raise SystemExit(1)
+        _handle_lola_error(ModuleNotFoundError(module_name))
 
     # Check for installations
     registry = InstallationRegistry(INSTALLED_FILE)
@@ -518,8 +528,7 @@ def module_info(module_name: str):
 
     module_path = MODULES_DIR / module_name
     if not module_path.exists():
-        console.print(f"[red]Module '{module_name}' not found[/red]")
-        raise SystemExit(1)
+        _handle_lola_error(ModuleNotFoundError(module_name))
 
     module = Module.from_path(module_path)
     if not module:
@@ -634,13 +643,11 @@ def update_module_cmd(module_name: str | None):
         # Update specific module
         module_path = MODULES_DIR / module_name
         if not module_path.exists():
-            console.print(f"[red]Module '{module_name}' not found[/red]")
-            raise SystemExit(1)
+            _handle_lola_error(ModuleNotFoundError(module_name))
 
         console.print(f"Updating {module_name}...")
-        success, message = update_module(module_path)
-
-        if success:
+        try:
+            message = update_module(module_path)
             console.print(f"[green]{message}[/green]")
 
             # Show updated module info
@@ -650,9 +657,8 @@ def update_module_cmd(module_name: str | None):
 
             console.print()
             console.print("[dim]Run 'lola update' to regenerate assistant files[/dim]")
-        else:
-            console.print(f"[red]{message}[/red]")
-            raise SystemExit(1)
+        except SourceError as e:
+            _handle_lola_error(e)
     else:
         # Update all modules
         modules = list_registered_modules()
@@ -669,13 +675,12 @@ def update_module_cmd(module_name: str | None):
 
         for module in modules:
             console.print(f"  [cyan]{module.name}[/cyan]")
-            success, message = update_module(module.path)
-
-            if success:
+            try:
+                message = update_module(module.path)
                 console.print(f"    [green]{message}[/green]")
                 updated += 1
-            else:
-                console.print(f"    [red]{message}[/red]")
+            except SourceError as e:
+                console.print(f"    [red]{e}[/red]")
                 failed += 1
 
         console.print()

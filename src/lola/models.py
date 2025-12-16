@@ -10,6 +10,7 @@ import yaml
 
 from lola.config import SKILL_FILE
 from lola import frontmatter as fm
+from lola.exceptions import ValidationError
 
 SKILLS_DIRNAME = "skills"
 
@@ -219,6 +220,17 @@ class Module:
                     errors.append(f"agents/{agent_name}.md: {err}")
 
         return len(errors) == 0, errors
+
+    def validate_or_raise(self) -> None:
+        """
+        Validate the module structure.
+
+        Raises:
+            ValidationError: If the module has validation errors.
+        """
+        is_valid, errors = self.validate()
+        if not is_valid:
+            raise ValidationError(self.name, errors)
 
 
 @dataclass

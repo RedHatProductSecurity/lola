@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from lola.exceptions import UnknownAssistantError
 from lola.targets import (
     ClaudeCodeTarget,
     CursorTarget,
@@ -875,13 +876,13 @@ class TestGetTarget:
         assert isinstance(get_target("opencode"), OpenCodeTarget)
 
     def test_raises_for_unknown_assistant(self):
-        """Should raise ValueError for unknown assistant."""
-        with pytest.raises(ValueError, match="Unknown assistant"):
+        """Should raise UnknownAssistantError for unknown assistant."""
+        with pytest.raises(UnknownAssistantError, match="Unknown assistant"):
             get_target("unknown-assistant")
 
     def test_error_message_lists_supported_assistants(self):
         """Error message should list supported assistants."""
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(UnknownAssistantError) as exc_info:
             get_target("bad")
         assert "claude-code" in str(exc_info.value)
         assert "cursor" in str(exc_info.value)

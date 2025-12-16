@@ -3,7 +3,9 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 
+from lola.exceptions import ConfigurationError
 from lola.utils import (
     ensure_lola_dirs,
     get_local_modules_path,
@@ -77,16 +79,12 @@ class TestGetLocalModulesPath:
 
     def test_user_scope(self):
         """User scope is not supported (project-only)."""
-        import pytest
-
-        with pytest.raises(ValueError, match="Project path is required"):
+        with pytest.raises(ConfigurationError, match="Project path is required"):
             get_local_modules_path(None)
 
     def test_empty_string_treated_as_falsy(self):
         """Empty string is not a valid project path."""
-        import pytest
-
-        with pytest.raises(ValueError, match="Project path is required"):
+        with pytest.raises(ConfigurationError, match="Project path is required"):
             get_local_modules_path("")
 
     def test_returns_path_object(self, tmp_path):

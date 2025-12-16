@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import yaml
 
+from lola.exceptions import ModuleNameError, SecurityError, SourceError, UnsupportedSourceError
 from lola.parsers import (
     download_file,
     validate_module_name,
@@ -37,33 +38,33 @@ class TestValidateModuleName:
 
     def test_empty_name(self):
         """Reject empty names."""
-        with pytest.raises(ValueError, match="cannot be empty"):
+        with pytest.raises(ModuleNameError, match="cannot be empty"):
             validate_module_name("")
 
     def test_path_traversal_dot(self):
         """Reject . and .. names."""
-        with pytest.raises(ValueError, match="path traversal"):
+        with pytest.raises(ModuleNameError, match="path traversal"):
             validate_module_name(".")
-        with pytest.raises(ValueError, match="path traversal"):
+        with pytest.raises(ModuleNameError, match="path traversal"):
             validate_module_name("..")
 
     def test_path_separators(self):
         """Reject names with path separators."""
-        with pytest.raises(ValueError, match="path separators"):
+        with pytest.raises(ModuleNameError, match="path separators"):
             validate_module_name("foo/bar")
-        with pytest.raises(ValueError, match="path separators"):
+        with pytest.raises(ModuleNameError, match="path separators"):
             validate_module_name("foo\\bar")
 
     def test_hidden_names(self):
         """Reject names starting with dot."""
-        with pytest.raises(ValueError, match="cannot start with"):
+        with pytest.raises(ModuleNameError, match="cannot start with"):
             validate_module_name(".hidden")
 
     def test_control_characters(self):
         """Reject names with control characters."""
-        with pytest.raises(ValueError, match="control characters"):
+        with pytest.raises(ModuleNameError, match="control characters"):
             validate_module_name("foo\x00bar")
-        with pytest.raises(ValueError, match="control characters"):
+        with pytest.raises(ModuleNameError, match="control characters"):
             validate_module_name("foo\nbar")
 
 
@@ -425,7 +426,7 @@ class TestFetchModule:
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
 
-        with pytest.raises(ValueError, match="Cannot handle source"):
+        with pytest.raises(UnsupportedSourceError, match="Cannot handle source"):
             fetch_module(str(file), dest_dir)
 
 
@@ -497,9 +498,8 @@ class TestUpdateModule:
         (source_dir / "new.txt").write_text("new content")
 
         # Update module
-        success, message = update_module(module_path)
+        message = update_module(module_path)
 
-        assert success is True
         assert "Updated" in message
         assert (module_path / "original.txt").read_text() == "v2"
         assert (module_path / "new.txt").exists()
@@ -509,10 +509,8 @@ class TestUpdateModule:
         module_path = tmp_path / "mymodule"
         module_path.mkdir()
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "No source information" in message
+        with pytest.raises(SourceError, match="No source information"):
+            update_module(module_path)
 
     def test_update_source_missing(self, tmp_path):
         """Update fails when source folder is missing."""
@@ -523,10 +521,8 @@ class TestUpdateModule:
         nonexistent = tmp_path / "nonexistent"
         save_source_info(module_path, str(nonexistent), "folder")
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "no longer exists" in message
+        with pytest.raises(SourceError, match="no longer exists"):
+            update_module(module_path)
 
     def test_update_invalid_source_info(self, tmp_path):
         """Update fails with invalid source info."""
@@ -539,10 +535,8 @@ class TestUpdateModule:
         with open(source_file, "w") as f:
             yaml.dump({"source": None, "type": None}, f)
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "Invalid source" in message
+        with pytest.raises(SourceError, match="Invalid source"):
+            update_module(module_path)
 
     def test_update_unknown_source_type(self, tmp_path):
         """Update fails with unknown source type."""
@@ -554,10 +548,8 @@ class TestUpdateModule:
         with open(source_file, "w") as f:
             yaml.dump({"source": "something", "type": "unknowntype"}, f)
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "Unknown source type" in message
+        with pytest.raises(SourceError, match="Unknown source type"):
+            update_module(module_path)
 
     def test_update_zip_source_missing(self, tmp_path):
         """Update fails when zip source file is missing."""
@@ -567,10 +559,8 @@ class TestUpdateModule:
         nonexistent_zip = tmp_path / "nonexistent.zip"
         save_source_info(module_path, str(nonexistent_zip), "zip")
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "no longer exists" in message
+        with pytest.raises(SourceError, match="no longer exists"):
+            update_module(module_path)
 
     def test_update_tar_source_missing(self, tmp_path):
         """Update fails when tar source file is missing."""
@@ -580,10 +570,8 @@ class TestUpdateModule:
         nonexistent_tar = tmp_path / "nonexistent.tar.gz"
         save_source_info(module_path, str(nonexistent_tar), "tar")
 
-        success, message = update_module(module_path)
-
-        assert success is False
-        assert "no longer exists" in message
+        with pytest.raises(SourceError, match="no longer exists"):
+            update_module(module_path)
 
     def test_update_from_zip(self, tmp_path):
         """Update module from zip source."""
@@ -609,9 +597,8 @@ class TestUpdateModule:
             zf.writestr("mymodule/new.txt", "new content")
 
         # Update module
-        success, message = update_module(module_path)
+        message = update_module(module_path)
 
-        assert success is True
         assert "Updated" in message
 
     def test_update_from_tar(self, tmp_path):
@@ -642,9 +629,8 @@ class TestUpdateModule:
             tf.add(content_dir, arcname="mymodule")
 
         # Update module
-        success, message = update_module(module_path)
+        message = update_module(module_path)
 
-        assert success is True
         assert "Updated" in message
 
     def test_update_renames_if_needed(self, tmp_path):
@@ -662,9 +648,9 @@ class TestUpdateModule:
         save_source_info(module_path, str(source_dir), "folder")
 
         # Update module
-        success, message = update_module(module_path)
+        message = update_module(module_path)
 
-        assert success is True
+        assert "Updated" in message
         # Module should still be at original name
         assert (dest_dir / "mymodule").exists()
 
@@ -808,7 +794,7 @@ class TestZipSlipPrevention:
         dest_dir = tmp_path / "dest"
         dest_dir.mkdir()
 
-        with pytest.raises(ValueError, match="Zip Slip"):
+        with pytest.raises(SecurityError, match="Zip Slip"):
             handler.fetch(str(zip_file), dest_dir)
 
 

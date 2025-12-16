@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from lola.config import LOLA_HOME, MODULES_DIR, INSTALLED_FILE, SKILL_FILE
+from lola.exceptions import UnknownAssistantError
 from lola.parsers import SOURCE_TYPES
 from lola.targets import TARGETS, get_target
 
@@ -96,7 +97,7 @@ class TestGetCommandPath:
 
     def test_unknown_assistant(self):
         """Raise error for unknown assistant."""
-        with pytest.raises(ValueError, match="Unknown assistant"):
+        with pytest.raises(UnknownAssistantError, match="Unknown assistant"):
             get_target("unknown")
 
 
@@ -127,5 +128,5 @@ class TestGetSkillPath:
 
     def test_unknown_assistant(self):
         """Raise error for unknown assistant."""
-        with pytest.raises(ValueError, match="Unknown assistant"):
+        with pytest.raises(UnknownAssistantError, match="Unknown assistant"):
             get_target("unknown")

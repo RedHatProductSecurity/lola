@@ -81,7 +81,7 @@ class TestModAdd:
             result = cli_runner.invoke(mod, ["add", str(invalid_file)])
 
         assert result.exit_code == 1
-        assert "Cannot determine source type" in result.output
+        assert "Cannot handle source" in result.output
 
     def test_add_invalid_name_override(self, cli_runner, sample_module, tmp_path):
         """Fail on invalid name override."""

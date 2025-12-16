@@ -21,6 +21,7 @@ from rich.console import Console
 
 import lola.config as config
 import lola.frontmatter as fm
+from lola.exceptions import ConfigurationError, UnknownAssistantError
 from lola.models import Installation, InstallationRegistry, Module
 
 console = Console()
@@ -633,9 +634,13 @@ TARGETS: dict[str, AssistantTarget] = {
 
 
 def get_target(assistant: str) -> AssistantTarget:
-    """Get a target by name. Raises ValueError if not found."""
+    """Get a target by name.
+
+    Raises:
+        UnknownAssistantError: If the assistant is not supported.
+    """
     if assistant not in TARGETS:
-        raise ValueError(f"Unknown assistant: {assistant}. Supported: {list(TARGETS.keys())}")
+        raise UnknownAssistantError(assistant, list(TARGETS.keys()))
     return TARGETS[assistant]
 
 
@@ -823,7 +828,7 @@ def install_to_assistant(
     target = get_target(assistant)
 
     if scope != "project":
-        raise ValueError("Only project scope is supported")
+        raise ConfigurationError("Only project scope is supported")
 
     local_module_path = copy_module_to_local(module, local_modules)
 

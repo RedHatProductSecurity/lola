@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from lola.config import LOLA_HOME, MODULES_DIR
+from lola.exceptions import ConfigurationError
 
 
 def ensure_lola_dirs():
@@ -24,7 +25,10 @@ def get_local_modules_path(project_path: Optional[str]) -> Path:
 
     Returns:
         Path to .lola/modules/
+
+    Raises:
+        ConfigurationError: If project_path is not provided.
     """
     if not project_path:
-        raise ValueError("Project path is required (project-scope only)")
+        raise ConfigurationError("Project path is required (project-scope only)")
     return Path(project_path) / ".lola" / "modules"

@@ -26,6 +26,12 @@ from urllib.request import urlopen
 import yaml
 
 from lola.config import SKILL_FILE
+from lola.exceptions import (
+    ModuleNameError,
+    SecurityError,
+    SourceError,
+    UnsupportedSourceError,
+)
 
 SOURCE_TYPES = ["git", "zip", "tar", "folder", "zipurl", "tarurl"]
 
@@ -51,19 +57,21 @@ SOURCE_FILE = ".lola/source.yml"
 
 
 def validate_module_name(name: str) -> str:
-    """Validate and sanitize a module name to prevent traversal attacks."""
+    """Validate and sanitize a module name to prevent traversal attacks.
+
+    Raises:
+        ModuleNameError: If the name is invalid.
+    """
     if not name:
-        raise ValueError("Module name cannot be empty")
+        raise ModuleNameError(name, "name cannot be empty")
     if name in (".", ".."):
-        raise ValueError(f"Invalid module name: '{name}' (path traversal not allowed)")
+        raise ModuleNameError(name, "path traversal not allowed")
     if "/" in name or "\\" in name:
-        raise ValueError(f"Invalid module name: '{name}' (path separators not allowed)")
+        raise ModuleNameError(name, "path separators not allowed")
     if name.startswith("."):
-        raise ValueError(f"Invalid module name: '{name}' (cannot start with '.')")
+        raise ModuleNameError(name, "cannot start with '.'")
     if any(ord(c) < 32 for c in name):
-        raise ValueError(
-            f"Invalid module name: '{name}' (control characters not allowed)"
-        )
+        raise ModuleNameError(name, "control characters not allowed")
     return name
 
 
@@ -169,7 +177,7 @@ class ZipSourceHandler(SourceHandler):
         for member in zf.namelist():
             member_path = (dest / member).resolve()
             if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
-                raise ValueError(f"Zip Slip attack detected: {member}")
+                raise SecurityError(f"Zip Slip attack detected: {member}")
         zf.extractall(dest)
 
 
@@ -248,7 +256,7 @@ class ZipUrlSourceHandler(SourceHandler):
                 for member in zf.namelist():
                     member_path = (dest / member).resolve()
                     if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
-                        raise ValueError(f"Zip Slip attack detected: {member}")
+                        raise SecurityError(f"Zip Slip attack detected: {member}")
                 zf.extractall(extract_path)
 
             module_dir = ZipSourceHandler()._find_module_dir(extract_path) or ZipSourceHandler()._fallback_module_dir(
@@ -329,14 +337,16 @@ SOURCE_HANDLERS: list[SourceHandler] = [
 
 
 def fetch_module(source: str, dest_dir: Path) -> Path:
-    """Fetch a module from any supported source."""
+    """Fetch a module from any supported source.
+
+    Raises:
+        UnsupportedSourceError: If the source type is not supported.
+        SourceError: If fetching fails.
+    """
     for handler in SOURCE_HANDLERS:
         if handler.can_handle(source):
             return handler.fetch(source, dest_dir)
-    raise ValueError(
-        f"Cannot handle source: {source}\n"
-        f"Supported sources: git repos, .zip/.tar URLs, local .zip/.tar files, or local folders"
-    )
+    raise UnsupportedSourceError(source)
 
 
 def detect_source_type(source: str) -> str:
@@ -369,23 +379,30 @@ def load_source_info(module_path: Path) -> Optional[dict]:
         return yaml.safe_load(f)
 
 
-def update_module(module_path: Path) -> tuple[bool, str]:
-    """Update a module from its original source."""
+def update_module(module_path: Path) -> str:
+    """Update a module from its original source.
+
+    Returns:
+        Success message describing the update.
+
+    Raises:
+        SourceError: If the update fails for any reason.
+    """
     source_info = load_source_info(module_path)
     if not source_info:
-        return False, "No source information found. Module cannot be updated."
+        raise SourceError(str(module_path), "No source information found. Module cannot be updated.")
 
     source = source_info.get("source")
     source_type = source_info.get("type")
     if not source or not source_type:
-        return False, "Invalid source information."
+        raise SourceError(str(module_path), "Invalid source information.")
 
     if source_type == "folder":
         if not Path(source).exists():
-            return False, f"Source folder no longer exists: {source}"
+            raise SourceError(source, f"Source folder no longer exists: {source}")
     elif source_type in ("zip", "tar"):
         if not Path(source).exists():
-            return False, f"Source archive no longer exists: {source}"
+            raise SourceError(source, f"Source archive no longer exists: {source}")
 
     handler = None
     for h in SOURCE_HANDLERS:
@@ -394,7 +411,7 @@ def update_module(module_path: Path) -> tuple[bool, str]:
             handler = h
             break
     if not handler:
-        return False, f"Unknown source type: {source_type}"
+        raise SourceError(source, f"Unknown source type: {source_type}")
 
     module_name = module_path.name
     dest_dir = module_path.parent
@@ -412,8 +429,8 @@ def update_module(module_path: Path) -> tuple[bool, str]:
                 new_path = final_path
 
         save_source_info(new_path, source, source_type)
-        return True, f"Updated from {source_type} source"
+        return f"Updated from {source_type} source"
     except Exception as e:
-        return False, f"Update failed: {e}"
+        raise SourceError(source, f"Update failed: {e}") from e
 
 

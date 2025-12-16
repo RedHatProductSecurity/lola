@@ -7,12 +7,19 @@ Commands for installing, uninstalling, updating, and listing module installation
 from dataclasses import dataclass, field
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn, Optional
 
 import click
 from rich.console import Console
 
 from lola.config import MODULES_DIR
+from lola.exceptions import (
+    LolaError,
+    ModuleInvalidError,
+    ModuleNotFoundError,
+    PathNotFoundError,
+    ValidationError,
+)
 from lola.models import Installation, Module
 from lola.targets import (
     AssistantTarget,
@@ -27,6 +34,12 @@ from lola.targets import (
 from lola.utils import ensure_lola_dirs, get_local_modules_path
 
 console = Console()
+
+
+def _handle_lola_error(e: LolaError) -> NoReturn:
+    """Handle a LolaError by printing an error message and exiting."""
+    console.print(f"[red]{e}[/red]")
+    raise SystemExit(1)
 
 
 # =============================================================================
@@ -434,30 +447,25 @@ def install_cmd(
     if scope == "project":
         project_path = str(Path(project_path).resolve())
         if not Path(project_path).exists():
-            console.print(f"[red]Project path does not exist: {project_path}[/red]")
-            raise SystemExit(1)
+            _handle_lola_error(PathNotFoundError(project_path, "Project path"))
 
     # Find module in global registry
     module_path = MODULES_DIR / module_name
     if not module_path.exists():
-        console.print(f"[red]Module '{module_name}' not found[/red]")
         console.print("[dim]Use 'lola mod ls' to see available modules[/dim]")
         console.print("[dim]Use 'lola mod add <source>' to add a module[/dim]")
-        raise SystemExit(1)
+        _handle_lola_error(ModuleNotFoundError(module_name))
 
     module = Module.from_path(module_path)
     if not module:
-        console.print("[red]Invalid module: no skills, commands, or agents found[/red]")
         console.print("[dim]Expected structure: skills/<name>/SKILL.md, commands/*.md, or agents/*.md[/dim]")
-        raise SystemExit(1)
+        _handle_lola_error(ModuleInvalidError(module_name))
 
     # Validate module structure and skill files
-    is_valid, errors = module.validate()
-    if not is_valid:
-        console.print(f"[red]Module '{module_name}' has validation errors:[/red]")
-        for err in errors:
-            console.print(f"  [red]{err}[/red]")
-        raise SystemExit(1)
+    try:
+        module.validate_or_raise()
+    except ValidationError as e:
+        _handle_lola_error(e)
 
     if not module.skills and not module.commands and not module.agents:
         console.print(

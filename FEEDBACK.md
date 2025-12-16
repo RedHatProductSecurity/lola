@@ -3,14 +3,74 @@
 - [x] Resolve module format inconsistency (Codex #1)
 - [x] Unify competing module concepts (Codex #2) - Already resolved: docs/, modules/ removed
 - [x] Fix release hygiene and metadata (Codex #3)
-- [ ] Standardize error handling strategy (Claude #1)
+- [x] Standardize error handling strategy (Claude #1)
 - [x] Extract shared ManagedSectionTarget base class (Claude #2)
 - [x] Refactor large functions into smaller units (Claude #3)
 - [x] Fix leaky abstraction in Strategy pattern (Gemini #1)
 - [x] Add tests for concrete target implementations (Gemini #2)
-- [ ] Improve error handling and observability (Gemini #3)
+- [x] Improve error handling and observability (Gemini #3)
 
 ---
+
+# Feedback from GPT-5.2 (2025-12-16)
+
+## 1. Scope support is inconsistent (CLI/docs mention user scope, but installer enforces project-only)
+
+**Location:** `src/lola/cli/install.py:401`, `src/lola/targets.py:818`, `README.md`
+
+**Issue:** The CLI exposes `--scope user` and the README discusses user-scope installs, but `install_to_assistant()` hard-fails for anything except `scope == "project"` (`ConfigurationError("Only project scope is supported")`).
+
+**Impact:** `lola install ... -s user` is a dead feature: it can’t succeed, and the UX/doc story doesn’t match runtime behavior.
+
+**Recommendation:** Either (a) implement user-scope end-to-end (target paths, registry records, install/uninstall/update flows) or (b) remove `--scope user` from the CLI + docs until it’s real. Doing both partially (current state) is the worst of both worlds.
+
+---
+
+## 2. Uninstall logic skips user-scope installations (gated on `inst.project_path`)
+
+**Location:** `src/lola/cli/install.py:614`
+
+**Issue:** `uninstall_cmd()` only removes skills/commands/agents when `inst.project_path` is set (e.g., `if inst.skills and inst.project_path:`). User-scope installs typically have `project_path=None`, so uninstall will report success but not remove files.
+
+**Impact:** Orphaned assistant files accumulate and the registry can become out of sync with reality. This is especially confusing because the UI explicitly groups entries under `"~/.lola (user scope)"`.
+
+**Recommendation:** Key off `inst.scope` (and/or store a concrete root path for user-scope installs) instead of `inst.project_path`. Add filesystem assertions in tests for both scopes (right now, `tests/test_cli_install.py` mostly mocks targets and doesn’t verify actual file deletions).
+
+---
+
+## 3. Module updates are destructive/non-atomic (can lose a module on fetch failure)
+
+**Location:** `src/lola/parsers.py:382`
+
+**Issue:** `update_module()` deletes the existing module directory (`shutil.rmtree(module_path)`) before re-fetching from the source.
+
+**Impact:** Any transient failure (network hiccup, corrupt archive, git error) can permanently delete the module from the registry.
+
+**Recommendation:** Fetch into a temporary directory, validate, then swap into place (atomic rename where possible). Only delete the old copy after the new one is successfully fetched and verified.
+
+---
+
+## 4. Zip/tar “flat archive” fallback yields random module names (temp dir names)
+
+**Location:** `src/lola/parsers.py:129`
+
+**Issue:** When a zip/tar doesn’t contain a single top-level module directory, `_fallback_module_dir()` returns the temporary extraction directory, and the module name becomes `tmpXXXX...` (`module_dir.name`). This also affects URL fetchers (`ZipUrlSourceHandler`, `TarUrlSourceHandler`) because they reuse the same fallback logic.
+
+**Impact:** Unpredictable module names (hard to reference in commands, impossible to “update” reliably, and surprising registry contents).
+
+**Recommendation:** Use the archive stem/filename as the module name for flat archives (e.g., wrap extracted contents into a synthetic directory named `default_name` / `stem`, then validate and copy that).
+
+---
+
+## 5. Packaging/repo integrity issue: `src/lola/exceptions.py` is present but untracked
+
+**Location:** `src/lola/exceptions.py` (imported across `src/lola/*`)
+
+**Issue:** The code imports `lola.exceptions` widely, but in this working tree `src/lola/exceptions.py` is untracked by git.
+
+**Impact:** A clean clone or published sdist/wheel risks failing at import time (`ModuleNotFoundError: lola.exceptions`) depending on what actually ships.
+
+**Recommendation:** Ensure `src/lola/exceptions.py` is committed and included in distributions. Add a lightweight release check in CI (e.g., build sdist/wheel + import `lola` in a clean env) so this can’t regress.
 
 # Feedback from Codex
 
