@@ -15,8 +15,6 @@ from lola.config import MODULES_DIR
 from lola.models import Module
 from lola.targets import (
     TARGETS,
-    GeminiTarget,
-    OpenCodeTarget,
     _get_skill_description,
     _skill_source_dir,
     copy_module_to_local,
@@ -256,8 +254,8 @@ def uninstall_cmd(
         if inst.skills and inst.project_path:
             skill_dest = target.get_skill_path(inst.project_path)
 
-            if isinstance(target, (GeminiTarget, OpenCodeTarget)):
-                # Gemini/OpenCode: remove module section from GEMINI.md/AGENTS.md
+            if target.uses_managed_section:
+                # Managed section targets: remove module section from GEMINI.md/AGENTS.md
                 if target.remove_skill(skill_dest, module_name):
                     removed_count += 1
                     if verbose:
@@ -458,8 +456,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 agents_failed = 0
                 orphans_removed = 0
 
-                # Remove orphaned skill files (not for Gemini/OpenCode - they rebuild the whole section)
-                if orphaned_skills and not isinstance(target, (GeminiTarget, OpenCodeTarget)):
+                # Remove orphaned skill files (not for managed section targets - they rebuild the whole section)
+                if orphaned_skills and not target.uses_managed_section:
                     for skill in orphaned_skills:
                         if target.remove_skill(skill_dest, skill):
                             orphans_removed += 1
@@ -499,8 +497,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
 
                 # Update skills - iterate over CURRENT module skills, not old registry
                 if global_module.skills:
-                    if isinstance(target, (GeminiTarget, OpenCodeTarget)):
-                        # Gemini/OpenCode: Update entries in GEMINI.md/AGENTS.md
+                    if target.uses_managed_section:
+                        # Managed section targets: Update entries in GEMINI.md/AGENTS.md
                         batch_skills = []
                         for original_skill in global_module.skills:
                             prefixed_skill = f"{inst.module_name}-{original_skill}"

@@ -4,9 +4,9 @@
 - [x] Unify competing module concepts (Codex #2) - Already resolved: docs/, modules/ removed
 - [x] Fix release hygiene and metadata (Codex #3)
 - [ ] Standardize error handling strategy (Claude #1)
-- [ ] Extract shared ManagedSectionTarget base class (Claude #2)
+- [x] Extract shared ManagedSectionTarget base class (Claude #2)
 - [ ] Refactor large functions into smaller units (Claude #3)
-- [ ] Fix leaky abstraction in Strategy pattern (Gemini #1)
+- [x] Fix leaky abstraction in Strategy pattern (Gemini #1)
 - [ ] Add tests for concrete target implementations (Gemini #2)
 - [ ] Improve error handling and observability (Gemini #3)
 

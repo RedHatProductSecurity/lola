@@ -1,10 +1,9 @@
 """Tests for agent support."""
 
-import pytest
 
 from lola.models import Agent, Module
 from lola.frontmatter import validate_agent
-from lola.targets import TARGETS, get_target
+from lola.targets import get_target
 
 
 class TestAgentModel:
@@ -162,10 +161,10 @@ class TestAgentConfig:
         target = get_target("claude-code")
         assert target.supports_agents is True
 
-    def test_cursor_supports_agents(self):
-        """Cursor supports agents."""
+    def test_cursor_does_not_support_agents(self):
+        """Cursor does not support agents."""
         target = get_target("cursor")
-        assert target.supports_agents is True
+        assert target.supports_agents is False
 
     def test_gemini_does_not_support_agents(self):
         """Gemini doesn't support agents."""

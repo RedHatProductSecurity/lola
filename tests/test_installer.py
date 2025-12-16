@@ -156,6 +156,7 @@ Do {cmd}.
         mock_target = MagicMock()
         mock_target.name = "claude-code"
         mock_target.supports_agents = True
+        mock_target.uses_managed_section = False  # Not a managed section target
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = None
         mock_target.get_agent_path.return_value = None
@@ -192,6 +193,7 @@ Do {cmd}.
         mock_target = MagicMock()
         mock_target.name = "claude-code"
         mock_target.supports_agents = True
+        mock_target.uses_managed_section = False  # Not a managed section target
         mock_target.get_skill_path.return_value = None
         mock_target.get_command_path.return_value = command_dest
         mock_target.get_agent_path.return_value = None
@@ -229,6 +231,7 @@ Do {cmd}.
         mock_target = MagicMock()
         mock_target.name = "claude-code"
         mock_target.supports_agents = True
+        mock_target.uses_managed_section = False  # Not a managed section target
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
         mock_target.get_agent_path.return_value = None

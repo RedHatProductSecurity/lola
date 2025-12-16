@@ -359,6 +359,7 @@ class TestUpdateCmd:
         mock_target.remove_skill.side_effect = mock_remove_skill
         mock_target.generate_skill.return_value = True
         mock_target.generate_command.return_value = True
+        mock_target.uses_managed_section = False  # Not a managed section target
 
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),

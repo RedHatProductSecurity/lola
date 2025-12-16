@@ -294,9 +294,10 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert "Initialized module" in result.output
-            # Default skill and command should be created
-            assert (tmp_path / "example-skill" / "SKILL.md").exists()
+            # Default skill, command, and agent should be created
+            assert (tmp_path / "skills" / "example-skill" / "SKILL.md").exists()
             assert (tmp_path / "commands" / "example-command.md").exists()
+            assert (tmp_path / "agents" / "example-agent.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -312,10 +313,13 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert "my-new-module" in result.output
-            # Default skill and command should be created
-            assert (tmp_path / "my-new-module" / "example-skill" / "SKILL.md").exists()
+            # Default skill, command, and agent should be created
+            assert (tmp_path / "my-new-module" / "skills" / "example-skill" / "SKILL.md").exists()
             assert (
                 tmp_path / "my-new-module" / "commands" / "example-command.md"
+            ).exists()
+            assert (
+                tmp_path / "my-new-module" / "agents" / "example-agent.md"
             ).exists()
         finally:
             os.chdir(original_dir)
@@ -333,10 +337,12 @@ class TestModInit:
             assert result.exit_code == 0
             # Module directory should exist
             assert (tmp_path / "mymod").exists()
-            # No skill directory should exist
-            assert not (tmp_path / "mymod" / "example-skill").exists()
-            # But command should still be created
+            # Skills directory should exist but be empty (no example-skill)
+            assert (tmp_path / "mymod" / "skills").exists()
+            assert not (tmp_path / "mymod" / "skills" / "example-skill").exists()
+            # But command and agent should still be created
             assert (tmp_path / "mymod" / "commands" / "example-command.md").exists()
+            assert (tmp_path / "mymod" / "agents" / "example-agent.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -351,7 +357,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "-s", "custom-skill"])
 
             assert result.exit_code == 0
-            assert (tmp_path / "mymod" / "custom-skill" / "SKILL.md").exists()
+            assert (tmp_path / "mymod" / "skills" / "custom-skill" / "SKILL.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -394,8 +400,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            # Create the default skill directory
-            (tmp_path / "example-skill").mkdir()
+            # Create the default skill directory under skills/
+            (tmp_path / "skills").mkdir()
+            (tmp_path / "skills" / "example-skill").mkdir()
             result = cli_runner.invoke(mod, ["init"])
 
             assert result.exit_code == 1

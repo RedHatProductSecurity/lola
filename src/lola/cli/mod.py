@@ -13,7 +13,7 @@ from rich.tree import Tree
 
 from lola.config import MODULES_DIR, INSTALLED_FILE
 from lola.models import Module, InstallationRegistry
-from lola.targets import GeminiTarget, get_target
+from lola.targets import get_target
 from lola.parsers import (
     fetch_module,
     detect_source_type,
@@ -430,8 +430,8 @@ def remove_module(module_name: str, force: bool):
         skill_dest = target.get_skill_path(inst.project_path)
 
         # Remove generated skill files
-        if isinstance(target, GeminiTarget):
-            # Remove module section from GEMINI.md
+        if target.uses_managed_section:
+            # Remove module section from managed file (e.g., GEMINI.md, AGENTS.md)
             if target.remove_skill(skill_dest, module_name):
                 console.print(f"  [dim]Removed from: {skill_dest}[/dim]")
         else:

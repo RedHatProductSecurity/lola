@@ -36,6 +36,7 @@ class AssistantTarget(Protocol):
 
     name: str
     supports_agents: bool
+    uses_managed_section: bool  # True if skills go into a managed section (e.g., GEMINI.md)
 
     def get_skill_path(self, project_path: str) -> Path:
         """Get the skill output path for this assistant."""
@@ -83,6 +84,16 @@ class AssistantTarget(Protocol):
         """Remove skill file(s) for this assistant."""
         ...
 
+    def generate_skills_batch(
+        self,
+        dest_file: Path,
+        module_name: str,
+        skills: list[tuple[str, str, Path]],
+        project_path: str | None,
+    ) -> bool:
+        """Generate skills as a batch (for managed section targets)."""
+        ...
+
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:
         """Get the filename for a command."""
         ...
@@ -102,6 +113,7 @@ class BaseAssistantTarget:
 
     name: str = ""
     supports_agents: bool = True
+    uses_managed_section: bool = False
 
     def get_agent_path(self, project_path: str) -> Path | None:  # noqa: ARG002
         """Default: no agent support. Override in subclasses."""
@@ -132,6 +144,163 @@ class BaseAssistantTarget:
     def get_agent_filename(self, module_name: str, agent_name: str) -> str:
         """Default: module-agent.md"""
         return f"{module_name}-{agent_name}.md"
+
+    def generate_skills_batch(
+        self,
+        dest_file: Path,  # noqa: ARG002
+        module_name: str,  # noqa: ARG002
+        skills: list[tuple[str, str, Path]],  # noqa: ARG002
+        project_path: str | None,  # noqa: ARG002
+    ) -> bool:
+        """Default: batch generation not supported."""
+        return False
+
+
+# =============================================================================
+# ManagedSectionTarget - base for targets using managed markdown sections
+# =============================================================================
+
+
+class ManagedSectionTarget(BaseAssistantTarget):
+    """Base class for targets that write skills to a managed section in a markdown file.
+
+    Subclasses must define:
+    - MANAGED_FILE: name of the file (e.g., "GEMINI.md", "AGENTS.md")
+    - START_MARKER, END_MARKER: markers for the managed section
+    - HEADER: header text for the managed section
+    """
+
+    uses_managed_section: bool = True
+
+    # Subclasses must override these
+    MANAGED_FILE: str = ""
+    START_MARKER: str = "<!-- lola:skills:start -->"
+    END_MARKER: str = "<!-- lola:skills:end -->"
+    HEADER: str = """## Lola Skills
+
+These skills are installed by Lola and provide specialized capabilities.
+When a task matches a skill's description, read the skill's SKILL.md file
+to learn the detailed instructions and workflows.
+
+**How to use skills:**
+1. Check if your task matches any skill description below
+2. Use `read_file` to read the skill's SKILL.md for detailed instructions
+3. Follow the instructions in the SKILL.md file
+
+"""
+
+    def get_skill_path(self, project_path: str) -> Path:
+        return Path(project_path) / self.MANAGED_FILE
+
+    def generate_skill(
+        self,
+        source_path: Path,  # noqa: ARG002
+        dest_path: Path,  # noqa: ARG002
+        skill_name: str,  # noqa: ARG002
+        project_path: str | None = None,  # noqa: ARG002
+    ) -> bool:
+        """Managed section targets use batch generation - this should not be called directly."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.generate_skill should not be called directly. "
+            "Use generate_skills_batch() instead."
+        )
+
+    def generate_skills_batch(
+        self,
+        dest_file: Path,
+        module_name: str,
+        skills: list[tuple[str, str, Path]],
+        project_path: str | None,
+    ) -> bool:
+        """Update managed markdown file with skill listings for a module."""
+        if dest_file.exists():
+            content = dest_file.read_text()
+        else:
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            content = ""
+
+        project_root = Path(project_path) if project_path else None
+
+        # Build skills block for this module
+        skills_block = f"\n### {module_name}\n\n"
+        for skill_name, description, skill_path in skills:
+            if project_root:
+                try:
+                    relative_path = skill_path.relative_to(project_root)
+                    skill_md_path = relative_path / "SKILL.md"
+                except ValueError:
+                    skill_md_path = skill_path / "SKILL.md"
+            else:
+                skill_md_path = skill_path / "SKILL.md"
+            skills_block += f"#### {skill_name}\n"
+            skills_block += f"**When to use:** {description}\n"
+            skills_block += f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
+
+        # Update or create managed section
+        if self.START_MARKER in content and self.END_MARKER in content:
+            start_idx = content.index(self.START_MARKER)
+            end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
+            existing_section = content[start_idx:end_idx]
+            section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
+
+            # Remove existing module section if present
+            lines = section_content.split("\n")
+            new_lines: list[str] = []
+            skip_until_next_module = False
+            for line in lines:
+                if line.startswith("### "):
+                    if line == f"### {module_name}":
+                        skip_until_next_module = True
+                        continue
+                    skip_until_next_module = False
+                if not skip_until_next_module:
+                    new_lines.append(line)
+
+            new_section = self.START_MARKER + "\n".join(new_lines) + skills_block + self.END_MARKER
+            content = content[:start_idx] + new_section + content[end_idx:]
+        else:
+            lola_section = f"\n\n{self.HEADER}{self.START_MARKER}\n{skills_block}{self.END_MARKER}\n"
+            content = content.rstrip() + lola_section
+
+        dest_file.write_text(content)
+        return True
+
+    def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
+        """Remove a module's skills from the managed markdown file.
+
+        Note: For managed section targets, dest_path is the markdown file and
+        skill_name is the module name (skills are grouped by module).
+        """
+        if not dest_path.exists():
+            return True
+
+        content = dest_path.read_text()
+        if self.START_MARKER not in content or self.END_MARKER not in content:
+            return True
+
+        start_idx = content.index(self.START_MARKER)
+        end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
+        existing_section = content[start_idx:end_idx]
+        section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
+
+        # Remove module section (skill_name is actually module_name)
+        module_name = skill_name
+        lines = section_content.split("\n")
+        new_lines: list[str] = []
+        skip_until_next_module = False
+        for line in lines:
+            if line.startswith("### "):
+                if line == f"### {module_name}":
+                    skip_until_next_module = True
+                    continue
+                skip_until_next_module = False
+            if not skip_until_next_module:
+                new_lines.append(line)
+
+        new_section = self.START_MARKER + "\n".join(new_lines) + self.END_MARKER
+        content = content[:start_idx] + new_section + content[end_idx:]
+        dest_path.write_text(content)
+        return True
 
 
 # =============================================================================
@@ -366,109 +535,15 @@ class CursorTarget(BaseAssistantTarget):
         return False
 
 
-class GeminiTarget(BaseAssistantTarget):
+class GeminiTarget(ManagedSectionTarget):
     """Target for Gemini CLI assistant."""
 
     name = "gemini-cli"
     supports_agents = False
-
-    # Markers for managed section in GEMINI.md
-    START_MARKER = "<!-- lola:skills:start -->"
-    END_MARKER = "<!-- lola:skills:end -->"
-    HEADER = """## Lola Skills
-
-These skills are installed by Lola and provide specialized capabilities.
-When a task matches a skill's description, read the skill's SKILL.md file
-to learn the detailed instructions and workflows.
-
-**How to use skills:**
-1. Check if your task matches any skill description below
-2. Use `read_file` to read the skill's SKILL.md for detailed instructions
-3. Follow the instructions in the SKILL.md file
-
-"""
-
-    def get_skill_path(self, project_path: str) -> Path:
-        return Path(project_path) / "GEMINI.md"
+    MANAGED_FILE = "GEMINI.md"
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".gemini" / "commands"
-
-    def get_agent_path(self, project_path: str) -> None:
-        return None
-
-    def generate_skill(
-        self,
-        source_path: Path,  # noqa: ARG002
-        dest_path: Path,  # noqa: ARG002
-        skill_name: str,  # noqa: ARG002
-        project_path: str | None = None,  # noqa: ARG002
-    ) -> bool:
-        """Gemini uses batch skill generation - this should not be called directly."""
-        raise NotImplementedError(
-            "GeminiTarget.generate_skill should not be called directly. "
-            "Use generate_skills_batch() instead."
-        )
-
-    def generate_skills_batch(
-        self,
-        gemini_file: Path,
-        module_name: str,
-        skills: list[tuple[str, str, Path]],  # (name, description, source_path)
-        project_path: str | None,
-    ) -> bool:
-        """Update GEMINI.md with skill listings for a module."""
-        if gemini_file.exists():
-            content = gemini_file.read_text()
-        else:
-            gemini_file.parent.mkdir(parents=True, exist_ok=True)
-            content = ""
-
-        project_root = Path(project_path) if project_path else None
-
-        # Build skills block for this module
-        skills_block = f"\n### {module_name}\n\n"
-        for skill_name, description, skill_path in skills:
-            if project_root:
-                try:
-                    relative_path = skill_path.relative_to(project_root)
-                    skill_md_path = relative_path / "SKILL.md"
-                except ValueError:
-                    skill_md_path = skill_path / "SKILL.md"
-            else:
-                skill_md_path = skill_path / "SKILL.md"
-            skills_block += f"#### {skill_name}\n"
-            skills_block += f"**When to use:** {description}\n"
-            skills_block += f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
-
-        # Update or create managed section
-        if self.START_MARKER in content and self.END_MARKER in content:
-            start_idx = content.index(self.START_MARKER)
-            end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
-            existing_section = content[start_idx:end_idx]
-            section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
-
-            # Remove existing module section if present
-            lines = section_content.split("\n")
-            new_lines: list[str] = []
-            skip_until_next_module = False
-            for line in lines:
-                if line.startswith("### "):
-                    if line == f"### {module_name}":
-                        skip_until_next_module = True
-                        continue
-                    skip_until_next_module = False
-                if not skip_until_next_module:
-                    new_lines.append(line)
-
-            new_section = self.START_MARKER + "\n".join(new_lines) + skills_block + self.END_MARKER
-            content = content[:start_idx] + new_section + content[end_idx:]
-        else:
-            lola_section = f"\n\n{self.HEADER}{self.START_MARKER}\n{skills_block}{self.END_MARKER}\n"
-            content = content.rstrip() + lola_section
-
-        gemini_file.write_text(content)
-        return True
 
     def generate_command(
         self,
@@ -502,45 +577,8 @@ to learn the detailed instructions and workflows.
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:
         return f"{module_name}-{cmd_name}.toml"
 
-    def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
-        """Remove a module's skills from GEMINI.md.
 
-        Note: For Gemini, dest_path is the GEMINI.md file and skill_name
-        is the module name (skills are grouped by module in GEMINI.md).
-        """
-        if not dest_path.exists():
-            return True
-
-        content = dest_path.read_text()
-        if self.START_MARKER not in content or self.END_MARKER not in content:
-            return True
-
-        start_idx = content.index(self.START_MARKER)
-        end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
-        existing_section = content[start_idx:end_idx]
-        section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
-
-        # Remove module section (skill_name is actually module_name for Gemini)
-        module_name = skill_name
-        lines = section_content.split("\n")
-        new_lines: list[str] = []
-        skip_until_next_module = False
-        for line in lines:
-            if line.startswith("### "):
-                if line == f"### {module_name}":
-                    skip_until_next_module = True
-                    continue
-                skip_until_next_module = False
-            if not skip_until_next_module:
-                new_lines.append(line)
-
-        new_section = self.START_MARKER + "\n".join(new_lines) + self.END_MARKER
-        content = content[:start_idx] + new_section + content[end_idx:]
-        dest_path.write_text(content)
-        return True
-
-
-class OpenCodeTarget(BaseAssistantTarget):
+class OpenCodeTarget(ManagedSectionTarget):
     """Target for OpenCode assistant.
 
     OpenCode uses AGENTS.md for skills (similar to Gemini's GEMINI.md approach).
@@ -548,104 +586,13 @@ class OpenCodeTarget(BaseAssistantTarget):
 
     name = "opencode"
     supports_agents = True
-
-    # Markers for managed section in AGENTS.md
-    START_MARKER = "<!-- lola:skills:start -->"
-    END_MARKER = "<!-- lola:skills:end -->"
-    HEADER = """## Lola Skills
-
-These skills are installed by Lola and provide specialized capabilities.
-When a task matches a skill's description, read the skill's SKILL.md file
-to learn the detailed instructions and workflows.
-
-**How to use skills:**
-1. Check if your task matches any skill description below
-2. Use `read_file` to read the skill's SKILL.md for detailed instructions
-3. Follow the instructions in the SKILL.md file
-
-"""
-
-    def get_skill_path(self, project_path: str) -> Path:
-        return Path(project_path) / "AGENTS.md"
+    MANAGED_FILE = "AGENTS.md"
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".opencode" / "commands"
 
     def get_agent_path(self, project_path: str) -> Path:
         return Path(project_path) / ".opencode" / "agent"
-
-    def generate_skill(
-        self,
-        source_path: Path,  # noqa: ARG002
-        dest_path: Path,  # noqa: ARG002
-        skill_name: str,  # noqa: ARG002
-        project_path: str | None = None,  # noqa: ARG002
-    ) -> bool:
-        """OpenCode uses batch skill generation - this should not be called directly."""
-        raise NotImplementedError(
-            "OpenCodeTarget.generate_skill should not be called directly. "
-            "Use generate_skills_batch() instead."
-        )
-
-    def generate_skills_batch(
-        self,
-        agents_file: Path,
-        module_name: str,
-        skills: list[tuple[str, str, Path]],  # (name, description, source_path)
-        project_path: str | None,
-    ) -> bool:
-        """Update AGENTS.md with skill listings for a module."""
-        if agents_file.exists():
-            content = agents_file.read_text()
-        else:
-            agents_file.parent.mkdir(parents=True, exist_ok=True)
-            content = ""
-
-        project_root = Path(project_path) if project_path else None
-
-        # Build skills block for this module
-        skills_block = f"\n### {module_name}\n\n"
-        for skill_name, description, skill_path in skills:
-            if project_root:
-                try:
-                    relative_path = skill_path.relative_to(project_root)
-                    skill_md_path = relative_path / "SKILL.md"
-                except ValueError:
-                    skill_md_path = skill_path / "SKILL.md"
-            else:
-                skill_md_path = skill_path / "SKILL.md"
-            skills_block += f"#### {skill_name}\n"
-            skills_block += f"**When to use:** {description}\n"
-            skills_block += f"**Instructions:** Read `{skill_md_path}` for detailed guidance.\n\n"
-
-        # Update or create managed section
-        if self.START_MARKER in content and self.END_MARKER in content:
-            start_idx = content.index(self.START_MARKER)
-            end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
-            existing_section = content[start_idx:end_idx]
-            section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
-
-            # Remove existing module section if present
-            lines = section_content.split("\n")
-            new_lines: list[str] = []
-            skip_until_next_module = False
-            for line in lines:
-                if line.startswith("### "):
-                    if line == f"### {module_name}":
-                        skip_until_next_module = True
-                        continue
-                    skip_until_next_module = False
-                if not skip_until_next_module:
-                    new_lines.append(line)
-
-            new_section = self.START_MARKER + "\n".join(new_lines) + skills_block + self.END_MARKER
-            content = content[:start_idx] + new_section + content[end_idx:]
-        else:
-            lola_section = f"\n\n{self.HEADER}{self.START_MARKER}\n{skills_block}{self.END_MARKER}\n"
-            content = content.rstrip() + lola_section
-
-        agents_file.write_text(content)
-        return True
 
     def generate_command(
         self,
@@ -671,43 +618,6 @@ to learn the detailed instructions and workflows.
             filename,
             {"mode": "subagent"},
         )
-
-    def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
-        """Remove a module's skills from AGENTS.md.
-
-        Note: For OpenCode, dest_path is the AGENTS.md file and skill_name
-        is the module name (skills are grouped by module in AGENTS.md).
-        """
-        if not dest_path.exists():
-            return True
-
-        content = dest_path.read_text()
-        if self.START_MARKER not in content or self.END_MARKER not in content:
-            return True
-
-        start_idx = content.index(self.START_MARKER)
-        end_idx = content.index(self.END_MARKER) + len(self.END_MARKER)
-        existing_section = content[start_idx:end_idx]
-        section_content = existing_section[len(self.START_MARKER) : -len(self.END_MARKER)]
-
-        # Remove module section (skill_name is actually module_name for OpenCode)
-        module_name = skill_name
-        lines = section_content.split("\n")
-        new_lines: list[str] = []
-        skip_until_next_module = False
-        for line in lines:
-            if line.startswith("### "):
-                if line == f"### {module_name}":
-                    skip_until_next_module = True
-                    continue
-                skip_until_next_module = False
-            if not skip_until_next_module:
-                new_lines.append(line)
-
-        new_section = self.START_MARKER + "\n".join(new_lines) + self.END_MARKER
-        content = content[:start_idx] + new_section + content[end_idx:]
-        dest_path.write_text(content)
-        return True
 
 
 # =============================================================================
@@ -777,8 +687,8 @@ def _install_skills(
     if not skill_dest:
         return [], []
 
-    # Special handling for Gemini and OpenCode batch updates
-    if isinstance(target, (GeminiTarget, OpenCodeTarget)):
+    # Batch updates for managed section targets (Gemini, OpenCode)
+    if target.uses_managed_section:
         batch_skills: list[tuple[str, str, Path]] = []
         for skill in module.skills:
             source = _skill_source_dir(local_module_path, skill)

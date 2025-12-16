@@ -2,7 +2,6 @@
 
 from lola.frontmatter import parse as parse_frontmatter, has_positional_args
 from lola.targets import (
-    TARGETS,
     get_target,
     _convert_to_gemini_args,
 )
