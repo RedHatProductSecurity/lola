@@ -665,10 +665,10 @@ class TestOpenCodeTarget:
         assert path == tmp_path / "AGENTS.md"
 
     def test_get_command_path(self, tmp_path: Path):
-        """Command path should be .opencode/commands."""
+        """Command path should be .opencode/command."""
         target = OpenCodeTarget()
         path = target.get_command_path(str(tmp_path))
-        assert path == tmp_path / ".opencode" / "commands"
+        assert path == tmp_path / ".opencode" / "command"
 
     def test_get_agent_path(self, tmp_path: Path):
         """Agent path should be .opencode/agent."""

@@ -986,7 +986,7 @@ class OpenCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionT
     INSTRUCTIONS_FILE = "AGENTS.md"
 
     def get_command_path(self, project_path: str) -> Path:
-        return Path(project_path) / ".opencode" / "commands"
+        return Path(project_path) / ".opencode" / "command"
 
     def get_agent_path(self, project_path: str) -> Path:
         return Path(project_path) / ".opencode" / "agent"
