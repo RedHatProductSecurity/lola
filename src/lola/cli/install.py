@@ -57,6 +57,7 @@ class UpdateResult:
     commands_failed: int = 0
     agents_ok: int = 0
     agents_failed: int = 0
+    instructions_ok: bool = False
     orphans_removed: int = 0
     error: str | None = None
 
@@ -72,6 +73,7 @@ class UpdateContext:
     current_skills: set[str] = field(default_factory=set)
     current_commands: set[str] = field(default_factory=set)
     current_agents: set[str] = field(default_factory=set)
+    has_instructions: bool = False
     orphaned_skills: set[str] = field(default_factory=set)
     orphaned_commands: set[str] = field(default_factory=set)
     orphaned_agents: set[str] = field(default_factory=set)
@@ -144,6 +146,7 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
         current_skills=current_skills,
         current_commands=current_commands,
         current_agents=current_agents,
+        has_instructions=global_module.has_instructions,
         orphaned_skills=orphaned_skills,
         orphaned_commands=orphaned_commands,
         orphaned_agents=orphaned_agents,
@@ -343,13 +346,45 @@ def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     return agents_ok, agents_failed
 
 
+def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
+    """
+    Update module instructions for an installation.
+
+    Returns True if instructions were successfully installed.
+    """
+    from lola.models import INSTRUCTIONS_FILE
+
+    if not ctx.has_instructions or not ctx.inst.project_path:
+        # If module no longer has instructions but installation did, remove them
+        if ctx.inst.has_instructions and ctx.inst.project_path:
+            instructions_dest = ctx.target.get_instructions_path(ctx.inst.project_path)
+            ctx.target.remove_instructions(instructions_dest, ctx.inst.module_name)
+            if verbose:
+                console.print(f"      [yellow]- instructions[/yellow] [dim](removed)[/dim]")
+        return False
+
+    instructions_source = ctx.source_module / INSTRUCTIONS_FILE
+    if not instructions_source.exists():
+        return False
+
+    instructions_dest = ctx.target.get_instructions_path(ctx.inst.project_path)
+    success = ctx.target.generate_instructions(
+        instructions_source, instructions_dest, ctx.inst.module_name
+    )
+
+    if success and verbose:
+        console.print("      [green]instructions[/green]")
+
+    return success
+
+
 def _process_single_installation(
     ctx: UpdateContext, verbose: bool
 ) -> UpdateResult:
     """
     Process a single installation update.
 
-    Removes orphaned items and regenerates all skills, commands, and agents.
+    Removes orphaned items and regenerates all skills, commands, agents, and instructions.
     """
     result = UpdateResult()
     skill_dest = ctx.target.get_skill_path(ctx.inst.project_path or "")
@@ -368,6 +403,9 @@ def _process_single_installation(
     # Update agents
     result.agents_ok, result.agents_failed = _update_agents(ctx, verbose)
 
+    # Update instructions
+    result.instructions_ok = _update_instructions(ctx, verbose)
+
     return result
 
 
@@ -382,6 +420,8 @@ def _format_update_summary(result: UpdateResult) -> str:
         )
     if result.agents_ok > 0:
         parts.append(f"{result.agents_ok} {'agent' if result.agents_ok == 1 else 'agents'}")
+    if result.instructions_ok:
+        parts.append("instructions")
 
     summary = ", ".join(parts) if parts else "no items"
 
@@ -558,6 +598,7 @@ def uninstall_cmd(
         skill_count = len(insts[0].skills) if insts[0].skills else 0
         cmd_count = len(insts[0].commands) if insts[0].commands else 0
         agent_count = len(insts[0].agents) if insts[0].agents else 0
+        has_instructions = insts[0].has_instructions
 
         parts = []
         if skill_count:
@@ -566,6 +607,8 @@ def uninstall_cmd(
             parts.append(f"{cmd_count} command{'s' if cmd_count != 1 else ''}")
         if agent_count:
             parts.append(f"{agent_count} agent{'s' if agent_count != 1 else ''}")
+        if has_instructions:
+            parts.append("instructions")
 
         summary = ", ".join(parts) if parts else "no items"
         console.print(f"  [dim]{project}[/dim]")
@@ -648,6 +691,14 @@ def uninstall_cmd(
                         removed_count += 1
                         if verbose:
                             console.print(f"  [green]Removed {agent_file}[/green]")
+
+        # Remove instructions
+        if inst.has_instructions:
+            instructions_dest = target.get_instructions_path(inst.project_path)
+            if target.remove_instructions(instructions_dest, module_name):
+                removed_count += 1
+                if verbose:
+                    console.print(f"  [green]Removed instructions from {instructions_dest}[/green]")
 
         # Also remove the project-local module copy
         if inst.scope == "project":
@@ -768,10 +819,11 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 # Process the installation update
                 result = _process_single_installation(ctx, verbose)
 
-                # Update the registry with current skills/commands/agents
+                # Update the registry with current skills/commands/agents/instructions
                 inst.skills = list(ctx.current_skills)
                 inst.commands = list(ctx.current_commands)
                 inst.agents = list(ctx.current_agents)
+                inst.has_instructions = result.instructions_ok
                 registry.add(inst)
 
                 # Print summary line for this installation
