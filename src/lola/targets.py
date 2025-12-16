@@ -137,6 +137,10 @@ class BaseAssistantTarget:
         """Default: no agent support. Override in subclasses."""
         return None
 
+    def get_instructions_path(self, project_path: str) -> Path:  # noqa: ARG002
+        """Default: no instructions path. Override in subclasses."""
+        raise NotImplementedError(f"{self.__class__.__name__} must implement get_instructions_path()")
+
     def generate_agent(
         self,
         source_path: Path,  # noqa: ARG002
@@ -147,12 +151,29 @@ class BaseAssistantTarget:
         """Default: agents not supported."""
         return False
 
+    def generate_instructions(
+        self,
+        source_path: Path,  # noqa: ARG002
+        dest_path: Path,  # noqa: ARG002
+        module_name: str,  # noqa: ARG002
+    ) -> bool:
+        """Default: instructions not supported. Override in subclasses."""
+        return False
+
     def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
         """Default: remove skill directory."""
         skill_dir = dest_path / skill_name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
             return True
+        return False
+
+    def remove_instructions(
+        self,
+        dest_path: Path,  # noqa: ARG002
+        module_name: str,  # noqa: ARG002
+    ) -> bool:
+        """Default: instructions removal not supported. Override in subclasses."""
         return False
 
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:
@@ -322,6 +343,163 @@ to learn the detailed instructions and workflows.
 
 
 # =============================================================================
+# ManagedInstructionsTarget - mixin for managed instructions sections
+# =============================================================================
+
+
+class ManagedInstructionsTarget:
+    """Mixin for targets that use managed sections for module instructions.
+
+    This provides shared logic for inserting/removing module instructions
+    into markdown files like CLAUDE.md, GEMINI.md, AGENTS.md.
+    """
+
+    INSTRUCTIONS_START_MARKER: str = "<!-- lola:instructions:start -->"
+    INSTRUCTIONS_END_MARKER: str = "<!-- lola:instructions:end -->"
+    MODULE_START_MARKER_FMT: str = "<!-- lola:module:{module_name}:start -->"
+    MODULE_END_MARKER_FMT: str = "<!-- lola:module:{module_name}:end -->"
+
+    def _get_module_markers(self, module_name: str) -> tuple[str, str]:
+        """Get the start/end markers for a specific module."""
+        start = self.MODULE_START_MARKER_FMT.format(module_name=module_name)
+        end = self.MODULE_END_MARKER_FMT.format(module_name=module_name)
+        return start, end
+
+    def generate_instructions(
+        self,
+        source_path: Path,
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Generate/update module instructions in a managed section."""
+        if not source_path.exists():
+            return False
+
+        instructions_content = source_path.read_text().strip()
+        if not instructions_content:
+            return False
+
+        # Read existing file content
+        if dest_path.exists():
+            content = dest_path.read_text()
+        else:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            content = ""
+
+        module_start, module_end = self._get_module_markers(module_name)
+
+        # Build the module block
+        module_block = f"{module_start}\n{instructions_content}\n{module_end}"
+
+        # Check if managed section exists
+        if (
+            self.INSTRUCTIONS_START_MARKER in content
+            and self.INSTRUCTIONS_END_MARKER in content
+        ):
+            start_idx = content.index(self.INSTRUCTIONS_START_MARKER)
+            end_idx = content.index(self.INSTRUCTIONS_END_MARKER) + len(
+                self.INSTRUCTIONS_END_MARKER
+            )
+            existing_section = content[start_idx:end_idx]
+            section_content = existing_section[
+                len(self.INSTRUCTIONS_START_MARKER) : -len(
+                    self.INSTRUCTIONS_END_MARKER
+                )
+            ]
+
+            # Remove existing module section if present
+            if module_start in section_content:
+                mod_start_idx = section_content.index(module_start)
+                mod_end_idx = section_content.index(module_end) + len(module_end)
+                section_content = (
+                    section_content[:mod_start_idx] + section_content[mod_end_idx:]
+                )
+
+            # Collect all module blocks and sort them alphabetically
+            module_blocks = self._extract_module_blocks(section_content)
+            module_blocks[module_name] = module_block
+
+            # Build new section with sorted modules
+            sorted_blocks = [
+                module_blocks[name] for name in sorted(module_blocks.keys())
+            ]
+            new_section_content = "\n\n".join(sorted_blocks)
+            if new_section_content:
+                new_section_content = "\n" + new_section_content + "\n"
+
+            new_section = (
+                self.INSTRUCTIONS_START_MARKER
+                + new_section_content
+                + self.INSTRUCTIONS_END_MARKER
+            )
+            content = content[:start_idx] + new_section + content[end_idx:]
+        else:
+            # Create new managed section at the end
+            new_section = (
+                f"\n\n{self.INSTRUCTIONS_START_MARKER}\n{module_block}\n"
+                f"{self.INSTRUCTIONS_END_MARKER}\n"
+            )
+            content = content.rstrip() + new_section
+
+        dest_path.write_text(content)
+        return True
+
+    def _extract_module_blocks(self, section_content: str) -> dict[str, str]:
+        """Extract individual module blocks from section content."""
+        import re
+
+        blocks: dict[str, str] = {}
+        pattern = r"<!-- lola:module:([^:]+):start -->(.*?)<!-- lola:module:\1:end -->"
+        for match in re.finditer(pattern, section_content, re.DOTALL):
+            module_name = match.group(1)
+            full_block = match.group(0)
+            blocks[module_name] = full_block.strip()
+        return blocks
+
+    def remove_instructions(self, dest_path: Path, module_name: str) -> bool:
+        """Remove a module's instructions from the managed section."""
+        if not dest_path.exists():
+            return True
+
+        content = dest_path.read_text()
+        if (
+            self.INSTRUCTIONS_START_MARKER not in content
+            or self.INSTRUCTIONS_END_MARKER not in content
+        ):
+            return True
+
+        module_start, module_end = self._get_module_markers(module_name)
+
+        start_idx = content.index(self.INSTRUCTIONS_START_MARKER)
+        end_idx = content.index(self.INSTRUCTIONS_END_MARKER) + len(
+            self.INSTRUCTIONS_END_MARKER
+        )
+        existing_section = content[start_idx:end_idx]
+        section_content = existing_section[
+            len(self.INSTRUCTIONS_START_MARKER) : -len(self.INSTRUCTIONS_END_MARKER)
+        ]
+
+        # Remove module section if present
+        if module_start in section_content:
+            mod_start_idx = section_content.index(module_start)
+            mod_end_idx = section_content.index(module_end) + len(module_end)
+            section_content = (
+                section_content[:mod_start_idx] + section_content[mod_end_idx:]
+            )
+            # Clean up extra newlines
+            section_content = re.sub(r"\n{3,}", "\n\n", section_content)
+
+        new_section = (
+            self.INSTRUCTIONS_START_MARKER
+            + section_content
+            + self.INSTRUCTIONS_END_MARKER
+        )
+        content = content[:start_idx] + new_section + content[end_idx:]
+        dest_path.write_text(content)
+        return True
+
+
+# =============================================================================
 # Private helpers
 # =============================================================================
 
@@ -404,11 +582,12 @@ def _skill_source_dir(local_module_path: Path, skill_name: str) -> Path:
 # =============================================================================
 
 
-class ClaudeCodeTarget(BaseAssistantTarget):
+class ClaudeCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
     """Target for Claude Code assistant."""
 
     name = "claude-code"
     supports_agents = True
+    INSTRUCTIONS_FILE = "CLAUDE.md"
 
     def get_skill_path(self, project_path: str) -> Path:
         return Path(project_path) / ".claude" / "skills"
@@ -418,6 +597,9 @@ class ClaudeCodeTarget(BaseAssistantTarget):
 
     def get_agent_path(self, project_path: str) -> Path:
         return Path(project_path) / ".claude" / "agents"
+
+    def get_instructions_path(self, project_path: str) -> Path:
+        return Path(project_path) / self.INSTRUCTIONS_FILE
 
     def generate_skill(
         self,
@@ -478,7 +660,11 @@ class ClaudeCodeTarget(BaseAssistantTarget):
 
 
 class CursorTarget(BaseAssistantTarget):
-    """Target for Cursor assistant."""
+    """Target for Cursor assistant.
+
+    Cursor uses .mdc rule files with alwaysApply: true for instructions,
+    avoiding inconsistent AGENTS.md loading behavior.
+    """
 
     name = "cursor"
     supports_agents = False
@@ -488,6 +674,9 @@ class CursorTarget(BaseAssistantTarget):
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".cursor" / "commands"
+
+    def get_instructions_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".cursor" / "rules"
 
     def generate_skill(
         self,
@@ -544,6 +733,36 @@ class CursorTarget(BaseAssistantTarget):
         filename = self.get_command_filename(module_name, cmd_name)
         return _generate_passthrough_command(source_path, dest_dir, filename)
 
+    def generate_instructions(
+        self,
+        source_path: Path,
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Generate .mdc file with alwaysApply: true for module instructions."""
+        if not source_path.exists():
+            return False
+
+        content = source_path.read_text().strip()
+        if not content:
+            return False
+
+        dest_path.mkdir(parents=True, exist_ok=True)
+
+        mdc_lines = [
+            "---",
+            f"description: {module_name} module instructions",
+            "globs:",
+            "alwaysApply: true",
+            "---",
+            "",
+            content,
+        ]
+
+        mdc_file = dest_path / f"{module_name}-instructions.mdc"
+        mdc_file.write_text("\n".join(mdc_lines))
+        return True
+
     def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
         """Remove .mdc file instead of directory."""
         mdc_file = dest_path / f"{skill_name}.mdc"
@@ -552,16 +771,28 @@ class CursorTarget(BaseAssistantTarget):
             return True
         return False
 
+    def remove_instructions(self, dest_path: Path, module_name: str) -> bool:
+        """Remove the module's instructions .mdc file."""
+        mdc_file = dest_path / f"{module_name}-instructions.mdc"
+        if mdc_file.exists():
+            mdc_file.unlink()
+            return True
+        return False
 
-class GeminiTarget(ManagedSectionTarget):
+
+class GeminiTarget(ManagedInstructionsTarget, ManagedSectionTarget):
     """Target for Gemini CLI assistant."""
 
     name = "gemini-cli"
     supports_agents = False
     MANAGED_FILE = "GEMINI.md"
+    INSTRUCTIONS_FILE = "GEMINI.md"
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".gemini" / "commands"
+
+    def get_instructions_path(self, project_path: str) -> Path:
+        return Path(project_path) / self.INSTRUCTIONS_FILE
 
     def generate_command(
         self,
@@ -596,21 +827,25 @@ class GeminiTarget(ManagedSectionTarget):
         return f"{module_name}-{cmd_name}.toml"
 
 
-class OpenCodeTarget(ManagedSectionTarget):
+class OpenCodeTarget(ManagedInstructionsTarget, ManagedSectionTarget):
     """Target for OpenCode assistant.
 
-    OpenCode uses AGENTS.md for skills (similar to Gemini's GEMINI.md approach).
+    OpenCode uses AGENTS.md for both skills and instructions (similar to Gemini's GEMINI.md approach).
     """
 
     name = "opencode"
     supports_agents = True
     MANAGED_FILE = "AGENTS.md"
+    INSTRUCTIONS_FILE = "AGENTS.md"
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".opencode" / "commands"
 
     def get_agent_path(self, project_path: str) -> Path:
         return Path(project_path) / ".opencode" / "agent"
+
+    def get_instructions_path(self, project_path: str) -> Path:
+        return Path(project_path) / self.INSTRUCTIONS_FILE
 
     def generate_command(
         self,
@@ -790,11 +1025,32 @@ def _install_agents(
     return installed, failed
 
 
+def _install_instructions(
+    target: AssistantTarget,
+    module: Module,
+    local_module_path: Path,
+    project_path: str | None,
+) -> bool:
+    """Install module instructions for a target. Returns True if installed."""
+    from lola.models import INSTRUCTIONS_FILE
+
+    if not module.has_instructions or not project_path:
+        return False
+
+    instructions_source = local_module_path / INSTRUCTIONS_FILE
+    if not instructions_source.exists():
+        return False
+
+    instructions_dest = target.get_instructions_path(project_path)
+    return target.generate_instructions(instructions_source, instructions_dest, module.name)
+
+
 def _print_summary(
     assistant: str,
     installed_skills: list[str],
     installed_commands: list[str],
     installed_agents: list[str],
+    has_instructions: bool,
     failed_skills: list[str],
     failed_commands: list[str],
     failed_agents: list[str],
@@ -802,7 +1058,7 @@ def _print_summary(
     verbose: bool,
 ) -> None:
     """Print installation summary."""
-    if not (installed_skills or installed_commands or installed_agents):
+    if not (installed_skills or installed_commands or installed_agents or has_instructions):
         return
 
     parts: list[str] = []
@@ -812,6 +1068,8 @@ def _print_summary(
         parts.append(f"{len(installed_commands)} command{'s' if len(installed_commands) != 1 else ''}")
     if installed_agents:
         parts.append(f"{len(installed_agents)} agent{'s' if len(installed_agents) != 1 else ''}")
+    if has_instructions:
+        parts.append("instructions")
 
     console.print(f"  [green]{assistant}[/green] [dim]({', '.join(parts)})[/dim]")
 
@@ -822,6 +1080,8 @@ def _print_summary(
             console.print(f"    [green]/{module_name}-{cmd}[/green]")
         for agent in installed_agents:
             console.print(f"    [green]@{module_name}-{agent}[/green]")
+        if has_instructions:
+            console.print("    [green]instructions[/green]")
 
     if failed_skills or failed_commands or failed_agents:
         for skill in failed_skills:
@@ -852,12 +1112,14 @@ def install_to_assistant(
     installed_skills, failed_skills = _install_skills(target, module, local_module_path, project_path)
     installed_commands, failed_commands = _install_commands(target, module, local_module_path, project_path)
     installed_agents, failed_agents = _install_agents(target, module, local_module_path, project_path)
+    instructions_installed = _install_instructions(target, module, local_module_path, project_path)
 
     _print_summary(
         assistant,
         installed_skills,
         installed_commands,
         installed_agents,
+        instructions_installed,
         failed_skills,
         failed_commands,
         failed_agents,
@@ -865,7 +1127,7 @@ def install_to_assistant(
         verbose,
     )
 
-    if installed_skills or installed_commands or installed_agents:
+    if installed_skills or installed_commands or installed_agents or instructions_installed:
         registry.add(
             Installation(
                 module_name=module.name,
@@ -875,7 +1137,8 @@ def install_to_assistant(
                 skills=installed_skills,
                 commands=installed_commands,
                 agents=installed_agents,
+                has_instructions=instructions_installed,
             )
         )
 
-    return len(installed_skills) + len(installed_commands) + len(installed_agents)
+    return len(installed_skills) + len(installed_commands) + len(installed_agents) + (1 if instructions_installed else 0)
