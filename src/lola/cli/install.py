@@ -577,7 +577,7 @@ def uninstall_cmd(
     if len(installations) > 1 and not force:
         console.print("[yellow]Multiple installations found[/yellow]")
         console.print(
-            "[dim]Use -a <assistant> and -s <scope> to target specific installation[/dim]"
+            "[dim]Use -a <assistant> to target specific installation[/dim]"
         )
         console.print("[dim]Use -f/--force to uninstall all[/dim]")
         console.print()
@@ -589,10 +589,24 @@ def uninstall_cmd(
     # Uninstall each
     removed_count = 0
     for inst in installations:
+        # Skip installations without project_path (legacy user-scope entries)
+        if not inst.project_path:
+            console.print(
+                f"  [yellow]Skipping {inst.assistant}: no project path (legacy entry)[/yellow]"
+            )
+            # Still remove from registry to clean up
+            registry.remove(
+                module_name,
+                assistant=inst.assistant,
+                scope=inst.scope,
+                project_path=inst.project_path,
+            )
+            continue
+
         target = get_target(inst.assistant)
 
         # Remove skill files
-        if inst.skills and inst.project_path:
+        if inst.skills:
             skill_dest = target.get_skill_path(inst.project_path)
 
             if target.uses_managed_section:
@@ -609,7 +623,7 @@ def uninstall_cmd(
                             console.print(f"  [green]Removed {skill}[/green]")
 
         # Remove command files
-        if inst.commands and inst.project_path:
+        if inst.commands:
             command_dest = target.get_command_path(inst.project_path)
 
             for cmd_name in inst.commands:
@@ -622,7 +636,7 @@ def uninstall_cmd(
                         console.print(f"  [green]Removed {cmd_file}[/green]")
 
         # Remove agent files
-        if inst.agents and inst.project_path:
+        if inst.agents:
             agent_dest = target.get_agent_path(inst.project_path)
 
             if agent_dest:
@@ -635,8 +649,8 @@ def uninstall_cmd(
                         if verbose:
                             console.print(f"  [green]Removed {agent_file}[/green]")
 
-        # For project scope, also remove the project-local module copy
-        if inst.scope == "project" and inst.project_path:
+        # Also remove the project-local module copy
+        if inst.scope == "project":
             local_modules = get_local_modules_path(inst.project_path)
             source_module = local_modules / module_name
             if source_module.is_symlink():
