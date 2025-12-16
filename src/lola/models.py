@@ -72,15 +72,18 @@ class Agent:
     name: str
     path: Path
     description: Optional[str] = None
+    model: Optional[str] = None
 
     @classmethod
     def from_path(cls, agent_path: Path) -> "Agent":
         """Load an agent from its file path."""
         description = None
+        model = None
 
         if agent_path.exists():
             metadata = fm.get_metadata(agent_path)
             description = metadata.get("description")
+            model = metadata.get("model")
 
         # Agent name derived from filename (without .md extension)
         name = agent_path.stem
@@ -89,6 +92,7 @@ class Agent:
             name=name,
             path=agent_path,
             description=description,
+            model=model,
         )
 
 

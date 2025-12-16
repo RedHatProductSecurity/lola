@@ -1,16 +1,16 @@
 """
-parsers:
-    Loading + parsing for lola.
+sources:
+    Module source fetching for lola.
 
-This file intentionally centralizes:
-- Module source fetching (git/zip/tar/folder + URL archives)
-- Command + skill parsing/conversion helpers
+This file handles fetching modules from various sources:
+- Git repositories
+- Zip/tar archives (local and remote URLs)
+- Local folders
 """
 
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import tarfile
@@ -25,87 +25,9 @@ from urllib.request import urlopen
 
 import yaml
 
-from lola import frontmatter as fm
 from lola.config import SKILL_FILE
 
 SOURCE_TYPES = ["git", "zip", "tar", "folder", "zipurl", "tarurl"]
-
-
-# =============================================================================
-# Skill parsing + conversion
-# =============================================================================
-
-
-def parse_skill_frontmatter(content: str) -> tuple[dict, str]:
-    """Parse YAML frontmatter from a SKILL.md file."""
-    return fm.parse(content)
-
-
-def rewrite_relative_paths(content: str, assets_path: str) -> str:
-    """
-    Rewrite relative paths in content to point to the assets location.
-
-    Handles patterns like:
-    - ./scripts/foo.sh -> <assets_path>/scripts/foo.sh
-    - ../templates/bar.md -> <assets_path>/../templates/bar.md (preserved path)
-    """
-    patterns = [
-        (r'(\s|^|"|\'|\(|`)(\.\./[^\s"\')\]`]+)', r"\1" + assets_path + r"/\2"),
-        (r'(\s|^|"|\'|\(|`)(\./([^\s"\')\]`]+))', r"\1" + assets_path + r"/\3"),
-    ]
-
-    result = content
-    for pattern, replacement in patterns:
-        result = re.sub(pattern, replacement, result)
-
-    # Clean up double slashes (except in URLs)
-    result = re.sub(r"(?<!:)//+", "/", result)
-    return result
-
-
-def skill_to_cursor_mdc(skill_path: Path, assets_path: Optional[str] = None) -> Optional[str]:
-    """Convert a SKILL.md file to Cursor MDC format."""
-    skill_file = skill_path / SKILL_FILE
-    if not skill_file.exists():
-        return None
-
-    content = skill_file.read_text()
-    frontmatter, body = parse_skill_frontmatter(content)
-
-    if assets_path:
-        body = rewrite_relative_paths(body, assets_path)
-
-    mdc_lines = ["---"]
-    mdc_lines.append(f"description: {frontmatter.get('description', '')}")
-    mdc_lines.append("globs:")
-    mdc_lines.append("alwaysApply: false")
-    mdc_lines.append("---")
-    mdc_lines.append("")
-    mdc_lines.append(body)
-    return "\n".join(mdc_lines)
-
-
-def skill_to_claude(skill_path: Path) -> Optional[str]:
-    """Return SKILL.md content for Claude Code (no conversion needed)."""
-    skill_file = skill_path / SKILL_FILE
-    if not skill_file.exists():
-        return None
-    return skill_file.read_text()
-
-
-# =============================================================================
-# Command parsing + conversion
-# =============================================================================
-
-
-def parse_command_frontmatter(content: str) -> tuple[dict, str]:
-    """Parse YAML frontmatter from a command .md file."""
-    return fm.parse(content)
-
-
-def has_positional_args(content: str) -> bool:
-    """Check if content uses positional argument placeholders ($1, $2, etc.)."""
-    return bool(re.search(r"\$\d+", content))
 
 
 # =============================================================================

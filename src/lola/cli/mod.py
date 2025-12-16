@@ -13,7 +13,7 @@ from rich.tree import Tree
 
 from lola.config import MODULES_DIR, INSTALLED_FILE
 from lola.models import Module, InstallationRegistry
-from lola.targets import get_assistant_skill_path, remove_gemini_skills
+from lola.targets import GeminiTarget, get_target
 from lola.parsers import (
     fetch_module,
     detect_source_type,
@@ -405,35 +405,21 @@ def remove_module(module_name: str, force: bool):
 
     # Uninstall from all locations
     for inst in installations:
-        try:
-            skill_dest = get_assistant_skill_path(
-                inst.assistant, inst.scope, inst.project_path
-            )
-        except ValueError:
-            console.print(
-                f"[red]Cannot determine path for {inst.assistant}/{inst.scope}[/red]"
-            )
+        if not inst.project_path:
             continue
 
-        # Remove generated files
-        if inst.assistant == "gemini-cli":
-            # Remove entries from GEMINI.md
-            if remove_gemini_skills(skill_dest, module_name):
+        target = get_target(inst.assistant)
+        skill_dest = target.get_skill_path(inst.project_path)
+
+        # Remove generated skill files
+        if isinstance(target, GeminiTarget):
+            # Remove module section from GEMINI.md
+            if target.remove_skill(skill_dest, module_name):
                 console.print(f"  [dim]Removed from: {skill_dest}[/dim]")
-        elif inst.assistant == "cursor":
-            # Remove .mdc files
-            for skill in inst.skills:
-                mdc_file = skill_dest / f"{skill}.mdc"
-                if mdc_file.exists():
-                    mdc_file.unlink()
-                    console.print(f"  [dim]Removed: {mdc_file}[/dim]")
         else:
-            # Remove skill directories (claude-code)
             for skill in inst.skills:
-                skill_dir = skill_dest / skill
-                if skill_dir.exists():
-                    shutil.rmtree(skill_dir)
-                    console.print(f"  [dim]Removed: {skill_dir}[/dim]")
+                if target.remove_skill(skill_dest, skill):
+                    console.print(f"  [dim]Removed: {skill}[/dim]")
 
         # Remove source files from project .lola/modules/ if applicable
         if inst.project_path:
@@ -556,7 +542,7 @@ def module_info(module_name: str):
     if not module.commands:
         console.print("  [dim](none)[/dim]")
     else:
-        from lola.parsers import parse_command_frontmatter
+        from lola.frontmatter import parse_file as fm_parse_file
 
         commands_dir = module.path / "commands"
         for cmd_name in module.commands:
@@ -564,8 +550,7 @@ def module_info(module_name: str):
             if cmd_path.exists():
                 console.print(f"  [green]/{module.name}-{cmd_name}[/green]")
                 # Show description from frontmatter
-                content = cmd_path.read_text()
-                frontmatter, _ = parse_command_frontmatter(content)
+                frontmatter, _ = fm_parse_file(cmd_path)
                 desc = frontmatter.get("description", "")
                 if desc:
                     console.print(f"    [dim]{desc[:60]}[/dim]")

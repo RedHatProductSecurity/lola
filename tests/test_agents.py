@@ -4,7 +4,7 @@ import pytest
 
 from lola.models import Agent, Module
 from lola.frontmatter import validate_agent
-from lola.targets import ASSISTANTS, generate_claude_agent, get_agent_filename, get_assistant_agent_path
+from lola.targets import TARGETS, get_target
 
 
 class TestAgentModel:
@@ -157,27 +157,32 @@ Content.
 class TestAgentConfig:
     """Tests for agent configuration."""
 
-    def test_claude_code_has_agent_paths(self):
-        """Claude Code config includes project-scope agent paths."""
-        assert "agents_project" in ASSISTANTS["claude-code"]
+    def test_claude_code_supports_agents(self):
+        """Claude Code supports agents."""
+        target = get_target("claude-code")
+        assert target.supports_agents is True
 
-    def test_other_assistants_no_agent_paths(self):
-        """Cursor has agents; Gemini doesn't."""
-        assert "agents_project" in ASSISTANTS["cursor"]
-        assert "agents_project" not in ASSISTANTS["gemini-cli"]
+    def test_cursor_supports_agents(self):
+        """Cursor supports agents."""
+        target = get_target("cursor")
+        assert target.supports_agents is True
 
-    def test_get_assistant_agent_path_claude_project(self, tmp_path):
+    def test_gemini_does_not_support_agents(self):
+        """Gemini doesn't support agents."""
+        target = get_target("gemini-cli")
+        assert target.supports_agents is False
+
+    def test_get_agent_path_claude_project(self, tmp_path):
         """Get Claude Code project agent path."""
-        path = get_assistant_agent_path("claude-code", "project", str(tmp_path))
+        target = get_target("claude-code")
+        path = target.get_agent_path(str(tmp_path))
         assert path == tmp_path / ".claude" / "agents"
 
-    def test_get_assistant_agent_path_unsupported(self):
-        """Unsupported assistants raise ValueError."""
-        with pytest.raises(ValueError, match="Only project scope is supported"):
-            get_assistant_agent_path("claude-code", "user")
-
-        with pytest.raises(ValueError, match="does not support agents"):
-            get_assistant_agent_path("gemini-cli", "project", "/tmp")
+    def test_get_agent_path_gemini_returns_none(self):
+        """Gemini's get_agent_path returns None."""
+        target = get_target("gemini-cli")
+        path = target.get_agent_path("/tmp")
+        assert path is None
 
 
 class TestAgentGenerator:
@@ -196,8 +201,9 @@ model: inherit
 Instructions.
 """)
 
+        target = get_target("claude-code")
         dest_dir = tmp_path / "dest"
-        success = generate_claude_agent(source, dest_dir, "myagent", "mymodule")
+        success = target.generate_agent(source, dest_dir, "myagent", "mymodule")
 
         assert success
         output_file = dest_dir / "mymodule-myagent.md"
@@ -208,12 +214,14 @@ Instructions.
 
     def test_generate_claude_agent_missing_source(self, tmp_path):
         """Generate fails gracefully for missing source."""
+        target = get_target("claude-code")
         source = tmp_path / "missing.md"
         dest_dir = tmp_path / "dest"
-        success = generate_claude_agent(source, dest_dir, "myagent", "mymodule")
+        success = target.generate_agent(source, dest_dir, "myagent", "mymodule")
         assert not success
 
     def test_get_agent_filename(self):
         """Get properly formatted agent filename."""
-        filename = get_agent_filename("claude-code", "mymodule", "myagent")
+        target = get_target("claude-code")
+        filename = target.get_agent_filename("mymodule", "myagent")
         assert filename == "mymodule-myagent.md"

@@ -5,6 +5,7 @@ This module provides consistent frontmatter parsing across lola,
 with proper error handling and validation warnings.
 """
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -188,3 +189,8 @@ def get_description(file_path: Path) -> Optional[str]:
     """
     metadata = get_metadata(file_path)
     return metadata.get("description")
+
+
+def has_positional_args(content: str) -> bool:
+    """Check if content uses positional argument placeholders ($1, $2, etc.)."""
+    return bool(re.search(r"\$\d+", content))

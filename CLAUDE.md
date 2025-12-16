@@ -63,14 +63,18 @@ my-module/
 
 ### Target Assistants
 
-Defined in `targets.py` ASSISTANTS dict. Each assistant has different output formats:
+Defined in `targets.py` TARGETS dict. Each assistant has different output formats:
 
 | Assistant | Skills | Commands | Agents |
 |-----------|--------|----------|--------|
 | claude-code | `.claude/skills/<module>-<skill>/SKILL.md` | `.claude/commands/<module>-<cmd>.md` | `.claude/agents/<module>-<agent>.md` |
-| cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` | `.cursor/agents/<module>-<agent>.md` |
+| cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` | N/A |
 | gemini-cli | `GEMINI.md` (managed section) | `.gemini/commands/<module>-<cmd>.toml` | N/A |
-| opencode | `.opencode/skills/<module>-<skill>.md` | `.opencode/commands/<module>-<cmd>.md` | `.opencode/agents/<module>-<agent>.md` |
+| opencode | `AGENTS.md` (managed section) | `.opencode/commands/<module>-<cmd>.md` | `.opencode/agent/<module>-<agent>.md` |
+
+Agent frontmatter is modified during generation:
+- Claude Code: `model: inherit` is added
+- OpenCode: `mode: subagent` is added
 
 ### Source Handlers
 

@@ -152,12 +152,20 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / "installed.yml")
         skill_dest = tmp_path / "skills"
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.name = "claude-code"
+        mock_target.supports_agents = True
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = None
+        mock_target.get_agent_path.return_value = None
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+        mock_target.generate_agent.return_value = True
+
         with (
             patch("lola.targets.console", self.console_mock),
-            patch(
-                "lola.targets.get_assistant_skill_path", return_value=skill_dest
-            ),
-            patch("lola.targets.get_assistant_command_path", return_value=None),
+            patch("lola.targets.get_target", return_value=mock_target),
         ):
             count = install_to_assistant(
                 module=module,
@@ -169,8 +177,8 @@ Do {cmd}.
             )
 
         assert count == 1
-        # Check skill was installed
-        assert (skill_dest / "testmod-skill1" / "SKILL.md").exists()
+        # Check generate_skill was called
+        mock_target.generate_skill.assert_called_once()
 
     def test_install_claude_code_commands(self, tmp_path):
         """Install commands to claude-code."""
@@ -180,13 +188,20 @@ Do {cmd}.
         registry = InstallationRegistry(tmp_path / "installed.yml")
         command_dest = tmp_path / "commands"
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.name = "claude-code"
+        mock_target.supports_agents = True
+        mock_target.get_skill_path.return_value = None
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_agent_path.return_value = None
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+        mock_target.generate_agent.return_value = True
+
         with (
             patch("lola.targets.console", self.console_mock),
-            patch("lola.targets.get_assistant_skill_path", return_value=None),
-            patch(
-                "lola.targets.get_assistant_command_path",
-                return_value=command_dest,
-            ),
+            patch("lola.targets.get_target", return_value=mock_target),
         ):
             count = install_to_assistant(
                 module=module,
@@ -198,8 +213,8 @@ Do {cmd}.
             )
 
         assert count == 1
-        # Check command was installed
-        assert (command_dest / "testmod-cmd1.md").exists()
+        # Check generate_command was called
+        mock_target.generate_command.assert_called_once()
 
     def test_install_records_installation(self, tmp_path):
         """Installation is recorded in registry."""
@@ -210,15 +225,20 @@ Do {cmd}.
         skill_dest = tmp_path / "skills"
         command_dest = tmp_path / "commands"
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.name = "claude-code"
+        mock_target.supports_agents = True
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_agent_path.return_value = None
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+        mock_target.generate_agent.return_value = True
+
         with (
             patch("lola.targets.console", self.console_mock),
-            patch(
-                "lola.targets.get_assistant_skill_path", return_value=skill_dest
-            ),
-            patch(
-                "lola.targets.get_assistant_command_path",
-                return_value=command_dest,
-            ),
+            patch("lola.targets.get_target", return_value=mock_target),
         ):
             install_to_assistant(
                 module=module,

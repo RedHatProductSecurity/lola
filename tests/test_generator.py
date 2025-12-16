@@ -1,19 +1,14 @@
 """Tests for the core/generator module."""
 
 from lola.targets import (
-    get_skill_description,
-    generate_claude_skill,
-    generate_claude_command,
-    generate_gemini_command,
-    update_gemini_md,
-    remove_gemini_skills,
-    GEMINI_START_MARKER,
-    GEMINI_END_MARKER,
+    _get_skill_description,
+    get_target,
+    GeminiTarget,
 )
 
 
 class TestGetSkillDescription:
-    """Tests for get_skill_description()"""
+    """Tests for _get_skill_description()"""
 
     def test_with_description(self, tmp_path):
         """Get description from SKILL.md with frontmatter."""
@@ -28,14 +23,14 @@ description: This is my skill description
 
 Content here.
 """)
-        desc = get_skill_description(skill_dir)
+        desc = _get_skill_description(skill_dir)
         assert desc == "This is my skill description"
 
     def test_without_skill_file(self, tmp_path):
         """Get description when SKILL.md doesn't exist."""
         skill_dir = tmp_path / "myskill"
         skill_dir.mkdir()
-        desc = get_skill_description(skill_dir)
+        desc = _get_skill_description(skill_dir)
         assert desc == ""
 
     def test_without_description(self, tmp_path):
@@ -48,12 +43,12 @@ name: myskill
 
 Content.
 """)
-        desc = get_skill_description(skill_dir)
+        desc = _get_skill_description(skill_dir)
         assert desc == ""
 
 
 class TestGenerateClaudeSkill:
-    """Tests for generate_claude_skill()"""
+    """Tests for ClaudeCodeTarget.generate_skill()"""
 
     def test_generates_skill_md(self, tmp_path):
         """Generate SKILL.md in destination."""
@@ -61,14 +56,15 @@ class TestGenerateClaudeSkill:
         source.mkdir(parents=True)
         (source / "SKILL.md").write_text("# My Skill\n\nContent.")
 
-        dest = tmp_path / "dest" / "myskill"
+        target = get_target("claude-code")
+        dest = tmp_path / "dest"
 
-        result = generate_claude_skill(source, dest)
+        result = target.generate_skill(source, dest, "myskill")
 
         assert result is True
-        assert dest.exists()
-        assert (dest / "SKILL.md").exists()
-        assert "My Skill" in (dest / "SKILL.md").read_text()
+        assert (dest / "myskill").exists()
+        assert (dest / "myskill" / "SKILL.md").exists()
+        assert "My Skill" in (dest / "myskill" / "SKILL.md").read_text()
 
     def test_copies_supporting_files(self, tmp_path):
         """Copy supporting files alongside SKILL.md."""
@@ -79,20 +75,22 @@ class TestGenerateClaudeSkill:
         (source / "scripts").mkdir()
         (source / "scripts" / "run.sh").write_text("#!/bin/bash")
 
-        dest = tmp_path / "dest" / "myskill"
+        target = get_target("claude-code")
+        dest = tmp_path / "dest"
 
-        result = generate_claude_skill(source, dest)
+        result = target.generate_skill(source, dest, "myskill")
 
         assert result is True
-        assert (dest / "helper.py").exists()
-        assert (dest / "scripts" / "run.sh").exists()
+        assert (dest / "myskill" / "helper.py").exists()
+        assert (dest / "myskill" / "scripts" / "run.sh").exists()
 
     def test_source_not_exists(self, tmp_path):
         """Return False when source doesn't exist."""
         source = tmp_path / "nonexistent"
         dest = tmp_path / "dest"
 
-        result = generate_claude_skill(source, dest)
+        target = get_target("claude-code")
+        result = target.generate_skill(source, dest, "myskill")
 
         assert result is False
 
@@ -112,7 +110,8 @@ Do something.
 """)
         dest_dir = tmp_path / "dest"
 
-        result = generate_claude_command(source, dest_dir, "test", "mymodule")
+        target = get_target("claude-code")
+        result = target.generate_command(source, dest_dir, "test", "mymodule")
 
         assert result is True
         assert (dest_dir / "mymodule-test.md").exists()
@@ -129,7 +128,8 @@ Do something with $ARGUMENTS.
 """)
         dest_dir = tmp_path / "dest"
 
-        result = generate_gemini_command(source, dest_dir, "test", "mymodule")
+        target = get_target("gemini-cli")
+        result = target.generate_command(source, dest_dir, "test", "mymodule")
 
         assert result is True
         toml_file = dest_dir / "mymodule-test.toml"
@@ -143,7 +143,8 @@ Do something with $ARGUMENTS.
         source = tmp_path / "nonexistent.md"
         dest_dir = tmp_path / "dest"
 
-        result = generate_claude_command(source, dest_dir, "test", "mymodule")
+        target = get_target("claude-code")
+        result = target.generate_command(source, dest_dir, "test", "mymodule")
 
         assert result is False
 
@@ -151,7 +152,7 @@ Do something with $ARGUMENTS.
 class TestGeminiMdHelpers:
     """Tests for Gemini MD update/remove functions."""
 
-    def test_update_gemini_md_new_file(self, tmp_path):
+    def test_generate_skills_batch_new_file(self, tmp_path):
         """Create new GEMINI.md with skills."""
         gemini_file = tmp_path / "GEMINI.md"
         skills = [
@@ -159,36 +160,41 @@ class TestGeminiMdHelpers:
             ("skill2", "Description 2", tmp_path / "skill2"),
         ]
 
-        result = update_gemini_md(gemini_file, "mymodule", skills, str(tmp_path))
+        target = get_target("gemini-cli")
+        assert isinstance(target, GeminiTarget)
+        result = target.generate_skills_batch(gemini_file, "mymodule", skills, str(tmp_path))
 
         assert result is True
         assert gemini_file.exists()
         content = gemini_file.read_text()
-        assert GEMINI_START_MARKER in content
-        assert GEMINI_END_MARKER in content
+        assert target.START_MARKER in content
+        assert target.END_MARKER in content
         assert "### mymodule" in content
         assert "skill1" in content
         assert "Description 1" in content
 
-    def test_update_gemini_md_existing_file(self, tmp_path):
+    def test_generate_skills_batch_existing_file(self, tmp_path):
         """Update existing GEMINI.md with new module."""
+        target = get_target("gemini-cli")
+        assert isinstance(target, GeminiTarget)
+
         gemini_file = tmp_path / "GEMINI.md"
         gemini_file.write_text(f"""# Project Info
 
 Some existing content.
 
-{GEMINI_START_MARKER}
+{target.START_MARKER}
 ### existing-module
 
 #### existingskill
 **When to use:** Existing skill
 **Instructions:** Read `path/SKILL.md` for detailed guidance.
 
-{GEMINI_END_MARKER}
+{target.END_MARKER}
 """)
         skills = [("newskill", "New description", tmp_path / "newskill")]
 
-        result = update_gemini_md(gemini_file, "newmodule", skills, str(tmp_path))
+        result = target.generate_skills_batch(gemini_file, "newmodule", skills, str(tmp_path))
 
         assert result is True
         content = gemini_file.read_text()
@@ -199,10 +205,13 @@ Some existing content.
         assert "### newmodule" in content
         assert "newskill" in content
 
-    def test_remove_gemini_skills(self, tmp_path):
+    def test_remove_skill(self, tmp_path):
         """Remove skills from GEMINI.md."""
+        target = get_target("gemini-cli")
+        assert isinstance(target, GeminiTarget)
+
         gemini_file = tmp_path / "GEMINI.md"
-        gemini_file.write_text(f"""{GEMINI_START_MARKER}
+        gemini_file.write_text(f"""{target.START_MARKER}
 ### module1
 
 #### skill1
@@ -213,10 +222,10 @@ Content for skill1.
 #### skill2
 Content for skill2.
 
-{GEMINI_END_MARKER}
+{target.END_MARKER}
 """)
 
-        result = remove_gemini_skills(gemini_file, "module1")
+        result = target.remove_skill(gemini_file, "module1")
 
         assert result is True
         content = gemini_file.read_text()
@@ -224,10 +233,11 @@ Content for skill2.
         assert "### module2" in content
         assert "skill2" in content
 
-    def test_remove_gemini_skills_no_file(self, tmp_path):
+    def test_remove_skill_no_file(self, tmp_path):
         """Remove from nonexistent file returns True."""
         gemini_file = tmp_path / "nonexistent.md"
 
-        result = remove_gemini_skills(gemini_file, "anymodule")
+        target = get_target("gemini-cli")
+        result = target.remove_skill(gemini_file, "anymodule")
 
         assert result is True

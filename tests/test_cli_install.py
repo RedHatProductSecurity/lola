@@ -146,13 +146,18 @@ class TestUninstallCmd:
         command_dest.mkdir()
         (command_dest / "mymodule-cmd1.md").write_text("content")
 
+        # Create mock target
+        from unittest.mock import MagicMock
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_command_filename.return_value = "mymodule-cmd1.md"
+        mock_target.remove_skill.return_value = True
+
         with (
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
-            patch("lola.cli.install.get_assistant_skill_path", return_value=skill_dest),
-            patch(
-                "lola.cli.install.get_assistant_command_path", return_value=command_dest
-            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = cli_runner.invoke(uninstall_cmd, ["mymodule", "-f"])
 
@@ -186,6 +191,8 @@ class TestUpdateCmd:
 
     def test_update_specific_module(self, cli_runner, sample_module, tmp_path):
         """Update a specific module."""
+        from unittest.mock import MagicMock
+
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
         installed_file = tmp_path / ".lola" / "installed.yml"
@@ -210,15 +217,21 @@ class TestUpdateCmd:
         command_dest = tmp_path / "commands"
         command_dest.mkdir()
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.remove_skill.return_value = True
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
             patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
-            patch("lola.cli.install.get_assistant_skill_path", return_value=skill_dest),
-            patch(
-                "lola.cli.install.get_assistant_command_path", return_value=command_dest
-            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = cli_runner.invoke(update_cmd, ["sample-module"])
 
@@ -227,6 +240,8 @@ class TestUpdateCmd:
 
     def test_update_removes_orphaned_commands(self, cli_runner, tmp_path):
         """Update removes orphaned command files when command removed from module."""
+        from unittest.mock import MagicMock
+
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
         installed_file = tmp_path / ".lola" / "installed.yml"
@@ -266,15 +281,21 @@ class TestUpdateCmd:
         orphan_cmd = command_dest / "mymodule-cmd1.md"
         orphan_cmd.write_text("orphaned content")
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.remove_skill.return_value = True
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
             patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
-            patch("lola.cli.install.get_assistant_skill_path", return_value=skill_dest),
-            patch(
-                "lola.cli.install.get_assistant_command_path", return_value=command_dest
-            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = cli_runner.invoke(update_cmd, ["mymodule"])
 
@@ -284,6 +305,8 @@ class TestUpdateCmd:
 
     def test_update_removes_orphaned_skills(self, cli_runner, tmp_path):
         """Update removes orphaned skill files when skill removed from module."""
+        from unittest.mock import MagicMock
+
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
         installed_file = tmp_path / ".lola" / "installed.yml"
@@ -321,15 +344,28 @@ class TestUpdateCmd:
         orphan_skill.mkdir()
         (orphan_skill / "SKILL.md").write_text("orphaned content")
 
+        # Create mock target with remove_skill that actually removes the dir
+        def mock_remove_skill(dest, name):
+            target = dest / name
+            if target.exists():
+                shutil.rmtree(target)
+                return True
+            return False
+
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.remove_skill.side_effect = mock_remove_skill
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
             patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
-            patch("lola.cli.install.get_assistant_skill_path", return_value=skill_dest),
-            patch(
-                "lola.cli.install.get_assistant_command_path", return_value=command_dest
-            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = cli_runner.invoke(update_cmd, ["mymodule"])
 
@@ -339,6 +375,8 @@ class TestUpdateCmd:
 
     def test_update_updates_registry_after_cleanup(self, cli_runner, tmp_path):
         """Update updates registry to reflect current module state."""
+        from unittest.mock import MagicMock
+
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
         installed_file = tmp_path / ".lola" / "installed.yml"
@@ -376,15 +414,21 @@ class TestUpdateCmd:
         command_dest = tmp_path / "commands"
         command_dest.mkdir()
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.remove_skill.return_value = True
+        mock_target.generate_skill.return_value = True
+        mock_target.generate_command.return_value = True
+
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
             patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
-            patch("lola.cli.install.get_assistant_skill_path", return_value=skill_dest),
-            patch(
-                "lola.cli.install.get_assistant_command_path", return_value=command_dest
-            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = cli_runner.invoke(update_cmd, ["mymodule"])
 

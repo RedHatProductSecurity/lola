@@ -556,6 +556,7 @@ class TestModRemoveAdvanced:
 
     def test_rm_with_installations(self, cli_runner, sample_module, tmp_path):
         """Remove module that has installations."""
+        from unittest.mock import MagicMock
         from lola.models import Installation, InstallationRegistry
 
         modules_dir = tmp_path / ".lola" / "modules"
@@ -582,13 +583,17 @@ class TestModRemoveAdvanced:
         skill_dest.mkdir(parents=True)
         (skill_dest / "SKILL.md").write_text("content")
 
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = tmp_path / "skills"
+        mock_target.get_command_path.return_value = tmp_path / "commands"
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.remove_skill.return_value = True
+
         with (
             patch("lola.cli.mod.MODULES_DIR", modules_dir),
             patch("lola.cli.mod.INSTALLED_FILE", installed_file),
-            patch(
-                "lola.cli.mod.get_assistant_skill_path",
-                return_value=tmp_path / "skills",
-            ),
+            patch("lola.cli.mod.get_target", return_value=mock_target),
             patch("lola.cli.mod.ensure_lola_dirs"),
         ):
             result = cli_runner.invoke(mod, ["rm", "sample-module", "-f"])
