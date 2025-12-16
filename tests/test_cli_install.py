@@ -31,8 +31,8 @@ class TestInstallCmd:
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    def test_install_project_scope_defaults_to_cwd(self, cli_runner, tmp_path):
-        """Project scope uses current directory when no path provided."""
+    def test_install_defaults_to_cwd(self, cli_runner, tmp_path):
+        """Install uses current directory when no path provided."""
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
 
@@ -40,7 +40,7 @@ class TestInstallCmd:
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
         ):
-            result = cli_runner.invoke(install_cmd, ["mymodule", "-s", "project"])
+            result = cli_runner.invoke(install_cmd, ["mymodule"])
 
         # Should fail because module doesn't exist (not because of missing path)
         assert result.exit_code == 1
@@ -56,7 +56,7 @@ class TestInstallCmd:
             patch("lola.cli.install.ensure_lola_dirs"),
         ):
             result = cli_runner.invoke(
-                install_cmd, ["mymodule", "-s", "project", "/nonexistent/path"]
+                install_cmd, ["mymodule", "/nonexistent/path"]
             )
 
         assert result.exit_code == 1

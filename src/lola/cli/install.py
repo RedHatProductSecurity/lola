@@ -408,13 +408,6 @@ def _format_update_summary(result: UpdateResult) -> str:
     help="AI assistant to install skills for (default: all)",
 )
 @click.option(
-    "-s",
-    "--scope",
-    type=click.Choice(["user", "project"]),
-    default="project",
-    help="Installation scope",
-)
-@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -424,7 +417,6 @@ def _format_update_summary(result: UpdateResult) -> str:
 def install_cmd(
     module_name: str,
     assistant: Optional[str],
-    scope: str,
     verbose: bool,
     project_path: str,
 ):
@@ -436,18 +428,17 @@ def install_cmd(
 
     \b
     Examples:
-        lola install my-module                              # All assistants in the current directory
-        lola install my-module -a claude-code               # Specific assistant in the current directory
-        lola install my-module -s user                      # User scope (in the user's home directory)
-        lola install my-module -s project ./my-project      # Project scope (in the specified project directory)
+        lola install my-module                         # All assistants in the current directory
+        lola install my-module -a claude-code          # Specific assistant in the current directory
+        lola install my-module ./my-project            # Install in a specific project directory
     """
     ensure_lola_dirs()
 
-    # Validate project path for project scope
-    if scope == "project":
-        project_path = str(Path(project_path).resolve())
-        if not Path(project_path).exists():
-            _handle_lola_error(PathNotFoundError(project_path, "Project path"))
+    # Project scope only - validate project path
+    scope = "project"
+    project_path = str(Path(project_path).resolve())
+    if not Path(project_path).exists():
+        _handle_lola_error(PathNotFoundError(project_path, "Project path"))
 
     # Find module in global registry
     module_path = MODULES_DIR / module_name
@@ -480,13 +471,7 @@ def install_cmd(
     # Determine which assistants to install to
     assistants_to_install = [assistant] if assistant else list(TARGETS.keys())
 
-    # Build location string
-    if scope == "project":
-        location = project_path
-    else:
-        location = "~/.lola (user scope)"
-
-    console.print(f"\n[bold]Installing {module_name} -> {location}[/bold]")
+    console.print(f"\n[bold]Installing {module_name} -> {project_path}[/bold]")
     console.print()
 
     total_installed = 0
@@ -511,13 +496,6 @@ def install_cmd(
     help="AI assistant to uninstall from (optional)",
 )
 @click.option(
-    "-s",
-    "--scope",
-    type=click.Choice(["user", "project"]),
-    default=None,
-    help="Installation scope (optional)",
-)
-@click.option(
     "-v", "--verbose", is_flag=True, help="Show detailed output for each file removed"
 )
 @click.argument("project_path", required=False, default=None)
@@ -527,7 +505,6 @@ def install_cmd(
 def uninstall_cmd(
     module_name: str,
     assistant: Optional[str],
-    scope: Optional[str],
     verbose: bool,
     project_path: Optional[str],
     force: bool,
@@ -542,7 +519,7 @@ def uninstall_cmd(
     Examples:
         lola uninstall my-module
         lola uninstall my-module -a claude-code
-        lola uninstall my-module -a cursor -s project ./my-project
+        lola uninstall my-module -a cursor ./my-project
     """
     ensure_lola_dirs()
 
@@ -553,11 +530,9 @@ def uninstall_cmd(
         console.print(f"[yellow]No installations found for '{module_name}'[/yellow]")
         return
 
-    # Filter by assistant/scope if provided
+    # Filter by assistant/project_path if provided
     if assistant:
         installations = [i for i in installations if i.assistant == assistant]
-    if scope:
-        installations = [i for i in installations if i.scope == scope]
     if project_path:
         project_path = str(Path(project_path).resolve())
         installations = [i for i in installations if i.project_path == project_path]

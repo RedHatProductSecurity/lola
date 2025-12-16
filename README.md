@@ -10,13 +10,12 @@ Lola fixes this. Write your skills and commands once as portable modules, then i
 
 ## Supported AI Assistants
 
-| Assistant | Skills | Commands | Scope |
-|-----------|--------|----------|-------|
-| Claude Code | `.claude/skills/<module>-<skill>/SKILL.md` | `.claude/commands/<module>-<cmd>.md` | user, project |
-| Cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` | skills: project only, commands: user, project |
-| Gemini CLI | `GEMINI.md` | `.gemini/commands/<module>-<cmd>.toml` | skills: project only, commands: user, project |
-
-> **Note:** Cursor and Gemini CLI skills require project-scope installs. Commands work in both scopes for all assistants.
+| Assistant | Skills | Commands |
+|-----------|--------|----------|
+| Claude Code | `.claude/skills/<module>-<skill>/SKILL.md` | `.claude/commands/<module>-<cmd>.md` |
+| Cursor | `.cursor/rules/<module>-<skill>.mdc` | `.cursor/commands/<module>-<cmd>.md` |
+| Gemini CLI | `GEMINI.md` | `.gemini/commands/<module>-<cmd>.toml` |
+| OpenCode | `AGENTS.md` | `.opencode/commands/<module>-<cmd>.md` |
 
 ## Installation
 
@@ -48,14 +47,14 @@ lola mod add ~/Downloads/skills.zip
 ### 2. Install skills to your AI assistants
 
 ```bash
-# Install to all assistants in the current directory (project scope, default)
+# Install to all assistants in the current directory
 lola install my-skills
 
 # Install to a specific assistant in the current directory
 lola install my-skills -a claude-code
 
 # Install to a specific project directory
-lola install my-skills -s project ./my-project
+lola install my-skills ./my-project
 ```
 
 ### 3. List and manage
@@ -94,7 +93,7 @@ lola update
 |---------|-------------|
 | `lola install <module>` | Install skills and commands to all assistants |
 | `lola install <module> -a <assistant>` | Install to specific assistant |
-| `lola install <module> -s project <path>` | Install to a project |
+| `lola install <module> <path>` | Install to a specific project directory |
 | `lola uninstall <module>` | Uninstall skills and commands |
 | `lola installed` | List all installations |
 | `lola update` | Regenerate assistant files |
