@@ -19,11 +19,8 @@ dependencies = [
     "python-frontmatter>=1.1.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
-]
+# Dev dependencies are in [dependency-groups] below (PEP 735)
+# Install with: uv sync --group dev
 
 [project.scripts]
 lola = "lola.main:main"
