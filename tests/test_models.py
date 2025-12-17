@@ -209,6 +209,7 @@ Content.
 """)
 
         module = Module.from_path(module_dir)
+        assert module is not None
         is_valid, errors = module.validate()
         assert is_valid is True
         assert errors == []
@@ -231,6 +232,7 @@ Content.
 """)
 
         module = Module.from_path(module_dir)
+        assert module is not None
         is_valid, errors = module.validate()
         assert is_valid is False
         assert any("description" in e.lower() for e in errors)
