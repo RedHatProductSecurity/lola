@@ -571,9 +571,9 @@ def install_cmd(
     except ValidationError as e:
         _handle_lola_error(e)
 
-    if not module.skills and not module.commands and not module.agents:
+    if not module.skills and not module.commands and not module.agents and not module.mcps and not module.has_instructions:
         console.print(
-            f"[yellow]Module '{module_name}' has no skills, commands, or agents defined[/yellow]"
+            f"[yellow]Module '{module_name}' has no skills, commands, agents, MCPs, or instructions defined[/yellow]"
         )
         return
 
