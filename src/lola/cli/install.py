@@ -564,6 +564,7 @@ def install_cmd(
     if not module:
         console.print("[dim]Expected structure: skills/<name>/SKILL.md, commands/*.md, or agents/*.md[/dim]")
         _handle_lola_error(ModuleInvalidError(module_name))
+    assert module is not None  # For type narrowing after NoReturn
 
     # Validate module structure and skill files
     try:

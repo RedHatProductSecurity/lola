@@ -456,6 +456,7 @@ class TestSourceInfo:
         save_source_info(module_path, str(source_dir), "folder")
 
         info = load_source_info(module_path)
+        assert info is not None
         assert info["source"] == str(source_dir.resolve())
 
     def test_load_nonexistent(self, tmp_path):
@@ -847,7 +848,7 @@ class TestTarSourceHandlerAdvanced:
             (content_dir / "file.txt").write_text("content")
 
             tar_file = source_dir / f"mymodule{ext}"
-            with tarfile.open(tar_file, mode) as tf:
+            with tarfile.open(tar_file, mode) as tf:  # type: ignore[no-matching-overload]
                 tf.add(content_dir, arcname="content")
 
             dest_dir = tmp_path / f"dest{ext.replace('.', '_')}"
