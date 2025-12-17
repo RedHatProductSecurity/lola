@@ -307,11 +307,11 @@ class TestTargetMCPPaths:
         assert path == Path("/project/.gemini/settings.json")
 
     def test_opencode_mcp_path(self):
-        """OpenCodeTarget returns correct MCP path."""
+        """OpenCodeTarget returns correct MCP path (opencode.json at project root)."""
         target = OpenCodeTarget()
         path = target.get_mcp_path("/project")
 
-        assert path == Path("/project/.opencode/mcp.json")
+        assert path == Path("/project/opencode.json")
 
 
 # =============================================================================
@@ -400,11 +400,9 @@ class TestTargetMCPGeneration:
         assert "git-tools-github" in content["mcpServers"]
 
     def test_opencode_generates_mcp_json(self, tmp_path):
-        """OpenCodeTarget creates .opencode/mcp.json correctly."""
+        """OpenCodeTarget creates opencode.json at project root in OpenCode format."""
         target = OpenCodeTarget()
-        opencode_dir = tmp_path / ".opencode"
-        opencode_dir.mkdir()
-        mcp_path = opencode_dir / "mcp.json"
+        mcp_path = tmp_path / "opencode.json"
 
         servers = {
             "github": {"command": "npx", "args": ["-y", "@mcp/github"]},
@@ -416,7 +414,41 @@ class TestTargetMCPGeneration:
         assert mcp_path.exists()
 
         content = json.loads(mcp_path.read_text())
-        assert "git-tools-github" in content["mcpServers"]
+        # OpenCode uses different format
+        assert content["$schema"] == "https://opencode.ai/config.json"
+        assert "git-tools-github" in content["mcp"]
+        server = content["mcp"]["git-tools-github"]
+        assert server["type"] == "local"
+        assert server["command"] == ["npx", "-y", "@mcp/github"]
+
+    def test_opencode_converts_env_var_syntax(self, tmp_path):
+        """OpenCodeTarget converts ${VAR} to {env:VAR} syntax."""
+        target = OpenCodeTarget()
+        mcp_path = tmp_path / "opencode.json"
+
+        servers = {
+            "jira": {
+                "command": "uv",
+                "args": ["run", "jira-mcp"],
+                "env": {
+                    "JIRA_URL": "https://issues.example.com",
+                    "JIRA_TOKEN": "${JIRA_TOKEN}",
+                    "API_KEY": "${API_KEY}",
+                },
+            },
+        }
+
+        result = target.generate_mcps(servers, mcp_path, "tools")
+
+        assert result is True
+        content = json.loads(mcp_path.read_text())
+        server = content["mcp"]["tools-jira"]
+        assert server["type"] == "local"
+        assert server["command"] == ["uv", "run", "jira-mcp"]
+        # Static values preserved, ${VAR} converted to {env:VAR}
+        assert server["environment"]["JIRA_URL"] == "https://issues.example.com"
+        assert server["environment"]["JIRA_TOKEN"] == "{env:JIRA_TOKEN}"
+        assert server["environment"]["API_KEY"] == "{env:API_KEY}"
 
 
 # =============================================================================
