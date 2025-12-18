@@ -212,12 +212,12 @@ class BaseAssistantTarget(AssistantTarget):
         return False
 
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:
-        """Default: module-cmd.md"""
-        return f"{module_name}-{cmd_name}.md"
+        """Default: module.cmd.md (dot-separated)"""
+        return f"{module_name}.{cmd_name}.md"
 
     def get_agent_filename(self, module_name: str, agent_name: str) -> str:
-        """Default: module-agent.md"""
-        return f"{module_name}-{agent_name}.md"
+        """Default: module.agent.md (dot-separated)"""
+        return f"{module_name}.{agent_name}.md"
 
     def generate_skills_batch(
         self,
@@ -640,11 +640,28 @@ def _generate_agent_with_frontmatter(
     return True
 
 
+def _get_content_path(local_module_path: Path) -> Path:
+    """Get the content path for a local module (handles module/ subdirectory).
+
+    If the module has a module/ subdirectory, returns that path.
+    Otherwise, returns the root module path.
+    """
+    module_subdir = local_module_path / "module"
+    if module_subdir.exists() and module_subdir.is_dir():
+        return module_subdir
+    return local_module_path
+
+
 def _skill_source_dir(local_module_path: Path, skill_name: str) -> Path:
-    """Find the source directory for a skill."""
-    preferred = local_module_path / "skills" / skill_name
+    """Find the source directory for a skill.
+
+    Handles both module/ subdirectory structure and legacy root structure.
+    """
+    content_path = _get_content_path(local_module_path)
+    preferred = content_path / "skills" / skill_name
     if preferred.exists():
         return preferred
+    # Fallback for legacy structure
     return local_module_path / skill_name
 
 

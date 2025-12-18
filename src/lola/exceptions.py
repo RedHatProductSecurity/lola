@@ -260,5 +260,23 @@ class UnknownAssistantError(ConfigurationError):
         super().__init__(message)
 
 
+class LegacyModuleStructureError(LolaError):
+    """Raised when a module uses legacy structure without module/ subdirectory.
+
+    This error provides migration instructions to help module authors
+    update to the new structure.
+    """
+
+    def __init__(self, module_name: str):
+        self.module_name = module_name
+        message = f"""Module '{module_name}' uses legacy structure without module/ subdirectory.
+
+To migrate:
+  1. Create a module/ directory in your module repository
+  2. Move skills/, commands/, agents/, AGENTS.md, and mcps.json into module/
+  3. Re-run 'lola install {module_name}'"""
+        super().__init__(message)
+
+
 
 

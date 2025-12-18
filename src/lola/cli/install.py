@@ -24,6 +24,7 @@ from lola.models import Installation, Module
 from lola.targets import (
     AssistantTarget,
     TARGETS,
+    _get_content_path,
     _get_skill_description,
     _skill_source_dir,
     copy_module_to_local,
@@ -133,7 +134,7 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
     source_module = copy_module_to_local(global_module, local_modules)
 
     # Compute current skills, commands, agents, and mcps from the module (with prefixes)
-    current_skills = {f"{inst.module_name}-{s}" for s in global_module.skills}
+    current_skills = {f"{inst.module_name}.{s}" for s in global_module.skills}
     current_commands = set(global_module.commands)
     current_agents = set(global_module.agents)
     current_mcps = {f"{inst.module_name}-{m}" for m in global_module.mcps}
@@ -192,7 +193,7 @@ def _remove_orphaned_commands(ctx: UpdateContext, verbose: bool) -> int:
             removed += 1
             if verbose:
                 console.print(
-                    f"      [yellow]- /{ctx.inst.module_name}-{cmd_name}[/yellow] [dim](orphaned)[/dim]"
+                    f"      [yellow]- /{ctx.inst.module_name}.{cmd_name}[/yellow] [dim](orphaned)[/dim]"
                 )
     return removed
 
@@ -215,7 +216,7 @@ def _remove_orphaned_agents(ctx: UpdateContext, verbose: bool) -> int:
             removed += 1
             if verbose:
                 console.print(
-                    f"      [yellow]- @{ctx.inst.module_name}-{agent_name}[/yellow] [dim](orphaned)[/dim]"
+                    f"      [yellow]- @{ctx.inst.module_name}.{agent_name}[/yellow] [dim](orphaned)[/dim]"
                 )
     return removed
 
@@ -260,7 +261,7 @@ def _update_skills(
         # Managed section targets: Update entries in GEMINI.md/AGENTS.md
         batch_skills = []
         for original_skill in ctx.global_module.skills:
-            prefixed_skill = f"{ctx.inst.module_name}-{original_skill}"
+            prefixed_skill = f"{ctx.inst.module_name}.{original_skill}"
             source = _skill_source_dir(ctx.source_module, original_skill)
             if source.exists():
                 description = _get_skill_description(source)
@@ -283,7 +284,7 @@ def _update_skills(
             )
     else:
         for original_skill in ctx.global_module.skills:
-            prefixed_skill = f"{ctx.inst.module_name}-{original_skill}"
+            prefixed_skill = f"{ctx.inst.module_name}.{original_skill}"
             source = _skill_source_dir(ctx.source_module, original_skill)
 
             success = ctx.target.generate_skill(
@@ -317,7 +318,8 @@ def _update_commands(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     commands_failed = 0
 
     command_dest = ctx.target.get_command_path(ctx.inst.project_path or "")
-    commands_dir = ctx.source_module / "commands"
+    content_path = _get_content_path(ctx.source_module)
+    commands_dir = content_path / "commands"
 
     for cmd_name in ctx.global_module.commands:
         source = commands_dir / f"{cmd_name}.md"
@@ -328,7 +330,7 @@ def _update_commands(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
         if success:
             commands_ok += 1
             if verbose:
-                console.print(f"      [green]/{ctx.inst.module_name}-{cmd_name}[/green]")
+                console.print(f"      [green]/{ctx.inst.module_name}.{cmd_name}[/green]")
         else:
             commands_failed += 1
             if verbose:
@@ -355,7 +357,8 @@ def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     agents_ok = 0
     agents_failed = 0
 
-    agents_dir = ctx.source_module / "agents"
+    content_path = _get_content_path(ctx.source_module)
+    agents_dir = content_path / "agents"
     for agent_name in ctx.global_module.agents:
         source = agents_dir / f"{agent_name}.md"
         success = ctx.target.generate_agent(
@@ -365,7 +368,7 @@ def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
         if success:
             agents_ok += 1
             if verbose:
-                console.print(f"      [green]@{ctx.inst.module_name}-{agent_name}[/green]")
+                console.print(f"      [green]@{ctx.inst.module_name}.{agent_name}[/green]")
         else:
             agents_failed += 1
             if verbose:
@@ -393,7 +396,8 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
                 console.print("      [yellow]- instructions[/yellow] [dim](removed)[/dim]")
         return False
 
-    instructions_source = ctx.source_module / INSTRUCTIONS_FILE
+    content_path = _get_content_path(ctx.source_module)
+    instructions_source = content_path / INSTRUCTIONS_FILE
     if not instructions_source.exists():
         return False
 
@@ -424,8 +428,9 @@ def _update_mcps(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     if not mcp_dest:
         return 0, 0
 
-    # Load mcps.json from source module
-    mcps_file = ctx.source_module / MCPS_FILE
+    # Load mcps.json from source module (respecting module/ subdirectory)
+    content_path = _get_content_path(ctx.source_module)
+    mcps_file = content_path / MCPS_FILE
     if not mcps_file.exists():
         return 0, len(ctx.global_module.mcps)
 

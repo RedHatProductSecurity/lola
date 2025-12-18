@@ -167,7 +167,7 @@ Content.
 
     def test_get_skill_paths(self, tmp_path):
         """Get full paths to skills."""
-        module = Module(name="test", path=tmp_path, skills=["skill1", "skill2"])
+        module = Module(name="test", path=tmp_path, content_path=tmp_path, skills=["skill1", "skill2"])
         paths = module.get_skill_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "skills" / "skill1"
@@ -175,11 +175,117 @@ Content.
 
     def test_get_command_paths(self, tmp_path):
         """Get full paths to commands."""
-        module = Module(name="test", path=tmp_path, commands=["cmd1", "cmd2"])
+        module = Module(name="test", path=tmp_path, content_path=tmp_path, commands=["cmd1", "cmd2"])
         paths = module.get_command_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "commands" / "cmd1.md"
         assert paths[1] == tmp_path / "commands" / "cmd2.md"
+
+    def test_from_path_with_module_subdirectory(self, tmp_path):
+        """Load module with content in module/ subdirectory."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create module/ subdirectory with content
+        content_dir = module_dir / "module"
+        content_dir.mkdir()
+
+        # Create skills directory with skill
+        skills_dir = content_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("""---
+description: A skill in module/ subdir
+---
+
+Content.
+""")
+
+        # Create command
+        commands_dir = content_dir / "commands"
+        commands_dir.mkdir()
+        (commands_dir / "cmd1.md").write_text("Command content")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert module.name == "mymodule"
+        assert module.path == module_dir
+        assert module.content_path == content_dir
+        assert module.uses_module_subdir is True
+        assert module.skills == ["skill1"]
+        assert module.commands == ["cmd1"]
+
+    def test_from_path_prefers_module_subdirectory(self, tmp_path):
+        """Prefer module/ subdirectory over root-level content."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create root-level skill (should be ignored)
+        root_skills = module_dir / "skills"
+        root_skills.mkdir()
+        root_skill = root_skills / "root-skill"
+        root_skill.mkdir()
+        (root_skill / "SKILL.md").write_text("---\ndescription: root skill\n---\n")
+
+        # Create module/ subdirectory with different skill
+        content_dir = module_dir / "module"
+        content_dir.mkdir()
+        module_skills = content_dir / "skills"
+        module_skills.mkdir()
+        module_skill = module_skills / "module-skill"
+        module_skill.mkdir()
+        (module_skill / "SKILL.md").write_text("---\ndescription: module skill\n---\n")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert module.uses_module_subdir is True
+        assert module.skills == ["module-skill"]
+        assert "root-skill" not in module.skills
+
+    def test_from_path_falls_back_to_root(self, tmp_path):
+        """Fall back to root-level content when module/ doesn't exist."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+
+        # Create root-level skill only (no module/ subdir)
+        skills_dir = module_dir / "skills"
+        skills_dir.mkdir()
+        skill_dir = skills_dir / "skill1"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("---\ndescription: test\n---\n")
+
+        module = Module.from_path(module_dir)
+        assert module is not None
+        assert module.uses_module_subdir is False
+        assert module.content_path == module_dir
+        assert module.skills == ["skill1"]
+
+    def test_get_paths_with_module_subdirectory(self, tmp_path):
+        """Get paths respects content_path for module/ subdirectory."""
+        module_dir = tmp_path / "mymodule"
+        module_dir.mkdir()
+        content_dir = module_dir / "module"
+        content_dir.mkdir()
+
+        module = Module(
+            name="test",
+            path=module_dir,
+            content_path=content_dir,
+            skills=["skill1"],
+            commands=["cmd1"],
+            agents=["agent1"],
+            uses_module_subdir=True,
+        )
+
+        skill_paths = module.get_skill_paths()
+        assert skill_paths[0] == content_dir / "skills" / "skill1"
+
+        cmd_paths = module.get_command_paths()
+        assert cmd_paths[0] == content_dir / "commands" / "cmd1.md"
+
+        agent_paths = module.get_agent_paths()
+        assert agent_paths[0] == content_dir / "agents" / "agent1.md"
 
     def test_validate_valid_module(self, tmp_path):
         """Validate a correctly structured module."""

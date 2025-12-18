@@ -14,6 +14,7 @@ from lola import frontmatter as fm
 from lola.exceptions import ValidationError
 
 SKILLS_DIRNAME = "skills"
+MODULE_CONTENT_DIRNAME = "module"
 
 
 @dataclass
@@ -127,16 +128,21 @@ class Module:
 
     name: str
     path: Path
+    content_path: Path  # Path to the directory containing lola content (module/ or root)
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
     mcps: list[str] = field(default_factory=list)
     has_instructions: bool = False
+    uses_module_subdir: bool = False  # True if content is in module/ subdirectory
 
     @classmethod
     def from_path(cls, module_path: Path) -> Optional["Module"]:
         """
         Load a module from its directory path.
+
+        Checks for module/ subdirectory first (new structure), falls back to
+        root-level content (legacy structure).
 
         Auto-discovers:
         - skills (folders containing SKILL.md) under skills/<skill_name>/
@@ -146,8 +152,17 @@ class Module:
         if not module_path.exists() or not module_path.is_dir():
             return None
 
+        # Check for module/ subdirectory first (new structure)
+        module_subdir = module_path / MODULE_CONTENT_DIRNAME
+        if module_subdir.exists() and module_subdir.is_dir():
+            content_path = module_subdir
+            uses_module_subdir = True
+        else:
+            content_path = module_path
+            uses_module_subdir = False
+
         skills = []
-        skills_root = module_path / SKILLS_DIRNAME
+        skills_root = content_path / SKILLS_DIRNAME
         if skills_root.exists() and skills_root.is_dir():
             for subdir in skills_root.iterdir():
                 if subdir.name.startswith("."):
@@ -157,25 +172,25 @@ class Module:
 
         # Auto-discover commands: .md files in commands/
         commands = []
-        commands_dir = module_path / "commands"
+        commands_dir = content_path / "commands"
         if commands_dir.exists() and commands_dir.is_dir():
             for cmd_file in commands_dir.glob("*.md"):
                 commands.append(cmd_file.stem)
 
         # Auto-discover agents: .md files in agents/
         agents = []
-        agents_dir = module_path / "agents"
+        agents_dir = content_path / "agents"
         if agents_dir.exists() and agents_dir.is_dir():
             for agent_file in agents_dir.glob("*.md"):
                 agents.append(agent_file.stem)
 
         # Check for module instructions (AGENTS.md)
-        instructions_file = module_path / INSTRUCTIONS_FILE
+        instructions_file = content_path / INSTRUCTIONS_FILE
         has_instructions = instructions_file.exists() and instructions_file.stat().st_size > 0
 
         # Auto-discover MCP servers from mcps.json
         mcps: list[str] = []
-        mcps_file = module_path / MCPS_FILE
+        mcps_file = content_path / MCPS_FILE
         if mcps_file.exists():
             try:
                 data = json.loads(mcps_file.read_text())
@@ -191,16 +206,18 @@ class Module:
         return cls(
             name=module_path.name,
             path=module_path,
+            content_path=content_path,
             skills=sorted(skills),
             commands=sorted(commands),
             agents=sorted(agents),
             mcps=mcps,
             has_instructions=has_instructions,
+            uses_module_subdir=uses_module_subdir,
         )
 
     def _skills_root_dir(self) -> Path:
         """Get the directory that contains skill folders."""
-        return self.path / SKILLS_DIRNAME
+        return self.content_path / SKILLS_DIRNAME
 
     def get_skill_paths(self) -> list[Path]:
         """Get the full paths to all skills in this module."""
@@ -209,12 +226,12 @@ class Module:
 
     def get_command_paths(self) -> list[Path]:
         """Get the full paths to all commands in this module."""
-        commands_dir = self.path / "commands"
+        commands_dir = self.content_path / "commands"
         return [commands_dir / f"{cmd}.md" for cmd in self.commands]
 
     def get_agent_paths(self) -> list[Path]:
         """Get the full paths to all agents in this module."""
-        agents_dir = self.path / "agents"
+        agents_dir = self.content_path / "agents"
         return [agents_dir / f"{agent}.md" for agent in self.agents]
 
     def validate(self) -> tuple[bool, list[str]]:
@@ -241,7 +258,7 @@ class Module:
                     errors.append(f"{skill_rel}/{SKILL_FILE}: {err}")
 
         # Check each command exists and has valid frontmatter
-        commands_dir = self.path / "commands"
+        commands_dir = self.content_path / "commands"
         for cmd_name in self.commands:
             cmd_path = commands_dir / f"{cmd_name}.md"
             if not cmd_path.exists():
@@ -252,7 +269,7 @@ class Module:
                     errors.append(f"commands/{cmd_name}.md: {err}")
 
         # Check each agent exists and has valid frontmatter
-        agents_dir = self.path / "agents"
+        agents_dir = self.content_path / "agents"
         for agent_name in self.agents:
             agent_path = agents_dir / f"{agent_name}.md"
             if not agent_path.exists():
@@ -264,7 +281,7 @@ class Module:
 
         # Check mcps.json if module has MCPs
         if self.mcps:
-            mcps_file = self.path / MCPS_FILE
+            mcps_file = self.content_path / MCPS_FILE
             if not mcps_file.exists():
                 errors.append(f"MCP file not found: {MCPS_FILE}")
             else:

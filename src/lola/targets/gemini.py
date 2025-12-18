@@ -69,4 +69,4 @@ class GeminiTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTar
         return True
 
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:
-        return f"{module_name}-{cmd_name}.toml"
+        return f"{module_name}.{cmd_name}.toml"

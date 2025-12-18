@@ -129,7 +129,7 @@ Do something with $ARGUMENTS.
         success = target.generate_command(cmd_file, dest, "test", "mymodule")
 
         assert success
-        toml_file = dest / "mymodule-test.toml"
+        toml_file = dest / "mymodule.test.toml"
         assert toml_file.exists()
         result = toml_file.read_text()
         assert 'description = "Test command"' in result
@@ -142,6 +142,6 @@ Do something with $ARGUMENTS.
         cursor = get_target("cursor")
         gemini = get_target("gemini-cli")
 
-        assert claude.get_command_filename("mod", "cmd") == "mod-cmd.md"
-        assert cursor.get_command_filename("mod", "cmd") == "mod-cmd.md"
-        assert gemini.get_command_filename("mod", "cmd") == "mod-cmd.toml"
+        assert claude.get_command_filename("mod", "cmd") == "mod.cmd.md"
+        assert cursor.get_command_filename("mod", "cmd") == "mod.cmd.md"
+        assert gemini.get_command_filename("mod", "cmd") == "mod.cmd.toml"

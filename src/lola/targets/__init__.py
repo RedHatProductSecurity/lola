@@ -20,6 +20,7 @@ from lola.targets.base import (
     MCPSupportMixin,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
+    _get_content_path,
     _get_skill_description,
     _merge_mcps_into_file,
     _remove_mcps_from_file,
@@ -84,6 +85,7 @@ __all__ = [
     "copy_module_to_local",
     "install_to_assistant",
     # Helpers (used by tests and cli/install.py)
+    "_get_content_path",
     "_get_skill_description",
     "_skill_source_dir",
     "_rewrite_relative_paths",

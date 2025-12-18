@@ -4,7 +4,6 @@ Module management CLI commands.
 Commands for adding, removing, and managing lola modules.
 """
 
-import json
 import shutil
 from pathlib import Path
 from typing import NoReturn
@@ -210,13 +209,13 @@ def add_module(source: str, module_name: str):
         console.print()
         console.print("[bold]Commands[/bold]")
         for cmd in module.commands:
-            console.print(f"  /{module.name}-{cmd}")
+            console.print(f"  /{module.name}.{cmd}")
 
     if module.agents:
         console.print()
         console.print("[bold]Agents[/bold]")
         for agent in module.agents:
-            console.print(f"  @{module.name}-{agent}")
+            console.print(f"  @{module.name}.{agent}")
 
     console.print()
     console.print("[bold]Next steps:[/bold]")
@@ -251,6 +250,8 @@ def add_module(source: str, module_name: str):
 @click.option("--no-agent", is_flag=True, help="Do not create an initial agent")
 @click.option("--no-mcps", is_flag=True, help="Do not create mcps.json")
 @click.option("--no-instructions", is_flag=True, help="Do not create AGENTS.md")
+@click.option("--minimal", is_flag=True, help="Create only empty directories, no example content")
+@click.option("--force", is_flag=True, help="Overwrite existing directory")
 def init_module(
     name: str | None,
     skill_name: str,
@@ -261,56 +262,81 @@ def init_module(
     no_agent: bool,
     no_mcps: bool,
     no_instructions: bool,
+    minimal: bool,
+    force: bool,
 ):
     """
     Initialize a new lola module.
 
-    Creates a module folder structure with skills, commands, and agents that are
-    auto-discovered. Skills are folders containing SKILL.md files, commands are
-    .md files in the commands/ folder, and agents are .md files in the agents/ folder.
+    Creates a module folder structure with a module/ subdirectory containing
+    skills, commands, agents, mcps.json, and AGENTS.md. A README.md is created
+    at the repository root.
 
-    By default, creates skills/, commands/, and agents/ directories with example
-    content, plus mcps.json and AGENTS.md files. Use --no-skill, --no-command,
-    --no-agent, --no-mcps, or --no-instructions to skip creating initial content.
+    By default, creates example content in the module/ directory. Use --minimal
+    to create only empty directories, or use --no-skill, --no-command, --no-agent,
+    --no-mcps, or --no-instructions to skip specific components.
 
     \b
     Examples:
-        lola mod init                           # Use current folder name, create all directories and files
+        lola mod init                           # Use current folder name
         lola mod init my-skills                 # Create my-skills/ subdirectory
+        lola mod init --minimal                 # Empty structure, no example content
+        lola mod init --force                   # Overwrite existing directory
         lola mod init -s code-review            # Custom skill name
-        lola mod init --no-skill                # Skip initial skill (but still create skills/ dir)
+        lola mod init --no-skill                # Skip initial skill
         lola mod init -c review-pr              # Custom command name
-        lola mod init --no-command              # Skip initial command (but still create commands/ dir)
         lola mod init -g my-agent               # Custom agent name
-        lola mod init --no-agent                # Skip initial agent (but still create agents/ dir)
         lola mod init --no-mcps                 # Skip creating mcps.json
         lola mod init --no-instructions         # Skip creating AGENTS.md
     """
     if name:
         # Create a new subdirectory
-        module_dir = Path.cwd() / name
-        if module_dir.exists():
-            _handle_lola_error(PathExistsError(module_dir, "Directory"))
-        module_dir.mkdir(parents=True)
+        repo_dir = Path.cwd() / name
+        if repo_dir.exists():
+            if force:
+                shutil.rmtree(repo_dir)
+            else:
+                _handle_lola_error(PathExistsError(repo_dir, "Directory"))
+        repo_dir.mkdir(parents=True)
         module_name = name
     else:
         # Use current directory
-        module_dir = Path.cwd()
-        module_name = module_dir.name
+        repo_dir = Path.cwd()
+        module_name = repo_dir.name
+
+    # Create module/ subdirectory for lola-importable content
+    module_dir = repo_dir / "module"
+    module_dir.mkdir(exist_ok=True)
+
+    # With --minimal, skip all example content, mcps.json, and AGENTS.md
+    if minimal:
+        no_skill = True
+        no_command = True
+        no_agent = True
+        no_mcps = True
+        no_instructions = True
 
     # Apply --no-skill, --no-command, and --no-agent flags
     final_skill_name: str | None = None if no_skill else skill_name
     final_command_name: str | None = None if no_command else command_name
     final_agent_name: str | None = None if no_agent else agent_name
 
-    # Create directories by default (even if no initial content)
+    # Create directories inside module/
     skills_dir = module_dir / "skills"
     commands_dir = module_dir / "commands"
     agents_dir = module_dir / "agents"
 
+    # Always create empty directories
+    skills_dir.mkdir(exist_ok=True)
+    commands_dir.mkdir(exist_ok=True)
+    agents_dir.mkdir(exist_ok=True)
+
+    # Helper for title casing names
+    def _title_case(s: str) -> str:
+        return s.replace("-", " ").title()
+
     # Create initial skill if requested
     if final_skill_name:
-        skills_dir.mkdir(exist_ok=True)
         skill_dir = skills_dir / final_skill_name
         if skill_dir.exists():
             console.print(f"[yellow]Skill directory already exists, skipping:[/yellow] {skill_dir}")
@@ -319,87 +345,123 @@ def init_module(
 
             skill_content = f"""---
 name: {final_skill_name}
-description: Description of what this skill does and when to use it.
+description: [REPLACE: Brief description of what this skill does and when to use it]
 ---
 
-# {final_skill_name.replace('-', ' ').title()} Skill
+# {_title_case(final_skill_name)} Skill
 
-Describe the skill's purpose and capabilities here.
+[REPLACE: Detailed description of the skill's purpose and capabilities]
 
-## Usage
+## When to Use
 
-Explain how to use this skill.
+[REPLACE: Describe the scenarios and triggers for using this skill]
+
+## Instructions
+
+[REPLACE: Step-by-step instructions for the AI assistant to follow]
 
 ## Examples
 
-Provide examples of the skill in action.
+[REPLACE: Provide concrete examples of the skill in action]
+
+### Example 1: [REPLACE: Example Title]
+
+```
+[REPLACE: Example input/output or workflow]
+```
+
+## Best Practices
+
+[REPLACE: Tips and guidelines for effective skill usage]
 """
             (skill_dir / "SKILL.md").write_text(skill_content)
-    else:
-        # Create empty skills directory if not creating a skill
-        skills_dir.mkdir(exist_ok=True)
 
     # Create initial command if requested
     if final_command_name:
-        commands_dir.mkdir(exist_ok=True)
         command_file = commands_dir / f"{final_command_name}.md"
         if command_file.exists():
             console.print(f"[yellow]Command file already exists, skipping:[/yellow] {command_file}")
         else:
-            command_content = f"""---
-description: Description of what this command does
-argument-hint: "[optional args]"
+            command_content = """---
+description: [REPLACE: Brief description of what this command does]
+argument-hint: "[REPLACE: expected arguments, e.g., <file> [options]]"
 ---
 
-Prompt instructions for the {final_command_name} command.
+[REPLACE: Prompt instructions for the AI assistant when this command is invoked]
 
-Use $ARGUMENTS to reference any arguments passed to the command.
+## Arguments
+
+Use `$ARGUMENTS` to access any arguments passed to this command.
+
+## Workflow
+
+1. [REPLACE: First step]
+2. [REPLACE: Second step]
+3. [REPLACE: Continue as needed]
+
+## Output
+
+[REPLACE: Describe what the command should produce or accomplish]
 """
             command_file.write_text(command_content)
-    else:
-        # Create empty commands directory if not creating a command
-        commands_dir.mkdir(exist_ok=True)
 
     # Create initial agent if requested
     if final_agent_name:
-        agents_dir.mkdir(exist_ok=True)
         agent_file = agents_dir / f"{final_agent_name}.md"
         if agent_file.exists():
             console.print(f"[yellow]Agent file already exists, skipping:[/yellow] {agent_file}")
         else:
             agent_content = f"""---
-description: Description of what this agent does and when to use it
+description: [REPLACE: Brief description of what this agent does and when to delegate to it]
 ---
 
-Instructions for the {final_agent_name.replace('-', ' ').title()} agent.
+# {_title_case(final_agent_name)}
 
-Describe the agent's purpose, capabilities, and guidelines here.
+[REPLACE: Detailed instructions for this specialized agent]
+
+## Purpose
+
+[REPLACE: What tasks is this agent designed to handle?]
+
+## Capabilities
+
+[REPLACE: What can this agent do?]
+
+## Guidelines
+
+[REPLACE: Rules and best practices for this agent's behavior]
+
+## Workflow
+
+1. [REPLACE: Describe the agent's typical workflow]
+2. [REPLACE: Continue as needed]
 """
             agent_file.write_text(agent_content)
-    else:
-        # Create empty agents directory if not creating an agent
-        agents_dir.mkdir(exist_ok=True)
 
-    # Create mcps.json if not skipped
+    # Create mcps.json if not skipped (in module/)
     if not no_mcps:
         mcps_file = module_dir / MCPS_FILE
         if mcps_file.exists():
             console.print(f"[yellow]mcps.json already exists, skipping:[/yellow] {mcps_file}")
         else:
-            mcps_content = {
-                "mcpServers": {
-                    "example-server": {
-                        "command": "npx",
-                        "args": ["-y", "@modelcontextprotocol/server-example"],
-                        "env": {
-                            "API_KEY": "${API_KEY}",
-                        },
-                    },
-                },
-            }
-            mcps_file.write_text(json.dumps(mcps_content, indent=2) + "\n")
+            mcps_content = """{
+  "mcpServers": {
+    "[REPLACE: your-server-name]": {
+      "command": "[REPLACE: command to run, e.g., npx]",
+      "args": [
+        "[REPLACE: first argument]",
+        "[REPLACE: second argument, e.g., @package/server]"
+      ],
+      "env": {
+        "[REPLACE: ENV_VAR_NAME]": "${[REPLACE: ENV_VAR_NAME]}"
+      }
+    }
+  }
+}
+"""
+            mcps_file.write_text(mcps_content)
 
-    # Create AGENTS.md if not skipped
+    # Create AGENTS.md if not skipped (in module/)
     if not no_instructions:
         agents_md_file = module_dir / "AGENTS.md"
         if agents_md_file.exists():
@@ -410,64 +472,158 @@ Describe the agent's purpose, capabilities, and guidelines here.
 
             if final_skill_name:
                 when_to_use_items.append(
-                    f"- **{final_skill_name.replace('-', ' ').title()}**: Use the `{final_skill_name}` skill for [describe when to use this skill]"
+                    f"- **{_title_case(final_skill_name)}**: Use the `{final_skill_name}` skill for [REPLACE: describe when to use]"
                 )
             if final_command_name:
                 when_to_use_items.append(
-                    f"- **{final_command_name.replace('-', ' ').title()}**: Use `/{module_name}-{final_command_name}` to [describe what this command does]"
+                    f"- **{_title_case(final_command_name)}**: Use `/{module_name}.{final_command_name}` to [REPLACE: describe what it does]"
                 )
             if final_agent_name:
                 when_to_use_items.append(
-                    f"- **{final_agent_name.replace('-', ' ').title()}**: Delegate to `@{module_name}-{final_agent_name}` for [describe when to use this agent]"
+                    f"- **{_title_case(final_agent_name)}**: Delegate to `@{module_name}.{final_agent_name}` for [REPLACE: describe when to use]"
                 )
 
             if not when_to_use_items:
                 when_to_use_items.append(
-                    "- Add skills, commands, or agents and describe when to use them here"
+                    "- [REPLACE: Add skills, commands, or agents and describe when to use them]"
                 )
 
-            agents_md_content = f"""# {module_name.replace('-', ' ').title()}
+            agents_md_content = f"""# {_title_case(module_name)}
 
-Describe what this module provides and its purpose.
+[REPLACE: Brief overview of what this module provides]
 
 ## When to Use
 
 {chr(10).join(when_to_use_items)}
+
+## Configuration
+
+[REPLACE: Any configuration or setup requirements]
+
+## Notes
+
+[REPLACE: Additional guidance for AI assistants using this module]
 """
             agents_md_file.write_text(agents_md_content)
 
+    # Create README.md at repo root
+    readme_file = repo_dir / "README.md"
+    if readme_file.exists():
+        console.print(f"[yellow]README.md already exists, skipping:[/yellow] {readme_file}")
+    else:
+        # Build component sections based on what was created
+        skills_section = "[REPLACE: List and describe each skill in module/skills/]"
+        commands_section = "[REPLACE: List and describe each command in module/commands/]"
+        agents_section = "[REPLACE: List and describe each agent in module/agents/]"
+        mcps_section = "[REPLACE: List and describe each MCP server in module/mcps.json]"
+
+        readme_content = f"""# {_title_case(module_name)}
+
+[REPLACE: Brief description of what this module provides]
+
+## Installation
+
+```bash
+# Add to lola registry
+lola mod add /path/to/{module_name}
+
+# Install to a project
+lola install {module_name}
+```
+
+## Components
+
+### Skills
+
+{skills_section}
+
+### Commands
+
+{commands_section}
+
+### Agents
+
+{agents_section}
+
+### MCP Servers
+
+{mcps_section}
+
+## Development
+
+This module follows the lola module structure:
+
+```
+{module_name}/
+├── README.md           # This file (repo documentation)
+└── module/             # Lola-importable content
+    ├── skills/         # Skill folders with SKILL.md
+    ├── commands/       # Slash command .md files
+    ├── agents/         # Subagent .md files
+    ├── mcps.json       # MCP server configuration
+    └── AGENTS.md       # Module-level instructions
+```
+
+Edit files in `module/` to customize the content that gets installed to AI assistants.
+
+## License
+
+[REPLACE: Your license here]
+"""
+        readme_file.write_text(readme_content)
+
     console.print(f"[green]Initialized module {module_name}[/green]")
-    console.print(f"  [dim]Path:[/dim] {module_dir}")
+    console.print(f"  [dim]Path:[/dim] {repo_dir}")
 
     console.print()
     console.print("[bold]Structure[/bold]")
-    _module_tree(
-        module_name,
-        skills=[final_skill_name] if final_skill_name else None,
-        commands=[final_command_name] if final_command_name else None,
-        agents=[final_agent_name] if final_agent_name else None,
-        has_mcps=not no_mcps,
-        has_instructions=not no_instructions,
-    )
+    # Print tree with module/ subdirectory
+    tree = Tree(f"[cyan]{module_name}/[/cyan]")
+    tree.add("[dim]README.md[/dim]")
+    module_node = tree.add("[cyan]module/[/cyan]")
+
+    if final_skill_name or not minimal:
+        skills_node = module_node.add("[dim]skills/[/dim]")
+        if final_skill_name:
+            skill_node = skills_node.add(f"[green]{final_skill_name}/[/green]")
+            skill_node.add("[dim]SKILL.md[/dim]")
+
+    if final_command_name or not minimal:
+        cmd_node = module_node.add("[dim]commands/[/dim]")
+        if final_command_name:
+            cmd_node.add(f"[dim]{final_command_name}.md[/dim]")
+
+    if final_agent_name or not minimal:
+        agent_node = module_node.add("[dim]agents/[/dim]")
+        if final_agent_name:
+            agent_node.add(f"[dim]{final_agent_name}.md[/dim]")
+
+    if not no_mcps:
+        module_node.add("[dim]mcps.json[/dim]")
+    if not no_instructions:
+        module_node.add("[dim]AGENTS.md[/dim]")
+
+    console.print(tree)
 
     steps = []
+    steps.append("Replace [REPLACE: ...] markers with your content")
     if final_skill_name:
-        steps.append(f"Edit skills/{final_skill_name}/SKILL.md with your skill content")
+        steps.append(f"Edit module/skills/{final_skill_name}/SKILL.md with your skill content")
     else:
-        steps.append("Add skill directories under skills/ with SKILL.md files")
+        steps.append("Add skill directories under module/skills/ with SKILL.md files")
     if final_command_name:
-        steps.append(f"Edit commands/{final_command_name}.md with your command prompt")
+        steps.append(f"Edit module/commands/{final_command_name}.md with your command prompt")
     else:
-        steps.append("Add .md files to commands/ for slash commands")
+        steps.append("Add .md files to module/commands/ for slash commands")
     if final_agent_name:
-        steps.append(f"Edit agents/{final_agent_name}.md with your agent instructions")
+        steps.append(f"Edit module/agents/{final_agent_name}.md with your agent instructions")
     else:
-        steps.append("Add .md files to agents/ for subagents")
+        steps.append("Add .md files to module/agents/ for subagents")
     if not no_mcps:
-        steps.append(f"Edit {MCPS_FILE} to configure MCP servers")
+        steps.append(f"Edit module/{MCPS_FILE} to configure MCP servers")
     if not no_instructions:
-        steps.append("Edit AGENTS.md with module instructions")
-    steps.append(f"lola mod add {module_dir}")
+        steps.append("Edit module/AGENTS.md with module instructions")
+    steps.append(f"lola mod add {repo_dir}")
 
     console.print()
     console.print("[bold]Next steps:[/bold]")
@@ -594,11 +750,11 @@ def list_modules(verbose: bool):
             if module.commands:
                 console.print("  [bold]Commands:[/bold]")
                 for cmd in module.commands:
-                    console.print(f"    /{module.name}-{cmd}")
+                    console.print(f"    /{module.name}.{cmd}")
             if module.agents:
                 console.print("  [bold]Agents:[/bold]")
                 for agent in module.agents:
-                    console.print(f"    @{module.name}-{agent}")
+                    console.print(f"    @{module.name}.{agent}")
 
         console.print()
 
@@ -660,7 +816,7 @@ def module_info(module_name: str):
         for cmd_name in module.commands:
             cmd_path = commands_dir / f"{cmd_name}.md"
             if cmd_path.exists():
-                console.print(f"  [green]/{module.name}-{cmd_name}[/green]")
+                console.print(f"  [green]/{module.name}.{cmd_name}[/green]")
                 # Show description from frontmatter
                 frontmatter, _ = fm_parse_file(cmd_path)
                 desc = frontmatter.get("description", "")
@@ -681,7 +837,7 @@ def module_info(module_name: str):
         for agent_name in module.agents:
             agent_path = agents_dir / f"{agent_name}.md"
             if agent_path.exists():
-                console.print(f"  [green]@{module.name}-{agent_name}[/green]")
+                console.print(f"  [green]@{module.name}.{agent_name}[/green]")
                 # Show description from frontmatter
                 frontmatter, _ = fm_parse_file(agent_path)
                 desc = frontmatter.get("description", "")

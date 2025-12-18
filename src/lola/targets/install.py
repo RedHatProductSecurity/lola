@@ -21,7 +21,7 @@ import lola.config as config
 from lola.exceptions import ConfigurationError
 from lola.models import Installation, InstallationRegistry, Module
 
-from .base import AssistantTarget, _get_skill_description, _skill_source_dir
+from .base import AssistantTarget, _get_content_path, _get_skill_description, _skill_source_dir
 
 console = Console()
 
@@ -79,7 +79,7 @@ def _install_skills(
         batch_skills: list[tuple[str, str, Path]] = []
         for skill in module.skills:
             source = _skill_source_dir(local_module_path, skill)
-            prefixed = f"{module.name}-{skill}"
+            prefixed = f"{module.name}.{skill}"
             if source.exists():
                 batch_skills.append((skill, _get_skill_description(source), source))
                 installed.append(prefixed)
@@ -92,7 +92,7 @@ def _install_skills(
     else:
         for skill in module.skills:
             source = _skill_source_dir(local_module_path, skill)
-            prefixed = f"{module.name}-{skill}"
+            prefixed = f"{module.name}.{skill}"
             if target.generate_skill(source, skill_dest, prefixed, project_path):
                 installed.append(prefixed)
             else:
@@ -118,7 +118,8 @@ def _install_commands(
     if not command_dest:
         return [], []
 
-    commands_dir = local_module_path / "commands"
+    content_path = _get_content_path(local_module_path)
+    commands_dir = content_path / "commands"
     for cmd in module.commands:
         source = commands_dir / f"{cmd}.md"
         if target.generate_command(source, command_dest, cmd, module.name):
@@ -146,7 +147,8 @@ def _install_agents(
     installed: list[str] = []
     failed: list[str] = []
 
-    agents_dir = local_module_path / "agents"
+    content_path = _get_content_path(local_module_path)
+    agents_dir = content_path / "agents"
     for agent in module.agents:
         source = agents_dir / f"{agent}.md"
         if target.generate_agent(source, agent_dest, agent, module.name):
@@ -169,7 +171,8 @@ def _install_instructions(
     if not module.has_instructions or not project_path:
         return False
 
-    instructions_source = local_module_path / INSTRUCTIONS_FILE
+    content_path = _get_content_path(local_module_path)
+    instructions_source = content_path / INSTRUCTIONS_FILE
     if not instructions_source.exists():
         return False
 
@@ -193,8 +196,9 @@ def _install_mcps(
     if not mcp_dest:
         return [], []
 
-    # Load mcps.json from local module
-    mcps_file = local_module_path / config.MCPS_FILE
+    # Load mcps.json from local module (respecting module/ subdirectory)
+    content_path = _get_content_path(local_module_path)
+    mcps_file = content_path / config.MCPS_FILE
     if not mcps_file.exists():
         return [], list(module.mcps)
 
@@ -262,9 +266,9 @@ def _print_summary(
         for skill in installed_skills:
             console.print(f"    [green]{skill}[/green]")
         for cmd in installed_commands:
-            console.print(f"    [green]/{module_name}-{cmd}[/green]")
+            console.print(f"    [green]/{module_name}.{cmd}[/green]")
         for agent in installed_agents:
-            console.print(f"    [green]@{module_name}-{agent}[/green]")
+            console.print(f"    [green]@{module_name}.{agent}[/green]")
         for mcp in installed_mcps:
             console.print(f"    [green]mcp:{mcp}[/green]")
         if has_instructions:
