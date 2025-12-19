@@ -35,3 +35,4 @@ htmlcov/
 .cursor/
 .gemini/
 GEMINI.md
+.specify/

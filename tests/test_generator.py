@@ -114,7 +114,7 @@ Do something.
         result = target.generate_command(source, dest_dir, "test", "mymodule")
 
         assert result is True
-        assert (dest_dir / "mymodule-test.md").exists()
+        assert (dest_dir / "mymodule.test.md").exists()
 
     def test_generate_gemini_command(self, tmp_path):
         """Generate Gemini TOML command file."""
@@ -132,7 +132,7 @@ Do something with $ARGUMENTS.
         result = target.generate_command(source, dest_dir, "test", "mymodule")
 
         assert result is True
-        toml_file = dest_dir / "mymodule-test.toml"
+        toml_file = dest_dir / "mymodule.test.toml"
         assert toml_file.exists()
         content = toml_file.read_text()
         assert 'description = "Test command"' in content

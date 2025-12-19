@@ -83,7 +83,7 @@ class TestModuleWithAgents:
     def test_get_agent_paths(self, tmp_path):
         """Get full paths to agents."""
         module = Module(
-            name="test", path=tmp_path, agents=["agent1", "agent2"]
+            name="test", path=tmp_path, content_path=tmp_path, agents=["agent1", "agent2"]
         )
         paths = module.get_agent_paths()
         assert len(paths) == 2
@@ -205,11 +205,11 @@ Instructions.
         success = target.generate_agent(source, dest_dir, "myagent", "mymodule")
 
         assert success
-        output_file = dest_dir / "mymodule-myagent.md"
+        output_file = dest_dir / "mymodule.myagent.md"
         assert output_file.exists()
         content = output_file.read_text()
         # Claude Code requires name to match the filename for @agent-name references
-        assert "name: mymodule-myagent" in content
+        assert "name: mymodule.myagent" in content
         assert "Instructions." in content
 
     def test_generate_claude_agent_missing_source(self, tmp_path):
@@ -224,4 +224,4 @@ Instructions.
         """Get properly formatted agent filename."""
         target = get_target("claude-code")
         filename = target.get_agent_filename("mymodule", "myagent")
-        assert filename == "mymodule-myagent.md"
+        assert filename == "mymodule.myagent.md"

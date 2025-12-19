@@ -55,9 +55,7 @@ class TestInstallCmd:
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
         ):
-            result = cli_runner.invoke(
-                install_cmd, ["mymodule", "/nonexistent/path"]
-            )
+            result = cli_runner.invoke(install_cmd, ["mymodule", "/nonexistent/path"])
 
         assert result.exit_code == 1
         assert "does not exist" in result.output
@@ -131,27 +129,28 @@ class TestUninstallCmd:
             module_name="mymodule",
             assistant="claude-code",
             scope="user",
-            skills=["mymodule-skill1"],
+            skills=["mymodule.skill1"],
             commands=["cmd1"],
         )
         registry.add(inst)
 
         # Create mock skill/command paths
         skill_dest = tmp_path / "skills"
-        skill_dir = skill_dest / "mymodule-skill1"
+        skill_dir = skill_dest / "mymodule.skill1"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("content")
 
         command_dest = tmp_path / "commands"
         command_dest.mkdir()
-        (command_dest / "mymodule-cmd1.md").write_text("content")
+        (command_dest / "mymodule.cmd1.md").write_text("content")
 
         # Create mock target
         from unittest.mock import MagicMock
+
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
-        mock_target.get_command_filename.return_value = "mymodule-cmd1.md"
+        mock_target.get_command_filename.return_value = "mymodule.cmd1.md"
         mock_target.remove_skill.return_value = True
 
         with (
@@ -266,7 +265,7 @@ class TestUpdateCmd:
             module_name="mymodule",
             assistant="claude-code",
             scope="user",
-            skills=["mymodule-skill1"],
+            skills=["mymodule.skill1"],
             commands=["cmd1", "cmd2"],  # cmd1 is orphaned
         )
         registry.add(inst)
@@ -278,15 +277,23 @@ class TestUpdateCmd:
         command_dest.mkdir()
 
         # Create orphaned command file
-        orphan_cmd = command_dest / "mymodule-cmd1.md"
+        orphan_cmd = command_dest / "mymodule.cmd1.md"
         orphan_cmd.write_text("orphaned content")
 
-        # Create mock target
+        # Create mock target that actually removes command files
+        def mock_remove_command(dest, cmd, mod):
+            target_file = dest / f"{mod}.{cmd}.md"
+            if target_file.exists():
+                target_file.unlink()
+                return True
+            return True
+
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
-        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}.{c}.md"
         mock_target.remove_skill.return_value = True
+        mock_target.remove_command.side_effect = mock_remove_command
         mock_target.generate_skill.return_value = True
         mock_target.generate_command.return_value = True
 
@@ -328,7 +335,7 @@ class TestUpdateCmd:
             module_name="mymodule",
             assistant="claude-code",
             scope="user",
-            skills=["mymodule-skill1", "mymodule-skill2"],  # skill2 is orphaned
+            skills=["mymodule.skill1", "mymodule.skill2"],  # skill2 is orphaned
             commands=[],
         )
         registry.add(inst)
@@ -340,7 +347,7 @@ class TestUpdateCmd:
         command_dest.mkdir()
 
         # Create orphaned skill directory
-        orphan_skill = skill_dest / "mymodule-skill2"
+        orphan_skill = skill_dest / "mymodule.skill2"
         orphan_skill.mkdir()
         (orphan_skill / "SKILL.md").write_text("orphaned content")
 
@@ -404,7 +411,7 @@ class TestUpdateCmd:
             module_name="mymodule",
             assistant="claude-code",
             scope="user",
-            skills=["mymodule-skill1", "mymodule-skill2", "mymodule-skill3"],
+            skills=["mymodule.skill1", "mymodule.skill2", "mymodule.skill3"],
             commands=["cmd1", "cmd2"],
         )
         registry.add(inst)
@@ -419,7 +426,7 @@ class TestUpdateCmd:
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
-        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}-{c}.md"
+        mock_target.get_command_filename.side_effect = lambda m, c: f"{m}.{c}.md"
         mock_target.remove_skill.return_value = True
         mock_target.generate_skill.return_value = True
         mock_target.generate_command.return_value = True
@@ -437,7 +444,7 @@ class TestUpdateCmd:
 
         # Registry should now reflect current module state
         updated_inst = registry.find("mymodule")[0]
-        assert set(updated_inst.skills) == {"mymodule-skill1"}
+        assert set(updated_inst.skills) == {"mymodule.skill1"}
         assert set(updated_inst.commands) == {"cmd1"}
 
 

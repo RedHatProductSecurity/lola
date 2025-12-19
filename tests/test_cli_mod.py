@@ -294,10 +294,10 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert "Initialized module" in result.output
-            # Default skill, command, and agent should be created
-            assert (tmp_path / "skills" / "example-skill" / "SKILL.md").exists()
-            assert (tmp_path / "commands" / "example-command.md").exists()
-            assert (tmp_path / "agents" / "example-agent.md").exists()
+            # Default skill, command, and agent should be created in module/
+            assert (tmp_path / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (tmp_path / "module" / "commands" / "example-command.md").exists()
+            assert (tmp_path / "module" / "agents" / "example-agent.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -313,13 +313,13 @@ class TestModInit:
 
             assert result.exit_code == 0
             assert "my-new-module" in result.output
-            # Default skill, command, and agent should be created
-            assert (tmp_path / "my-new-module" / "skills" / "example-skill" / "SKILL.md").exists()
+            # Default skill, command, and agent should be created in module/
+            assert (tmp_path / "my-new-module" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
             assert (
-                tmp_path / "my-new-module" / "commands" / "example-command.md"
+                tmp_path / "my-new-module" / "module" / "commands" / "example-command.md"
             ).exists()
             assert (
-                tmp_path / "my-new-module" / "agents" / "example-agent.md"
+                tmp_path / "my-new-module" / "module" / "agents" / "example-agent.md"
             ).exists()
         finally:
             os.chdir(original_dir)
@@ -338,11 +338,11 @@ class TestModInit:
             # Module directory should exist
             assert (tmp_path / "mymod").exists()
             # Skills directory should exist but be empty (no example-skill)
-            assert (tmp_path / "mymod" / "skills").exists()
-            assert not (tmp_path / "mymod" / "skills" / "example-skill").exists()
+            assert (tmp_path / "mymod" / "module" / "skills").exists()
+            assert not (tmp_path / "mymod" / "module" / "skills" / "example-skill").exists()
             # But command and agent should still be created
-            assert (tmp_path / "mymod" / "commands" / "example-command.md").exists()
-            assert (tmp_path / "mymod" / "agents" / "example-agent.md").exists()
+            assert (tmp_path / "mymod" / "module" / "commands" / "example-command.md").exists()
+            assert (tmp_path / "mymod" / "module" / "agents" / "example-agent.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -357,7 +357,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "-s", "custom-skill"])
 
             assert result.exit_code == 0
-            assert (tmp_path / "mymod" / "skills" / "custom-skill" / "SKILL.md").exists()
+            assert (tmp_path / "mymod" / "module" / "skills" / "custom-skill" / "SKILL.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -372,7 +372,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "-c", "my-cmd"])
 
             assert result.exit_code == 0
-            assert (tmp_path / "mymod" / "commands" / "my-cmd.md").exists()
+            assert (tmp_path / "mymod" / "module" / "commands" / "my-cmd.md").exists()
         finally:
             os.chdir(original_dir)
 
@@ -400,9 +400,10 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            # Create the default skill directory under skills/
-            (tmp_path / "skills").mkdir()
-            (tmp_path / "skills" / "example-skill").mkdir()
+            # Create the default skill directory under module/skills/
+            (tmp_path / "module").mkdir()
+            (tmp_path / "module" / "skills").mkdir()
+            (tmp_path / "module" / "skills" / "example-skill").mkdir()
             result = cli_runner.invoke(mod, ["init"])
 
             # Command should succeed but warn about skipping existing skill
@@ -413,7 +414,6 @@ class TestModInit:
 
     def test_init_creates_mcps_json(self, cli_runner, tmp_path):
         """Initialize module creates mcps.json by default."""
-        import json
         import os
 
         from lola.config import MCPS_FILE
@@ -425,14 +425,13 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod"])
 
             assert result.exit_code == 0
-            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            mcps_file = tmp_path / "mymod" / "module" / MCPS_FILE
             assert mcps_file.exists()
 
-            # Verify content
-            content = json.loads(mcps_file.read_text())
+            # Verify content has [REPLACE:] placeholders (new template format)
+            content = mcps_file.read_text()
             assert "mcpServers" in content
-            assert "example-server" in content["mcpServers"]
-            assert content["mcpServers"]["example-server"]["command"] == "npx"
+            assert "[REPLACE:" in content
         finally:
             os.chdir(original_dir)
 
@@ -447,7 +446,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod"])
 
             assert result.exit_code == 0
-            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
             assert agents_file.exists()
 
             # Verify content
@@ -470,7 +469,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "--no-mcps"])
 
             assert result.exit_code == 0
-            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            mcps_file = tmp_path / "mymod" / "module" / MCPS_FILE
             assert not mcps_file.exists()
         finally:
             os.chdir(original_dir)
@@ -486,7 +485,7 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "--no-instructions"])
 
             assert result.exit_code == 0
-            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
             assert not agents_file.exists()
         finally:
             os.chdir(original_dir)
@@ -506,16 +505,15 @@ class TestModInit:
             )
 
             assert result.exit_code == 0
-            assert not (tmp_path / "mymod" / MCPS_FILE).exists()
-            assert not (tmp_path / "mymod" / "AGENTS.md").exists()
+            assert not (tmp_path / "mymod" / "module" / MCPS_FILE).exists()
+            assert not (tmp_path / "mymod" / "module" / "AGENTS.md").exists()
             # But other files should still be created
-            assert (tmp_path / "mymod" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (tmp_path / "mymod" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
         finally:
             os.chdir(original_dir)
 
     def test_init_mcps_with_no_skill_command_agent(self, cli_runner, tmp_path):
         """mcps.json and AGENTS.md created even when --no-skill --no-command --no-agent."""
-        import json
         import os
 
         from lola.config import MCPS_FILE
@@ -536,14 +534,14 @@ class TestModInit:
             )
 
             assert result.exit_code == 0
-            # mcps.json should be created
-            mcps_file = tmp_path / "mymod" / MCPS_FILE
+            # mcps.json should be created in module/
+            mcps_file = tmp_path / "mymod" / "module" / MCPS_FILE
             assert mcps_file.exists()
-            content = json.loads(mcps_file.read_text())
+            content = mcps_file.read_text()
             assert "mcpServers" in content
 
-            # AGENTS.md should be created
-            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            # AGENTS.md should be created in module/
+            agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
             assert agents_file.exists()
             agents_content = agents_file.read_text()
             assert "# Mymod" in agents_content
@@ -563,17 +561,17 @@ class TestModInit:
             )
 
             assert result.exit_code == 0
-            agents_file = tmp_path / "mymod" / "AGENTS.md"
+            agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
             content = agents_file.read_text()
 
             # Should mention the skill
             assert "my-skill" in content.lower() or "My Skill" in content
-            # Should mention the command
+            # Should mention the command (now uses dot notation)
             assert "my-cmd" in content.lower() or "My Cmd" in content
-            assert "mymod-my-cmd" in content
-            # Should mention the agent
+            assert "mymod.my-cmd" in content
+            # Should mention the agent (now uses dot notation)
             assert "my-agent" in content.lower() or "My Agent" in content
-            assert "mymod-my-agent" in content
+            assert "mymod.my-agent" in content
         finally:
             os.chdir(original_dir)
 
@@ -723,6 +721,203 @@ class TestModUpdate:
 
         assert result.exit_code == 0
         assert "Updating 1 module" in result.output
+
+
+class TestModInitModuleSubdir:
+    """Tests for mod init with module/ subdirectory structure."""
+
+    def test_init_creates_module_subdirectory(self, cli_runner, tmp_path):
+        """Init creates module/ subdirectory with skills, commands, agents."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "my-module"])
+
+            assert result.exit_code == 0
+            assert "Initialized module" in result.output
+            # Module/ subdirectory should contain skills, commands, agents
+            assert (tmp_path / "my-module" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (tmp_path / "my-module" / "module" / "commands" / "example-command.md").exists()
+            assert (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").exists()
+            # mcps.json and AGENTS.md should be in module/
+            assert (tmp_path / "my-module" / "module" / "mcps.json").exists()
+            assert (tmp_path / "my-module" / "module" / "AGENTS.md").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_creates_readme_at_root(self, cli_runner, tmp_path):
+        """Init creates README.md at repo root, not in module/."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "my-module"])
+
+            assert result.exit_code == 0
+            # README.md at repo root
+            readme = tmp_path / "my-module" / "README.md"
+            assert readme.exists()
+            content = readme.read_text()
+            assert "# My Module" in content
+            assert "module/" in content  # Should mention module/ structure
+            # No README inside module/
+            assert not (tmp_path / "my-module" / "module" / "README.md").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_templates_have_replace_markers(self, cli_runner, tmp_path):
+        """Template files contain [REPLACE:] markers."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "my-module"])
+
+            assert result.exit_code == 0
+            # Check README.md has markers
+            readme = (tmp_path / "my-module" / "README.md").read_text()
+            assert "[REPLACE:" in readme
+
+            # Check SKILL.md has markers
+            skill_md = (tmp_path / "my-module" / "module" / "skills" / "example-skill" / "SKILL.md").read_text()
+            assert "[REPLACE:" in skill_md
+
+            # Check command has markers
+            cmd_md = (tmp_path / "my-module" / "module" / "commands" / "example-command.md").read_text()
+            assert "[REPLACE:" in cmd_md
+
+            # Check agent has markers
+            agent_md = (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").read_text()
+            assert "[REPLACE:" in agent_md
+
+            # Check mcps.json has markers
+            mcps_json = (tmp_path / "my-module" / "module" / "mcps.json").read_text()
+            assert "[REPLACE:" in mcps_json
+
+            # Check AGENTS.md has markers
+            agents_md = (tmp_path / "my-module" / "module" / "AGENTS.md").read_text()
+            assert "[REPLACE:" in agents_md
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_current_dir_creates_module_subdir(self, cli_runner, tmp_path):
+        """Init in current directory uses directory name and creates module/."""
+        import os
+
+        original_dir = os.getcwd()
+        # Create and switch to a named directory
+        named_dir = tmp_path / "my-project"
+        named_dir.mkdir()
+
+        try:
+            os.chdir(named_dir)
+            result = cli_runner.invoke(mod, ["init"])
+
+            assert result.exit_code == 0
+            assert "my-project" in result.output
+            # Module/ subdirectory should be created
+            assert (named_dir / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (named_dir / "module" / "commands" / "example-command.md").exists()
+            # README.md at root
+            assert (named_dir / "README.md").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_agents_md_uses_dot_notation(self, cli_runner, tmp_path):
+        """AGENTS.md uses dot-separated naming convention."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(
+                mod, ["init", "my-mod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"]
+            )
+
+            assert result.exit_code == 0
+            agents_md = (tmp_path / "my-mod" / "module" / "AGENTS.md").read_text()
+            # Should use dot-separated notation
+            assert "/my-mod.my-cmd" in agents_md
+            assert "@my-mod.my-agent" in agents_md
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_minimal_flag_creates_empty_structure(self, cli_runner, tmp_path):
+        """Init with --minimal creates only empty directories."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init", "my-module", "--minimal"])
+
+            assert result.exit_code == 0
+            # Empty directories exist
+            assert (tmp_path / "my-module" / "module" / "skills").exists()
+            assert (tmp_path / "my-module" / "module" / "commands").exists()
+            assert (tmp_path / "my-module" / "module" / "agents").exists()
+            # No example content
+            assert not (tmp_path / "my-module" / "module" / "skills" / "example-skill").exists()
+            assert not (tmp_path / "my-module" / "module" / "commands" / "example-command.md").exists()
+            assert not (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").exists()
+            # No mcps.json or AGENTS.md
+            assert not (tmp_path / "my-module" / "module" / "mcps.json").exists()
+            assert not (tmp_path / "my-module" / "module" / "AGENTS.md").exists()
+            # README.md still created at root
+            assert (tmp_path / "my-module" / "README.md").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_force_overwrites_existing(self, cli_runner, tmp_path):
+        """Init with --force overwrites existing directory."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            # Create existing directory with some content
+            existing = tmp_path / "my-module"
+            existing.mkdir()
+            (existing / "old-file.txt").write_text("old content")
+
+            result = cli_runner.invoke(mod, ["init", "my-module", "--force"])
+
+            assert result.exit_code == 0
+            # New structure created
+            assert (existing / "module" / "skills").exists()
+            assert (existing / "README.md").exists()
+            # Old file should be gone
+            assert not (existing / "old-file.txt").exists()
+        finally:
+            os.chdir(original_dir)
+
+    def test_init_no_force_fails_on_existing(self, cli_runner, tmp_path):
+        """Init without --force fails when directory exists."""
+        import os
+
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            # Create existing directory
+            (tmp_path / "existing").mkdir()
+
+            result = cli_runner.invoke(mod, ["init", "existing"])
+
+            assert result.exit_code == 1
+            assert "already exists" in result.output
+        finally:
+            os.chdir(original_dir)
 
 
 class TestModRemoveAdvanced:

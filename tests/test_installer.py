@@ -30,7 +30,7 @@ class TestCopyModuleToLocal:
         (source_dir / "subdir").mkdir()
         (source_dir / "subdir" / "file.txt").write_text("content")
 
-        module = Module(name="mymodule", path=source_dir)
+        module = Module(name="mymodule", path=source_dir, content_path=source_dir)
 
         local_modules = tmp_path / "local" / ".lola" / "modules"
 
@@ -47,7 +47,7 @@ class TestCopyModuleToLocal:
         module_dir.mkdir(parents=True)
         (module_dir / "SKILL.md").write_text("# My Skill")
 
-        module = Module(name="mymodule", path=module_dir)
+        module = Module(name="mymodule", path=module_dir, content_path=module_dir)
 
         local_modules = tmp_path / ".lola" / "modules"
 
@@ -62,7 +62,7 @@ class TestCopyModuleToLocal:
         source_dir.mkdir(parents=True)
         (source_dir / "new.txt").write_text("new content")
 
-        module = Module(name="mymodule", path=source_dir)
+        module = Module(name="mymodule", path=source_dir, content_path=source_dir)
 
         local_modules = tmp_path / "local" / ".lola" / "modules"
         local_modules.mkdir(parents=True)
@@ -84,7 +84,7 @@ class TestCopyModuleToLocal:
         source_dir.mkdir(parents=True)
         (source_dir / "SKILL.md").write_text("# My Skill")
 
-        module = Module(name="mymodule", path=source_dir)
+        module = Module(name="mymodule", path=source_dir, content_path=source_dir)
 
         local_modules = tmp_path / "local" / ".lola" / "modules"
         local_modules.mkdir(parents=True)
@@ -257,7 +257,7 @@ Do {cmd}.
         assert len(installations) == 1
         assert installations[0].assistant == "claude-code"
         assert installations[0].scope == "project"
-        assert "testmod-skill1" in installations[0].skills
+        assert "testmod.skill1" in installations[0].skills
         assert "cmd1" in installations[0].commands
 
     # Note: test_install_missing_skill_source and test_install_missing_command_source
