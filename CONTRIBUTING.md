@@ -151,24 +151,22 @@ while maintaining quality through transparency.
 
 **Option 1: Git commit signature** (Recommended)
 
-Configure git to add "Assisted-by" to your commits:
+Configure git to add "Assisted-by" to your commits (or use
+"Co-authored-by" - both work for us):
 
 ```bash
 git config user.assistedby "Claude Code"
-git config user.assistedby "GitHub Copilot"
+```
+
+Or:
+
+```bash
+git config user.coauthoredby "Claude Code <ai@anthropic.com>"
 ```
 
 **Option 2: Commit message**
 
-Mention AI assistance in your commit message:
-
-```bash
-git commit -m "feat: add validation
-
-Co-authored-by: Claude Code <ai@anthropic.com>"
-```
-
-Or simply:
+Simply mention AI assistance in your commit message:
 
 ```bash
 git commit -m "feat: add validation (AI-assisted)"
