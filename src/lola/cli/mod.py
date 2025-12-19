@@ -250,7 +250,9 @@ def add_module(source: str, module_name: str):
 @click.option("--no-agent", is_flag=True, help="Do not create an initial agent")
 @click.option("--no-mcps", is_flag=True, help="Do not create mcps.json")
 @click.option("--no-instructions", is_flag=True, help="Do not create AGENTS.md")
-@click.option("--minimal", is_flag=True, help="Create only empty directories, no example content")
+@click.option(
+    "--minimal", is_flag=True, help="Create only empty directories, no example content"
+)
 @click.option("--force", is_flag=True, help="Overwrite existing directory")
 def init_module(
     name: str | None,
@@ -339,7 +341,9 @@ def init_module(
     if final_skill_name:
         skill_dir = skills_dir / final_skill_name
         if skill_dir.exists():
-            console.print(f"[yellow]Skill directory already exists, skipping:[/yellow] {skill_dir}")
+            console.print(
+                f"[yellow]Skill directory already exists, skipping:[/yellow] {skill_dir}"
+            )
         else:
             skill_dir.mkdir()
 
@@ -380,7 +384,9 @@ description: [REPLACE: Brief description of what this skill does and when to use
     if final_command_name:
         command_file = commands_dir / f"{final_command_name}.md"
         if command_file.exists():
-            console.print(f"[yellow]Command file already exists, skipping:[/yellow] {command_file}")
+            console.print(
+                f"[yellow]Command file already exists, skipping:[/yellow] {command_file}"
+            )
         else:
             command_content = """---
 description: [REPLACE: Brief description of what this command does]
@@ -409,7 +415,9 @@ Use `$ARGUMENTS` to access any arguments passed to this command.
     if final_agent_name:
         agent_file = agents_dir / f"{final_agent_name}.md"
         if agent_file.exists():
-            console.print(f"[yellow]Agent file already exists, skipping:[/yellow] {agent_file}")
+            console.print(
+                f"[yellow]Agent file already exists, skipping:[/yellow] {agent_file}"
+            )
         else:
             agent_content = f"""---
 description: [REPLACE: Brief description of what this agent does and when to delegate to it]
@@ -442,7 +450,9 @@ description: [REPLACE: Brief description of what this agent does and when to del
     if not no_mcps:
         mcps_file = module_dir / MCPS_FILE
         if mcps_file.exists():
-            console.print(f"[yellow]mcps.json already exists, skipping:[/yellow] {mcps_file}")
+            console.print(
+                f"[yellow]mcps.json already exists, skipping:[/yellow] {mcps_file}"
+            )
         else:
             mcps_content = """{
   "mcpServers": {
@@ -465,7 +475,9 @@ description: [REPLACE: Brief description of what this agent does and when to del
     if not no_instructions:
         agents_md_file = module_dir / "AGENTS.md"
         if agents_md_file.exists():
-            console.print(f"[yellow]AGENTS.md already exists, skipping:[/yellow] {agents_md_file}")
+            console.print(
+                f"[yellow]AGENTS.md already exists, skipping:[/yellow] {agents_md_file}"
+            )
         else:
             # Build the "When to Use" section based on what was created
             when_to_use_items = []
@@ -509,13 +521,19 @@ description: [REPLACE: Brief description of what this agent does and when to del
     # Create README.md at repo root
     readme_file = repo_dir / "README.md"
     if readme_file.exists():
-        console.print(f"[yellow]README.md already exists, skipping:[/yellow] {readme_file}")
+        console.print(
+            f"[yellow]README.md already exists, skipping:[/yellow] {readme_file}"
+        )
     else:
         # Build component sections based on what was created
         skills_section = "[REPLACE: List and describe each skill in module/skills/]"
-        commands_section = "[REPLACE: List and describe each command in module/commands/]"
+        commands_section = (
+            "[REPLACE: List and describe each command in module/commands/]"
+        )
         agents_section = "[REPLACE: List and describe each agent in module/agents/]"
-        mcps_section = "[REPLACE: List and describe each MCP server in module/mcps.json]"
+        mcps_section = (
+            "[REPLACE: List and describe each MCP server in module/mcps.json]"
+        )
 
         readme_content = f"""# {_title_case(module_name)}
 
@@ -608,15 +626,21 @@ Edit files in `module/` to customize the content that gets installed to AI assis
     steps = []
     steps.append("Replace [REPLACE: ...] markers with your content")
     if final_skill_name:
-        steps.append(f"Edit module/skills/{final_skill_name}/SKILL.md with your skill content")
+        steps.append(
+            f"Edit module/skills/{final_skill_name}/SKILL.md with your skill content"
+        )
     else:
         steps.append("Add skill directories under module/skills/ with SKILL.md files")
     if final_command_name:
-        steps.append(f"Edit module/commands/{final_command_name}.md with your command prompt")
+        steps.append(
+            f"Edit module/commands/{final_command_name}.md with your command prompt"
+        )
     else:
         steps.append("Add .md files to module/commands/ for slash commands")
     if final_agent_name:
-        steps.append(f"Edit module/agents/{final_agent_name}.md with your agent instructions")
+        steps.append(
+            f"Edit module/agents/{final_agent_name}.md with your agent instructions"
+        )
     else:
         steps.append("Add .md files to module/agents/ for subagents")
     if not no_mcps:

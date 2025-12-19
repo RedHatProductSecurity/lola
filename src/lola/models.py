@@ -128,7 +128,9 @@ class Module:
 
     name: str
     path: Path
-    content_path: Path  # Path to the directory containing lola content (module/ or root)
+    content_path: (
+        Path  # Path to the directory containing lola content (module/ or root)
+    )
     skills: list[str] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
@@ -186,7 +188,9 @@ class Module:
 
         # Check for module instructions (AGENTS.md)
         instructions_file = content_path / INSTRUCTIONS_FILE
-        has_instructions = instructions_file.exists() and instructions_file.stat().st_size > 0
+        has_instructions = (
+            instructions_file.exists() and instructions_file.stat().st_size > 0
+        )
 
         # Auto-discover MCP servers from mcps.json
         mcps: list[str] = []
@@ -200,7 +204,13 @@ class Module:
                 pass
 
         # Only valid if has at least one skill, command, agent, mcp, or instructions
-        if not skills and not commands and not agents and not mcps and not has_instructions:
+        if (
+            not skills
+            and not commands
+            and not agents
+            and not mcps
+            and not has_instructions
+        ):
             return None
 
         return cls(

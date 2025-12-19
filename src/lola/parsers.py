@@ -97,7 +97,9 @@ class GitSourceHandler(SourceHandler):
         if parsed.scheme in ("git", "ssh"):
             return True
         if parsed.scheme in ("http", "https") and (
-            "github.com" in source or "gitlab.com" in source or "bitbucket.org" in source
+            "github.com" in source
+            or "gitlab.com" in source
+            or "bitbucket.org" in source
         ):
             return True
         return False
@@ -178,7 +180,10 @@ class ZipSourceHandler(SourceHandler):
         dest = dest.resolve()
         for member in zf.namelist():
             member_path = (dest / member).resolve()
-            if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
+            if (
+                not str(member_path).startswith(str(dest) + os.sep)
+                and member_path != dest
+            ):
                 raise SecurityError(f"Zip Slip attack detected: {member}")
         zf.extractall(dest)
 
@@ -251,7 +256,9 @@ class ZipUrlSourceHandler(SourceHandler):
 
     def can_handle(self, source: str) -> bool:
         parsed = urlparse(source)
-        return parsed.scheme in ("http", "https") and parsed.path.lower().endswith(".zip")
+        return parsed.scheme in ("http", "https") and parsed.path.lower().endswith(
+            ".zip"
+        )
 
     def fetch(self, source: str, dest_dir: Path) -> Path:
         parsed = urlparse(source)
@@ -267,11 +274,16 @@ class ZipUrlSourceHandler(SourceHandler):
                 dest = extract_path.resolve()
                 for member in zf.namelist():
                     member_path = (dest / member).resolve()
-                    if not str(member_path).startswith(str(dest) + os.sep) and member_path != dest:
+                    if (
+                        not str(member_path).startswith(str(dest) + os.sep)
+                        and member_path != dest
+                    ):
                         raise SecurityError(f"Zip Slip attack detected: {member}")
                 zf.extractall(extract_path)
 
-            module_dir = ZipSourceHandler()._find_module_dir(extract_path) or ZipSourceHandler()._fallback_module_dir(
+            module_dir = ZipSourceHandler()._find_module_dir(
+                extract_path
+            ) or ZipSourceHandler()._fallback_module_dir(
                 extract_path, Path(filename).stem
             )
             module_name = validate_module_name(module_dir.name)
@@ -308,9 +320,9 @@ class TarUrlSourceHandler(SourceHandler):
             with tarfile.open(tar_path, "r:*") as tf:
                 tf.extractall(extract_path, filter="data")
 
-            module_dir = TarSourceHandler()._find_module_dir(extract_path) or TarSourceHandler()._fallback_module_dir(
-                extract_path, filename
-            )
+            module_dir = TarSourceHandler()._find_module_dir(
+                extract_path
+            ) or TarSourceHandler()._fallback_module_dir(extract_path, filename)
             module_name = validate_module_name(module_dir.name)
 
             final_dir = dest_dir / module_name
@@ -406,7 +418,9 @@ def update_module(module_path: Path) -> str:
     """
     source_info = load_source_info(module_path)
     if not source_info:
-        raise SourceError(str(module_path), "No source information found. Module cannot be updated.")
+        raise SourceError(
+            str(module_path), "No source information found. Module cannot be updated."
+        )
 
     source = source_info.get("source")
     source_type = source_info.get("type")
@@ -477,5 +491,3 @@ def update_module(module_path: Path) -> str:
             raise
         except Exception as e:
             raise SourceError(source, f"Update failed: {e}") from e
-
-

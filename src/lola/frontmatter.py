@@ -227,9 +227,7 @@ def validate_mcps(mcps_file: Path) -> list[str]:
         if "env" in config and isinstance(config["env"], dict):
             for env_key, env_value in config["env"].items():
                 if not isinstance(env_value, str):
-                    errors.append(
-                        f"Server '{name}': env['{env_key}'] must be a string"
-                    )
+                    errors.append(f"Server '{name}': env['{env_key}'] must be a string")
 
     return errors
 

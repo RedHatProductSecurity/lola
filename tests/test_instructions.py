@@ -539,7 +539,9 @@ class TestUpdateWithInstructions:
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
-            patch("lola.cli.install.get_local_modules_path", return_value=local_modules),
+            patch(
+                "lola.cli.install.get_local_modules_path", return_value=local_modules
+            ),
             patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = runner.invoke(update_cmd, ["test-module"])
@@ -608,7 +610,9 @@ class TestUpdateWithInstructions:
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
             patch("lola.cli.install.get_registry", return_value=registry),
-            patch("lola.cli.install.get_local_modules_path", return_value=local_modules),
+            patch(
+                "lola.cli.install.get_local_modules_path", return_value=local_modules
+            ),
             patch("lola.cli.install.get_target", return_value=mock_target),
         ):
             result = runner.invoke(update_cmd, ["test-module"])
@@ -680,6 +684,3 @@ Beta content
         assert "# Version 1" not in content
         # Should only have one module section
         assert content.count("lola:module:test-module:start") == 1
-
-
-

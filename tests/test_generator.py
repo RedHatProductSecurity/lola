@@ -162,7 +162,9 @@ class TestGeminiMdHelpers:
 
         target = get_target("gemini-cli")
         assert isinstance(target, GeminiTarget)
-        result = target.generate_skills_batch(gemini_file, "mymodule", skills, str(tmp_path))
+        result = target.generate_skills_batch(
+            gemini_file, "mymodule", skills, str(tmp_path)
+        )
 
         assert result is True
         assert gemini_file.exists()
@@ -194,7 +196,9 @@ Some existing content.
 """)
         skills = [("newskill", "New description", tmp_path / "newskill")]
 
-        result = target.generate_skills_batch(gemini_file, "newmodule", skills, str(tmp_path))
+        result = target.generate_skills_batch(
+            gemini_file, "newmodule", skills, str(tmp_path)
+        )
 
         assert result is True
         content = gemini_file.read_text()

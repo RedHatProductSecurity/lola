@@ -295,7 +295,9 @@ class TestModInit:
             assert result.exit_code == 0
             assert "Initialized module" in result.output
             # Default skill, command, and agent should be created in module/
-            assert (tmp_path / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (
+                tmp_path / "module" / "skills" / "example-skill" / "SKILL.md"
+            ).exists()
             assert (tmp_path / "module" / "commands" / "example-command.md").exists()
             assert (tmp_path / "module" / "agents" / "example-agent.md").exists()
         finally:
@@ -314,9 +316,20 @@ class TestModInit:
             assert result.exit_code == 0
             assert "my-new-module" in result.output
             # Default skill, command, and agent should be created in module/
-            assert (tmp_path / "my-new-module" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
             assert (
-                tmp_path / "my-new-module" / "module" / "commands" / "example-command.md"
+                tmp_path
+                / "my-new-module"
+                / "module"
+                / "skills"
+                / "example-skill"
+                / "SKILL.md"
+            ).exists()
+            assert (
+                tmp_path
+                / "my-new-module"
+                / "module"
+                / "commands"
+                / "example-command.md"
             ).exists()
             assert (
                 tmp_path / "my-new-module" / "module" / "agents" / "example-agent.md"
@@ -339,10 +352,16 @@ class TestModInit:
             assert (tmp_path / "mymod").exists()
             # Skills directory should exist but be empty (no example-skill)
             assert (tmp_path / "mymod" / "module" / "skills").exists()
-            assert not (tmp_path / "mymod" / "module" / "skills" / "example-skill").exists()
+            assert not (
+                tmp_path / "mymod" / "module" / "skills" / "example-skill"
+            ).exists()
             # But command and agent should still be created
-            assert (tmp_path / "mymod" / "module" / "commands" / "example-command.md").exists()
-            assert (tmp_path / "mymod" / "module" / "agents" / "example-agent.md").exists()
+            assert (
+                tmp_path / "mymod" / "module" / "commands" / "example-command.md"
+            ).exists()
+            assert (
+                tmp_path / "mymod" / "module" / "agents" / "example-agent.md"
+            ).exists()
         finally:
             os.chdir(original_dir)
 
@@ -357,7 +376,9 @@ class TestModInit:
             result = cli_runner.invoke(mod, ["init", "mymod", "-s", "custom-skill"])
 
             assert result.exit_code == 0
-            assert (tmp_path / "mymod" / "module" / "skills" / "custom-skill" / "SKILL.md").exists()
+            assert (
+                tmp_path / "mymod" / "module" / "skills" / "custom-skill" / "SKILL.md"
+            ).exists()
         finally:
             os.chdir(original_dir)
 
@@ -508,7 +529,9 @@ class TestModInit:
             assert not (tmp_path / "mymod" / "module" / MCPS_FILE).exists()
             assert not (tmp_path / "mymod" / "module" / "AGENTS.md").exists()
             # But other files should still be created
-            assert (tmp_path / "mymod" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (
+                tmp_path / "mymod" / "module" / "skills" / "example-skill" / "SKILL.md"
+            ).exists()
         finally:
             os.chdir(original_dir)
 
@@ -557,7 +580,8 @@ class TestModInit:
         try:
             os.chdir(tmp_path)
             result = cli_runner.invoke(
-                mod, ["init", "mymod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"]
+                mod,
+                ["init", "mymod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"],
             )
 
             assert result.exit_code == 0
@@ -739,9 +763,20 @@ class TestModInitModuleSubdir:
             assert result.exit_code == 0
             assert "Initialized module" in result.output
             # Module/ subdirectory should contain skills, commands, agents
-            assert (tmp_path / "my-module" / "module" / "skills" / "example-skill" / "SKILL.md").exists()
-            assert (tmp_path / "my-module" / "module" / "commands" / "example-command.md").exists()
-            assert (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").exists()
+            assert (
+                tmp_path
+                / "my-module"
+                / "module"
+                / "skills"
+                / "example-skill"
+                / "SKILL.md"
+            ).exists()
+            assert (
+                tmp_path / "my-module" / "module" / "commands" / "example-command.md"
+            ).exists()
+            assert (
+                tmp_path / "my-module" / "module" / "agents" / "example-agent.md"
+            ).exists()
             # mcps.json and AGENTS.md should be in module/
             assert (tmp_path / "my-module" / "module" / "mcps.json").exists()
             assert (tmp_path / "my-module" / "module" / "AGENTS.md").exists()
@@ -786,15 +821,26 @@ class TestModInitModuleSubdir:
             assert "[REPLACE:" in readme
 
             # Check SKILL.md has markers
-            skill_md = (tmp_path / "my-module" / "module" / "skills" / "example-skill" / "SKILL.md").read_text()
+            skill_md = (
+                tmp_path
+                / "my-module"
+                / "module"
+                / "skills"
+                / "example-skill"
+                / "SKILL.md"
+            ).read_text()
             assert "[REPLACE:" in skill_md
 
             # Check command has markers
-            cmd_md = (tmp_path / "my-module" / "module" / "commands" / "example-command.md").read_text()
+            cmd_md = (
+                tmp_path / "my-module" / "module" / "commands" / "example-command.md"
+            ).read_text()
             assert "[REPLACE:" in cmd_md
 
             # Check agent has markers
-            agent_md = (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").read_text()
+            agent_md = (
+                tmp_path / "my-module" / "module" / "agents" / "example-agent.md"
+            ).read_text()
             assert "[REPLACE:" in agent_md
 
             # Check mcps.json has markers
@@ -823,7 +869,9 @@ class TestModInitModuleSubdir:
             assert result.exit_code == 0
             assert "my-project" in result.output
             # Module/ subdirectory should be created
-            assert (named_dir / "module" / "skills" / "example-skill" / "SKILL.md").exists()
+            assert (
+                named_dir / "module" / "skills" / "example-skill" / "SKILL.md"
+            ).exists()
             assert (named_dir / "module" / "commands" / "example-command.md").exists()
             # README.md at root
             assert (named_dir / "README.md").exists()
@@ -839,7 +887,8 @@ class TestModInitModuleSubdir:
         try:
             os.chdir(tmp_path)
             result = cli_runner.invoke(
-                mod, ["init", "my-mod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"]
+                mod,
+                ["init", "my-mod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"],
             )
 
             assert result.exit_code == 0
@@ -866,9 +915,15 @@ class TestModInitModuleSubdir:
             assert (tmp_path / "my-module" / "module" / "commands").exists()
             assert (tmp_path / "my-module" / "module" / "agents").exists()
             # No example content
-            assert not (tmp_path / "my-module" / "module" / "skills" / "example-skill").exists()
-            assert not (tmp_path / "my-module" / "module" / "commands" / "example-command.md").exists()
-            assert not (tmp_path / "my-module" / "module" / "agents" / "example-agent.md").exists()
+            assert not (
+                tmp_path / "my-module" / "module" / "skills" / "example-skill"
+            ).exists()
+            assert not (
+                tmp_path / "my-module" / "module" / "commands" / "example-command.md"
+            ).exists()
+            assert not (
+                tmp_path / "my-module" / "module" / "agents" / "example-agent.md"
+            ).exists()
             # No mcps.json or AGENTS.md
             assert not (tmp_path / "my-module" / "module" / "mcps.json").exists()
             assert not (tmp_path / "my-module" / "module" / "AGENTS.md").exists()

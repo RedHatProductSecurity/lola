@@ -276,7 +276,3 @@ To migrate:
   2. Move skills/, commands/, agents/, AGENTS.md, and mcps.json into module/
   3. Re-run 'lola install {module_name}'"""
         super().__init__(message)
-
-
-
-

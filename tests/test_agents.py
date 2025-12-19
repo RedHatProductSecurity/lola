@@ -1,6 +1,5 @@
 """Tests for agent support."""
 
-
 from lola.models import Agent, Module
 from lola.frontmatter import validate_agent
 from lola.targets import get_target
@@ -83,7 +82,10 @@ class TestModuleWithAgents:
     def test_get_agent_paths(self, tmp_path):
         """Get full paths to agents."""
         module = Module(
-            name="test", path=tmp_path, content_path=tmp_path, agents=["agent1", "agent2"]
+            name="test",
+            path=tmp_path,
+            content_path=tmp_path,
+            agents=["agent1", "agent2"],
         )
         paths = module.get_agent_paths()
         assert len(paths) == 2

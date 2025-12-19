@@ -7,7 +7,12 @@ from unittest.mock import patch, MagicMock
 import pytest
 import yaml
 
-from lola.exceptions import ModuleNameError, SecurityError, SourceError, UnsupportedSourceError
+from lola.exceptions import (
+    ModuleNameError,
+    SecurityError,
+    SourceError,
+    UnsupportedSourceError,
+)
 from lola.parsers import (
     download_file,
     validate_module_name,

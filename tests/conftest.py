@@ -256,15 +256,21 @@ Instructions for the test agent.
 
     # Create mcps.json
     import json
-    (module_content_dir / "mcps.json").write_text(json.dumps({
-        "mcpServers": {
-            "test-server": {
-                "command": "npx",
-                "args": ["-y", "@test/server"],
-                "env": {"API_KEY": "${API_KEY}"}
-            }
-        }
-    }, indent=2))
+
+    (module_content_dir / "mcps.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "test-server": {
+                        "command": "npx",
+                        "args": ["-y", "@test/server"],
+                        "env": {"API_KEY": "${API_KEY}"},
+                    }
+                }
+            },
+            indent=2,
+        )
+    )
 
     # Create module instructions
     (module_content_dir / "AGENTS.md").write_text("""# Sample Module
@@ -344,7 +350,9 @@ This is a legacy module structure.
 
 
 @pytest.fixture
-def registered_module_with_module_subdir(mock_lola_home, sample_module_with_module_subdir):
+def registered_module_with_module_subdir(
+    mock_lola_home, sample_module_with_module_subdir
+):
     """Create and register a module with module/ subdirectory in the mock LOLA_HOME."""
     import shutil
 

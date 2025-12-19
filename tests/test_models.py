@@ -167,7 +167,12 @@ Content.
 
     def test_get_skill_paths(self, tmp_path):
         """Get full paths to skills."""
-        module = Module(name="test", path=tmp_path, content_path=tmp_path, skills=["skill1", "skill2"])
+        module = Module(
+            name="test",
+            path=tmp_path,
+            content_path=tmp_path,
+            skills=["skill1", "skill2"],
+        )
         paths = module.get_skill_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "skills" / "skill1"
@@ -175,7 +180,9 @@ Content.
 
     def test_get_command_paths(self, tmp_path):
         """Get full paths to commands."""
-        module = Module(name="test", path=tmp_path, content_path=tmp_path, commands=["cmd1", "cmd2"])
+        module = Module(
+            name="test", path=tmp_path, content_path=tmp_path, commands=["cmd1", "cmd2"]
+        )
         paths = module.get_command_paths()
         assert len(paths) == 2
         assert paths[0] == tmp_path / "commands" / "cmd1.md"

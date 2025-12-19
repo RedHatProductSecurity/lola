@@ -803,10 +803,20 @@ class TestMCPValidator:
         errors = fm.validate_mcps(mcps_file)
 
         assert len(errors) >= 3
-        assert any("server1" in err and "missing required 'command' field" in err for err in errors)
-        assert any("server1" in err and "'args' must be an array" in err for err in errors)
-        assert any("server2" in err and "'command' must be a non-empty string" in err for err in errors)
-        assert any("server2" in err and "'env' must be an object" in err for err in errors)
+        assert any(
+            "server1" in err and "missing required 'command' field" in err
+            for err in errors
+        )
+        assert any(
+            "server1" in err and "'args' must be an array" in err for err in errors
+        )
+        assert any(
+            "server2" in err and "'command' must be a non-empty string" in err
+            for err in errors
+        )
+        assert any(
+            "server2" in err and "'env' must be an object" in err for err in errors
+        )
 
     def test_module_validate_includes_mcps(self, module_with_mcps):
         """Module.validate() includes MCP validation errors."""
@@ -856,4 +866,3 @@ description: A test skill
         assert is_valid is False
         assert any("mcps.json" in err for err in errors)
         assert any("missing required 'command' field" in err for err in errors)
-
