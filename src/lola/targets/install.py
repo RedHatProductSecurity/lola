@@ -21,7 +21,12 @@ import lola.config as config
 from lola.exceptions import ConfigurationError
 from lola.models import Installation, InstallationRegistry, Module
 
-from .base import AssistantTarget, _get_content_path, _get_skill_description, _skill_source_dir
+from .base import (
+    AssistantTarget,
+    _get_content_path,
+    _get_skill_description,
+    _skill_source_dir,
+)
 
 console = Console()
 
@@ -363,4 +368,225 @@ def install_to_assistant(
         + len(installed_agents)
         + len(installed_mcps)
         + (1 if instructions_installed else 0)
+    )
+
+
+# =============================================================================
+# Uninstall helpers
+# =============================================================================
+
+
+def _uninstall_skills(
+    target: AssistantTarget,
+    inst: Installation,
+) -> tuple[list[str], list[str]]:
+    """Uninstall skills for a target. Returns (removed, failed) lists."""
+    if not inst.skills:
+        return [], []
+
+    removed: list[str] = []
+    failed: list[str] = []
+    skill_dest = target.get_skill_path(inst.project_path) if inst.project_path else None
+
+    if not skill_dest:
+        return [], []
+
+    for skill in inst.skills:
+        if target.remove_skill(skill_dest, skill):
+            removed.append(skill)
+        else:
+            failed.append(skill)
+
+    return removed, failed
+
+
+def _uninstall_commands(
+    target: AssistantTarget,
+    inst: Installation,
+) -> tuple[list[str], list[str]]:
+    """Uninstall commands for a target. Returns (removed, failed) lists."""
+    if not inst.commands:
+        return [], []
+
+    removed: list[str] = []
+    failed: list[str] = []
+    command_dest = (
+        target.get_command_path(inst.project_path) if inst.project_path else None
+    )
+
+    if not command_dest:
+        return [], []
+
+    for cmd in inst.commands:
+        if target.remove_command(command_dest, cmd, inst.module_name):
+            removed.append(cmd)
+        else:
+            failed.append(cmd)
+
+    return removed, failed
+
+
+def _uninstall_agents(
+    target: AssistantTarget,
+    inst: Installation,
+) -> tuple[list[str], list[str]]:
+    """Uninstall agents for a target. Returns (removed, failed) lists."""
+    if not inst.agents or not target.supports_agents:
+        return [], []
+
+    agent_dest = target.get_agent_path(inst.project_path) if inst.project_path else None
+    if not agent_dest:
+        return [], []
+
+    removed: list[str] = []
+    failed: list[str] = []
+
+    for agent in inst.agents:
+        if target.remove_agent(agent_dest, agent, inst.module_name):
+            removed.append(agent)
+        else:
+            failed.append(agent)
+
+    return removed, failed
+
+
+def _uninstall_instructions(
+    target: AssistantTarget,
+    inst: Installation,
+) -> bool:
+    """Uninstall module instructions for a target. Returns True if removed."""
+    if not inst.has_instructions or not inst.project_path:
+        return False
+
+    instructions_dest = target.get_instructions_path(inst.project_path)
+    return target.remove_instructions(instructions_dest, inst.module_name)
+
+
+def _uninstall_mcps(
+    target: AssistantTarget,
+    inst: Installation,
+) -> tuple[list[str], list[str]]:
+    """Uninstall MCPs for a target. Returns (removed, failed) lists."""
+    if not inst.mcps or not inst.project_path:
+        return [], []
+
+    mcp_dest = target.get_mcp_path(inst.project_path)
+    if not mcp_dest:
+        return [], []
+
+    if target.remove_mcps(mcp_dest, inst.module_name):
+        return list(inst.mcps), []
+
+    return [], list(inst.mcps)
+
+
+def _print_uninstall_summary(
+    assistant: str,
+    removed_skills: list[str],
+    removed_commands: list[str],
+    removed_agents: list[str],
+    removed_mcps: list[str],
+    had_instructions: bool,
+    module_name: str,
+    verbose: bool,
+) -> None:
+    """Print uninstall summary."""
+    if not (
+        removed_skills
+        or removed_commands
+        or removed_agents
+        or removed_mcps
+        or had_instructions
+    ):
+        return
+
+    parts: list[str] = []
+    if removed_skills:
+        parts.append(
+            f"{len(removed_skills)} skill{'s' if len(removed_skills) != 1 else ''}"
+        )
+    if removed_commands:
+        parts.append(
+            f"{len(removed_commands)} command{'s' if len(removed_commands) != 1 else ''}"
+        )
+    if removed_agents:
+        parts.append(
+            f"{len(removed_agents)} agent{'s' if len(removed_agents) != 1 else ''}"
+        )
+    if removed_mcps:
+        parts.append(f"{len(removed_mcps)} MCP{'s' if len(removed_mcps) != 1 else ''}")
+    if had_instructions:
+        parts.append("instructions")
+
+    console.print(f"  [green]{assistant}[/green] [dim]({', '.join(parts)})[/dim]")
+
+    if verbose:
+        for skill in removed_skills:
+            console.print(f"    [dim]- {skill}[/dim]")
+        for cmd in removed_commands:
+            console.print(f"    [dim]- /{module_name}.{cmd}[/dim]")
+        for agent in removed_agents:
+            console.print(f"    [dim]- @{module_name}.{agent}[/dim]")
+        for mcp in removed_mcps:
+            console.print(f"    [dim]- mcp:{mcp}[/dim]")
+        if had_instructions:
+            console.print("    [dim]- instructions[/dim]")
+
+
+def uninstall_from_assistant(
+    inst: Installation,
+    registry: InstallationRegistry,
+    verbose: bool = False,
+    local_modules: Optional[Path] = None,
+) -> int:
+    """Uninstall module from a specific assistant.
+
+    Args:
+        inst: Installation record describing what to remove
+        registry: Registry to remove installation from
+        verbose: Print detailed output
+        local_modules: Optional path to local modules directory for cleanup
+
+    Returns:
+        Count of items removed
+    """
+    # Late import to avoid circular imports
+    from lola.targets import get_target
+
+    target = get_target(inst.assistant)
+
+    removed_skills, _ = _uninstall_skills(target, inst)
+    removed_commands, _ = _uninstall_commands(target, inst)
+    removed_agents, _ = _uninstall_agents(target, inst)
+    removed_mcps, _ = _uninstall_mcps(target, inst)
+    instructions_removed = _uninstall_instructions(target, inst)
+
+    _print_uninstall_summary(
+        inst.assistant,
+        removed_skills,
+        removed_commands,
+        removed_agents,
+        removed_mcps,
+        instructions_removed,
+        inst.module_name,
+        verbose,
+    )
+
+    # Clean up local module copy if requested
+    if local_modules:
+        source_module = local_modules / inst.module_name
+        if source_module.is_symlink():
+            source_module.unlink()
+        elif source_module.exists():
+            shutil.rmtree(source_module)
+
+    # Remove from registry
+    registry.remove(inst.module_name, inst.assistant)
+
+    return (
+        len(removed_skills)
+        + len(removed_commands)
+        + len(removed_agents)
+        + len(removed_mcps)
+        + (1 if instructions_removed else 0)
     )

@@ -153,6 +153,47 @@ class AssistantTarget(ABC):
         """Remove a module's MCP servers from the config file."""
         ...
 
+    @abstractmethod
+    def remove_command(
+        self,
+        dest_dir: Path,
+        cmd_name: str,
+        module_name: str,
+    ) -> bool:
+        """Remove a command file for this assistant.
+
+        Args:
+            dest_dir: Directory containing commands (e.g., .claude/commands/)
+            cmd_name: Unprefixed command name (e.g., "review-pr")
+            module_name: Module name for filename construction
+
+        Returns:
+            True if removed or didn't exist (idempotent), False on error
+        """
+        ...
+
+    @abstractmethod
+    def remove_agent(
+        self,
+        dest_dir: Path,
+        agent_name: str,
+        module_name: str,
+    ) -> bool:
+        """Remove an agent file for this assistant.
+
+        Args:
+            dest_dir: Directory containing agents (e.g., .claude/agents/)
+            agent_name: Unprefixed agent name (e.g., "code-reviewer")
+            module_name: Module name for filename construction
+
+        Returns:
+            True if removed or didn't exist (idempotent), False on error
+
+        Note:
+            Returns True immediately if supports_agents is False.
+        """
+        ...
+
 
 # =============================================================================
 # BaseAssistantTarget - shared defaults
@@ -249,6 +290,41 @@ class BaseAssistantTarget(AssistantTarget):
     ) -> bool:
         """Default: MCP removal not supported. Override in subclasses."""
         return False
+
+    def remove_command(
+        self,
+        dest_dir: Path,
+        cmd_name: str,
+        module_name: str,
+    ) -> bool:
+        """Default: delete command file at expected path.
+
+        Returns True if removed or didn't exist (idempotent).
+        """
+        filename = self.get_command_filename(module_name, cmd_name)
+        cmd_file = dest_dir / filename
+        if cmd_file.exists():
+            cmd_file.unlink()
+        return True
+
+    def remove_agent(
+        self,
+        dest_dir: Path,
+        agent_name: str,
+        module_name: str,
+    ) -> bool:
+        """Default: delete agent file at expected path.
+
+        Returns True if removed or didn't exist (idempotent).
+        Returns True immediately if supports_agents is False.
+        """
+        if not self.supports_agents:
+            return True
+        filename = self.get_agent_filename(module_name, agent_name)
+        agent_file = dest_dir / filename
+        if agent_file.exists():
+            agent_file.unlink()
+        return True
 
 
 # =============================================================================

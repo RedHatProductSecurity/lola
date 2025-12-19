@@ -140,9 +140,7 @@ class TestClaudeCodeTarget:
         path = target.get_agent_path(str(tmp_path))
         assert path == tmp_path / ".claude" / "agents"
 
-    def test_generate_skill_copies_skill_md(
-        self, skill_source: Path, dest_path: Path
-    ):
+    def test_generate_skill_copies_skill_md(self, skill_source: Path, dest_path: Path):
         """generate_skill should copy SKILL.md to destination."""
         target = ClaudeCodeTarget()
         result = target.generate_skill(skill_source, dest_path, "mymod-test-skill")
@@ -193,14 +191,10 @@ class TestClaudeCodeTarget:
 
         assert (skill_dest / "scripts" / "new_file.py").exists()
 
-    def test_generate_command_creates_file(
-        self, command_source: Path, dest_path: Path
-    ):
+    def test_generate_command_creates_file(self, command_source: Path, dest_path: Path):
         """generate_command should create properly named markdown file."""
         target = ClaudeCodeTarget()
-        result = target.generate_command(
-            command_source, dest_path, "test-cmd", "mymod"
-        )
+        result = target.generate_command(command_source, dest_path, "test-cmd", "mymod")
 
         assert result is True
         cmd_file = dest_path / "mymod.test-cmd.md"
@@ -224,9 +218,7 @@ class TestClaudeCodeTarget:
     ):
         """generate_agent should add model: inherit to frontmatter."""
         target = ClaudeCodeTarget()
-        result = target.generate_agent(
-            agent_source, dest_path, "test-agent", "mymod"
-        )
+        result = target.generate_agent(agent_source, dest_path, "test-agent", "mymod")
 
         assert result is True
         agent_file = dest_path / "mymod.test-agent.md"
@@ -294,6 +286,48 @@ Agent body content.
         target = ClaudeCodeTarget()
         filename = target.get_agent_filename("mymod", "helper")
         assert filename == "mymod.helper.md"
+
+    def test_remove_command_deletes_file(self, dest_path: Path):
+        """remove_command should delete the command file."""
+        target = ClaudeCodeTarget()
+        commands_dir = dest_path
+        cmd_file = commands_dir / "mymod.review-pr.md"
+        cmd_file.write_text("# Review PR Command")
+
+        result = target.remove_command(commands_dir, "review-pr", "mymod")
+
+        assert result is True
+        assert not cmd_file.exists()
+
+    def test_remove_command_idempotent_when_file_missing(self, dest_path: Path):
+        """remove_command should succeed even if file doesn't exist."""
+        target = ClaudeCodeTarget()
+        commands_dir = dest_path
+
+        result = target.remove_command(commands_dir, "nonexistent", "mymod")
+
+        assert result is True  # Idempotent - no error
+
+    def test_remove_agent_deletes_file(self, dest_path: Path):
+        """remove_agent should delete the agent file."""
+        target = ClaudeCodeTarget()
+        agents_dir = dest_path
+        agent_file = agents_dir / "mymod.code-reviewer.md"
+        agent_file.write_text("# Code Reviewer Agent")
+
+        result = target.remove_agent(agents_dir, "code-reviewer", "mymod")
+
+        assert result is True
+        assert not agent_file.exists()
+
+    def test_remove_agent_idempotent_when_file_missing(self, dest_path: Path):
+        """remove_agent should succeed even if file doesn't exist."""
+        target = ClaudeCodeTarget()
+        agents_dir = dest_path
+
+        result = target.remove_agent(agents_dir, "nonexistent", "mymod")
+
+        assert result is True  # Idempotent - no error
 
 
 # =============================================================================
@@ -398,27 +432,19 @@ class TestCursorTarget:
         result = target.generate_skill(empty_dir, dest_path, "empty", str(tmp_path))
         assert result is False
 
-    def test_generate_command_creates_file(
-        self, command_source: Path, dest_path: Path
-    ):
+    def test_generate_command_creates_file(self, command_source: Path, dest_path: Path):
         """generate_command should create properly named markdown file."""
         target = CursorTarget()
-        result = target.generate_command(
-            command_source, dest_path, "test-cmd", "mymod"
-        )
+        result = target.generate_command(command_source, dest_path, "test-cmd", "mymod")
 
         assert result is True
         cmd_file = dest_path / "mymod.test-cmd.md"
         assert cmd_file.exists()
 
-    def test_generate_agent_returns_false(
-        self, agent_source: Path, dest_path: Path
-    ):
+    def test_generate_agent_returns_false(self, agent_source: Path, dest_path: Path):
         """generate_agent should return False (not supported)."""
         target = CursorTarget()
-        result = target.generate_agent(
-            agent_source, dest_path, "test-agent", "mymod"
-        )
+        result = target.generate_agent(agent_source, dest_path, "test-agent", "mymod")
         assert result is False
 
     def test_remove_skill_deletes_mdc_file(self, dest_path: Path):
@@ -437,6 +463,17 @@ class TestCursorTarget:
         target = CursorTarget()
         result = target.remove_skill(dest_path, "nonexistent")
         assert result is False
+
+    def test_remove_agent_returns_true_for_non_agent_supporting_target(
+        self, dest_path: Path
+    ):
+        """remove_agent should return True for targets without agent support."""
+        target = CursorTarget()  # Cursor doesn't support agents
+        agents_dir = dest_path
+
+        result = target.remove_agent(agents_dir, "any-agent", "mymod")
+
+        assert result is True  # No-op for unsupported targets
 
 
 # =============================================================================
@@ -486,9 +523,7 @@ class TestGeminiTarget:
             ("test-skill", "Test skill description", skill_source),
         ]
 
-        result = target.generate_skills_batch(
-            dest_file, "mymod", skills, str(tmp_path)
-        )
+        result = target.generate_skills_batch(dest_file, "mymod", skills, str(tmp_path))
 
         assert result is True
         assert dest_file.exists()
@@ -570,9 +605,7 @@ Some existing content here.
     ):
         """generate_command should create TOML file with proper format."""
         target = GeminiTarget()
-        result = target.generate_command(
-            command_source, dest_path, "test-cmd", "mymod"
-        )
+        result = target.generate_command(command_source, dest_path, "test-cmd", "mymod")
 
         assert result is True
         toml_file = dest_path / "mymod.test-cmd.toml"
@@ -636,6 +669,7 @@ Some text after.
 
         # Validate the TOML is parseable
         import tomllib
+
         parsed = tomllib.loads(content)
         assert "prompt" in parsed
         # The prompt should contain the original triple quotes (unescaped)
@@ -720,9 +754,7 @@ class TestOpenCodeTarget:
         dest_file = tmp_path / "AGENTS.md"
 
         skills = [("test-skill", "Test skill", skill_source)]
-        result = target.generate_skills_batch(
-            dest_file, "mymod", skills, str(tmp_path)
-        )
+        result = target.generate_skills_batch(dest_file, "mymod", skills, str(tmp_path))
 
         assert result is True
         assert dest_file.exists()
@@ -734,9 +766,7 @@ class TestOpenCodeTarget:
     ):
         """generate_command should create markdown file (passthrough)."""
         target = OpenCodeTarget()
-        result = target.generate_command(
-            command_source, dest_path, "test-cmd", "mymod"
-        )
+        result = target.generate_command(command_source, dest_path, "test-cmd", "mymod")
 
         assert result is True
         cmd_file = dest_path / "mymod.test-cmd.md"
@@ -752,9 +782,7 @@ class TestOpenCodeTarget:
     ):
         """generate_agent should add mode: subagent to frontmatter."""
         target = OpenCodeTarget()
-        result = target.generate_agent(
-            agent_source, dest_path, "test-agent", "mymod"
-        )
+        result = target.generate_agent(agent_source, dest_path, "test-agent", "mymod")
 
         assert result is True
         agent_file = dest_path / "mymod.test-agent.md"
@@ -1020,9 +1048,7 @@ class TestTargetIntegration:
         content = skill_dest.read_text()
         assert "### mymod" not in content
 
-    def test_command_generation_all_targets(
-        self, command_source: Path, tmp_path: Path
-    ):
+    def test_command_generation_all_targets(self, command_source: Path, tmp_path: Path):
         """Test command generation for all targets."""
         targets = [
             (ClaudeCodeTarget(), "mymod.cmd.md"),
@@ -1075,4 +1101,3 @@ class TestTargetIntegration:
             agent_source, cursor_dest, "agent", "mymod"
         )
         assert result is False
-

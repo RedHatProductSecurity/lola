@@ -162,9 +162,7 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
     )
 
 
-def _remove_orphaned_skills(
-    ctx: UpdateContext, skill_dest: Path, verbose: bool
-) -> int:
+def _remove_orphaned_skills(ctx: UpdateContext, skill_dest: Path, verbose: bool) -> int:
     """Remove orphaned skill files. Returns count of removed items."""
     if not ctx.orphaned_skills or ctx.target.uses_managed_section:
         return 0
@@ -186,10 +184,7 @@ def _remove_orphaned_commands(ctx: UpdateContext, verbose: bool) -> int:
     removed = 0
     command_dest = ctx.target.get_command_path(ctx.inst.project_path or "")
     for cmd_name in ctx.orphaned_commands:
-        filename = ctx.target.get_command_filename(ctx.inst.module_name, cmd_name)
-        orphan_file = command_dest / filename
-        if orphan_file.exists():
-            orphan_file.unlink()
+        if ctx.target.remove_command(command_dest, cmd_name, ctx.inst.module_name):
             removed += 1
             if verbose:
                 console.print(
@@ -209,10 +204,7 @@ def _remove_orphaned_agents(ctx: UpdateContext, verbose: bool) -> int:
 
     removed = 0
     for agent_name in ctx.orphaned_agents:
-        filename = ctx.target.get_agent_filename(ctx.inst.module_name, agent_name)
-        orphan_file = agent_dest / filename
-        if orphan_file.exists():
-            orphan_file.unlink()
+        if ctx.target.remove_agent(agent_dest, agent_name, ctx.inst.module_name):
             removed += 1
             if verbose:
                 console.print(
@@ -330,7 +322,9 @@ def _update_commands(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
         if success:
             commands_ok += 1
             if verbose:
-                console.print(f"      [green]/{ctx.inst.module_name}.{cmd_name}[/green]")
+                console.print(
+                    f"      [green]/{ctx.inst.module_name}.{cmd_name}[/green]"
+                )
         else:
             commands_failed += 1
             if verbose:
@@ -368,7 +362,9 @@ def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
         if success:
             agents_ok += 1
             if verbose:
-                console.print(f"      [green]@{ctx.inst.module_name}.{agent_name}[/green]")
+                console.print(
+                    f"      [green]@{ctx.inst.module_name}.{agent_name}[/green]"
+                )
         else:
             agents_failed += 1
             if verbose:
@@ -393,7 +389,9 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
             instructions_dest = ctx.target.get_instructions_path(ctx.inst.project_path)
             ctx.target.remove_instructions(instructions_dest, ctx.inst.module_name)
             if verbose:
-                console.print("      [yellow]- instructions[/yellow] [dim](removed)[/dim]")
+                console.print(
+                    "      [yellow]- instructions[/yellow] [dim](removed)[/dim]"
+                )
         return False
 
     content_path = _get_content_path(ctx.source_module)
@@ -444,15 +442,15 @@ def _update_mcps(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     if ctx.target.generate_mcps(servers, mcp_dest, ctx.inst.module_name):
         if verbose:
             for mcp_name in servers.keys():
-                console.print(f"      [green]mcp:{ctx.inst.module_name}-{mcp_name}[/green]")
+                console.print(
+                    f"      [green]mcp:{ctx.inst.module_name}-{mcp_name}[/green]"
+                )
         return len(servers), 0
 
     return 0, len(ctx.global_module.mcps)
 
 
-def _process_single_installation(
-    ctx: UpdateContext, verbose: bool
-) -> UpdateResult:
+def _process_single_installation(ctx: UpdateContext, verbose: bool) -> UpdateResult:
     """
     Process a single installation update.
 
@@ -489,13 +487,17 @@ def _format_update_summary(result: UpdateResult) -> str:
     """Format the summary string for an update result."""
     parts = []
     if result.skills_ok > 0:
-        parts.append(f"{result.skills_ok} {'skill' if result.skills_ok == 1 else 'skills'}")
+        parts.append(
+            f"{result.skills_ok} {'skill' if result.skills_ok == 1 else 'skills'}"
+        )
     if result.commands_ok > 0:
         parts.append(
             f"{result.commands_ok} {'command' if result.commands_ok == 1 else 'commands'}"
         )
     if result.agents_ok > 0:
-        parts.append(f"{result.agents_ok} {'agent' if result.agents_ok == 1 else 'agents'}")
+        parts.append(
+            f"{result.agents_ok} {'agent' if result.agents_ok == 1 else 'agents'}"
+        )
     if result.mcps_ok > 0:
         parts.append(f"{result.mcps_ok} {'MCP' if result.mcps_ok == 1 else 'MCPs'}")
     if result.instructions_ok:
@@ -505,11 +507,18 @@ def _format_update_summary(result: UpdateResult) -> str:
 
     # Build status indicators
     status_parts = []
-    total_failed = result.skills_failed + result.commands_failed + result.agents_failed + result.mcps_failed
+    total_failed = (
+        result.skills_failed
+        + result.commands_failed
+        + result.agents_failed
+        + result.mcps_failed
+    )
     if total_failed > 0:
         status_parts.append(f"[red]{total_failed} failed[/red]")
     if result.orphans_removed > 0:
-        status_parts.append(f"[yellow]{result.orphans_removed} orphaned removed[/yellow]")
+        status_parts.append(
+            f"[yellow]{result.orphans_removed} orphaned removed[/yellow]"
+        )
 
     status_suffix = f" ({', '.join(status_parts)})" if status_parts else ""
 
@@ -567,7 +576,9 @@ def install_cmd(
 
     module = Module.from_path(module_path)
     if not module:
-        console.print("[dim]Expected structure: skills/<name>/SKILL.md, commands/*.md, or agents/*.md[/dim]")
+        console.print(
+            "[dim]Expected structure: skills/<name>/SKILL.md, commands/*.md, or agents/*.md[/dim]"
+        )
         _handle_lola_error(ModuleInvalidError(module_name))
     assert module is not None  # For type narrowing after NoReturn
 
@@ -577,7 +588,13 @@ def install_cmd(
     except ValidationError as e:
         _handle_lola_error(e)
 
-    if not module.skills and not module.commands and not module.agents and not module.mcps and not module.has_instructions:
+    if (
+        not module.skills
+        and not module.commands
+        and not module.agents
+        and not module.mcps
+        and not module.has_instructions
+    ):
         console.print(
             f"[yellow]Module '{module_name}' has no skills, commands, agents, MCPs, or instructions defined[/yellow]"
         )
@@ -701,9 +718,7 @@ def uninstall_cmd(
     # Confirm if multiple installations and not forced
     if len(installations) > 1 and not force:
         console.print("[yellow]Multiple installations found[/yellow]")
-        console.print(
-            "[dim]Use -a <assistant> to target specific installation[/dim]"
-        )
+        console.print("[dim]Use -a <assistant> to target specific installation[/dim]")
         console.print("[dim]Use -f/--force to uninstall all[/dim]")
         console.print()
 
@@ -739,7 +754,9 @@ def uninstall_cmd(
                 if target.remove_skill(skill_dest, module_name):
                     removed_count += 1
                     if verbose:
-                        console.print(f"  [green]Removed skills from {skill_dest}[/green]")
+                        console.print(
+                            f"  [green]Removed skills from {skill_dest}[/green]"
+                        )
             else:
                 for skill in inst.skills:
                     if target.remove_skill(skill_dest, skill):
@@ -752,13 +769,13 @@ def uninstall_cmd(
             command_dest = target.get_command_path(inst.project_path)
 
             for cmd_name in inst.commands:
-                filename = target.get_command_filename(module_name, cmd_name)
-                cmd_file = command_dest / filename
-                if cmd_file.exists():
-                    cmd_file.unlink()
+                if target.remove_command(command_dest, cmd_name, module_name):
                     removed_count += 1
                     if verbose:
-                        console.print(f"  [green]Removed {cmd_file}[/green]")
+                        filename = target.get_command_filename(module_name, cmd_name)
+                        console.print(
+                            f"  [green]Removed {command_dest / filename}[/green]"
+                        )
 
         # Remove agent files
         if inst.agents:
@@ -766,13 +783,15 @@ def uninstall_cmd(
 
             if agent_dest:
                 for agent_name in inst.agents:
-                    filename = target.get_agent_filename(module_name, agent_name)
-                    agent_file = agent_dest / filename
-                    if agent_file.exists():
-                        agent_file.unlink()
+                    if target.remove_agent(agent_dest, agent_name, module_name):
                         removed_count += 1
                         if verbose:
-                            console.print(f"  [green]Removed {agent_file}[/green]")
+                            filename = target.get_agent_filename(
+                                module_name, agent_name
+                            )
+                            console.print(
+                                f"  [green]Removed {agent_dest / filename}[/green]"
+                            )
 
         # Remove instructions
         if inst.has_instructions:
@@ -780,7 +799,9 @@ def uninstall_cmd(
             if target.remove_instructions(instructions_dest, module_name):
                 removed_count += 1
                 if verbose:
-                    console.print(f"  [green]Removed instructions from {instructions_dest}[/green]")
+                    console.print(
+                        f"  [green]Removed instructions from {instructions_dest}[/green]"
+                    )
 
         # Remove MCP servers
         if inst.mcps:
@@ -903,7 +924,9 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 # Build context for update
                 ctx = _build_update_context(inst)
                 if not ctx:
-                    console.print(f"    [red]{inst.assistant}: failed to build context[/red]")
+                    console.print(
+                        f"    [red]{inst.assistant}: failed to build context[/red]"
+                    )
                     continue
 
                 # Process the installation update
@@ -919,7 +942,9 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
 
                 # Print summary line for this installation
                 summary = _format_update_summary(result)
-                console.print(f"    [green]{inst.assistant}[/green] [dim]{summary}[/dim]")
+                console.print(
+                    f"    [green]{inst.assistant}[/green] [dim]{summary}[/dim]"
+                )
 
     console.print()
     if stale_installations:

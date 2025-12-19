@@ -55,9 +55,7 @@ class TestInstallCmd:
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
         ):
-            result = cli_runner.invoke(
-                install_cmd, ["mymodule", "/nonexistent/path"]
-            )
+            result = cli_runner.invoke(install_cmd, ["mymodule", "/nonexistent/path"])
 
         assert result.exit_code == 1
         assert "does not exist" in result.output
@@ -148,6 +146,7 @@ class TestUninstallCmd:
 
         # Create mock target
         from unittest.mock import MagicMock
+
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
@@ -281,12 +280,20 @@ class TestUpdateCmd:
         orphan_cmd = command_dest / "mymodule.cmd1.md"
         orphan_cmd.write_text("orphaned content")
 
-        # Create mock target
+        # Create mock target that actually removes command files
+        def mock_remove_command(dest, cmd, mod):
+            target_file = dest / f"{mod}.{cmd}.md"
+            if target_file.exists():
+                target_file.unlink()
+                return True
+            return True
+
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
         mock_target.get_command_path.return_value = command_dest
         mock_target.get_command_filename.side_effect = lambda m, c: f"{m}.{c}.md"
         mock_target.remove_skill.return_value = True
+        mock_target.remove_command.side_effect = mock_remove_command
         mock_target.generate_skill.return_value = True
         mock_target.generate_command.return_value = True
 
