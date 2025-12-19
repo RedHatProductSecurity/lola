@@ -48,8 +48,8 @@ dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "pre-commit>=4.0.0",
-    "basedpyright>=1.22.0",
     "ruff>=0.8.0",
+    "ty>=0.0.4",
 ]
 
 [tool.basedpyright]

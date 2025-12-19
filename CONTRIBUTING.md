@@ -40,7 +40,7 @@ uv sync --group dev
 ```
 
 This creates a virtual environment (`.venv/`) and installs pytest,
-ruff, basedpyright, and all project dependencies.
+ruff, ty, and all project dependencies.
 
 ### 3. Install Pre-Commit Hooks (Recommended)
 
@@ -90,7 +90,7 @@ Before committing, ensure everything passes:
 ```bash
 pytest                    # Run tests
 ruff check src tests      # Linting
-basedpyright src          # Type checking
+ty check                  # Type checking
 ```
 
 If you changed CLI functionality, test it:
@@ -177,7 +177,7 @@ git commit -m "feat: add validation (AI-assisted)"
 Whether AI-assisted or not, all contributions must:
 - Pass all tests (`pytest`)
 - Pass linting (`ruff check src tests`)
-- Pass type checking (`basedpyright src`)
+- Pass type checking (`ty check`)
 - Be reviewed and understood by you
 
 ### What Gets Closed
@@ -225,7 +225,7 @@ When adding new functionality:
 If you installed pre-commit hooks, they'll automatically run
 before each commit:
 - ruff (linting and formatting)
-- basedpyright (type checking)
+- ty (type checking)
 - pytest (tests)
 
 You can also run pre-commit manually:

@@ -6,11 +6,19 @@ repos:
         args: [--fix]
       - id: ruff-format
 
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.18
+    hooks:
+      - id: uv-export
+        args: ["--frozen", "--no-dev", "--output-file=requirements.txt", "--quiet"]
+      - id: uv-export
+        args: ["--frozen", "--group", "dev", "--output-file=requirements-dev.txt", "--quiet"]
+
   - repo: local
     hooks:
-      - id: basedpyright
-        name: basedpyright
-        entry: uv run basedpyright
+      - id: ty-check
+        name: ty-check
+        entry: uv run ty check
         language: system
         types: [python]
         pass_filenames: false
