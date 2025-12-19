@@ -286,6 +286,11 @@ Commands are automatically converted to each assistant's format:
 4. **Project scope**: Copies modules to `.lola/modules/` within the project
 5. **Updates**: `lola mod update` re-fetches from original source; `lola update` regenerates files
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
+for guidelines on how to contribute to Lola.
+
 ## License
 
 [GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html)
