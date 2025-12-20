@@ -447,6 +447,88 @@ class TestUpdateCmd:
         assert set(updated_inst.skills) == {"skill1"}
         assert set(updated_inst.commands) == {"cmd1"}
 
+    def test_update_uses_prefixed_name_on_conflict(self, cli_runner, tmp_path):
+        """Update uses prefixed skill name when another module owns the unprefixed name."""
+        from unittest.mock import MagicMock
+
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        project_path = tmp_path / "project"
+        project_path.mkdir()
+
+        # Create module1 with skill "shared"
+        module1_dir = modules_dir / "module1"
+        module1_dir.mkdir()
+        skills1_dir = module1_dir / "skills"
+        skills1_dir.mkdir()
+        skill1_dir = skills1_dir / "shared"
+        skill1_dir.mkdir()
+        (skill1_dir / "SKILL.md").write_text("---\ndescription: Shared skill\n---\nModule 1")
+
+        # Create module2 with skill "shared" (same name)
+        module2_dir = modules_dir / "module2"
+        module2_dir.mkdir()
+        skills2_dir = module2_dir / "skills"
+        skills2_dir.mkdir()
+        skill2_dir = skills2_dir / "shared"
+        skill2_dir.mkdir()
+        (skill2_dir / "SKILL.md").write_text("---\ndescription: Shared skill\n---\nModule 2")
+
+        # Create registry with both modules installed to same project/assistant
+        registry = InstallationRegistry(installed_file)
+        inst1 = Installation(
+            module_name="module1",
+            assistant="claude-code",
+            scope="project",
+            project_path=str(project_path),
+            skills=["shared"],  # module1 owns "shared"
+        )
+        inst2 = Installation(
+            module_name="module2",
+            assistant="claude-code",
+            scope="project",
+            project_path=str(project_path),
+            skills=["shared"],  # module2 also claims "shared" (will conflict)
+        )
+        registry.add(inst1)
+        registry.add(inst2)
+
+        # Create mock paths
+        skill_dest = project_path / ".claude" / "skills"
+        skill_dest.mkdir(parents=True)
+
+        # Create mock target
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = project_path / ".claude" / "commands"
+        mock_target.get_agent_path.return_value = project_path / ".claude" / "agents"
+        mock_target.get_mcp_path.return_value = project_path / ".claude" / "mcp.json"
+        mock_target.get_instructions_path.return_value = None
+        mock_target.uses_managed_section = False
+        mock_target.generate_skill.return_value = True
+        mock_target.remove_skill.return_value = True
+
+        with (
+            patch("lola.cli.install.MODULES_DIR", modules_dir),
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = cli_runner.invoke(update_cmd, ["module2", "-v"])
+
+        assert result.exit_code == 0
+
+        # module2 should use prefixed name since module1 owns "shared"
+        updated_inst2 = [i for i in registry.find("module2") if i.project_path == str(project_path)][0]
+        assert "module2_shared" in updated_inst2.skills, (
+            f"Expected 'module2_shared' in skills, got {updated_inst2.skills}"
+        )
+        assert "shared" not in updated_inst2.skills, (
+            "module2 should not have unprefixed 'shared' since module1 owns it"
+        )
+
 
 class TestListInstalledCmd:
     """Tests for installed (list) command."""

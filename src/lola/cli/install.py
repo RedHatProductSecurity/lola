@@ -73,6 +73,7 @@ class UpdateContext:
     global_module: Module
     source_module: Path
     target: AssistantTarget
+    registry: "InstallationRegistry"
     current_skills: set[str] = field(default_factory=set)
     current_commands: set[str] = field(default_factory=set)
     current_agents: set[str] = field(default_factory=set)
@@ -82,6 +83,7 @@ class UpdateContext:
     orphaned_commands: set[str] = field(default_factory=set)
     orphaned_agents: set[str] = field(default_factory=set)
     orphaned_mcps: set[str] = field(default_factory=set)
+    installed_skills: set[str] = field(default_factory=set)  # Actual installed names
 
 
 def _validate_installation_for_update(inst: Installation) -> tuple[bool, str | None]:
@@ -116,7 +118,9 @@ def _validate_installation_for_update(inst: Installation) -> tuple[bool, str | N
     return True, None
 
 
-def _build_update_context(inst: Installation) -> UpdateContext | None:
+def _build_update_context(
+    inst: Installation, registry: "InstallationRegistry"
+) -> UpdateContext | None:
     """
     Build the context needed for updating an installation.
 
@@ -150,6 +154,7 @@ def _build_update_context(inst: Installation) -> UpdateContext | None:
         global_module=global_module,
         source_module=source_module,
         target=target,
+        registry=registry,
         current_skills=current_skills,
         current_commands=current_commands,
         current_agents=current_agents,
@@ -235,6 +240,29 @@ def _remove_orphaned_mcps(ctx: UpdateContext, verbose: bool) -> int:
     return 0
 
 
+def _skill_owned_by_other_module(
+    ctx: UpdateContext, skill_name: str
+) -> str | None:
+    """
+    Check if a skill name is owned by another module.
+
+    Returns the owning module name if found, None otherwise.
+    """
+    for inst in ctx.registry.all():
+        # Skip our own module
+        if inst.module_name == ctx.inst.module_name:
+            continue
+        # Must be same project path and assistant
+        if inst.project_path != ctx.inst.project_path:
+            continue
+        if inst.assistant != ctx.inst.assistant:
+            continue
+        # Check if this module has the skill installed
+        if skill_name in inst.skills:
+            return inst.module_name
+    return None
+
+
 def _update_skills(
     ctx: UpdateContext, skill_dest: Path, verbose: bool
 ) -> tuple[int, int]:
@@ -257,6 +285,7 @@ def _update_skills(
             if source.exists():
                 description = _get_skill_description(source)
                 batch_skills.append((skill, description, source))
+                ctx.installed_skills.add(skill)
                 skills_ok += 1
                 if verbose:
                     console.print(f"      [green]{skill}[/green]")
@@ -277,15 +306,27 @@ def _update_skills(
         for skill in ctx.global_module.skills:
             source = _skill_source_dir(ctx.source_module, skill)
 
-            # Use unprefixed skill name
+            # Check if another module owns this skill name
+            skill_name = skill
+            owner = _skill_owned_by_other_module(ctx, skill)
+            if owner:
+                # Use prefixed name to avoid conflict
+                skill_name = f"{ctx.inst.module_name}_{skill}"
+                if verbose:
+                    console.print(
+                        f"      [yellow]{skill}[/yellow] [dim](using {skill_name}, "
+                        f"'{skill}' owned by {owner})[/dim]"
+                    )
+
             success = ctx.target.generate_skill(
-                source, skill_dest, skill, ctx.inst.project_path
+                source, skill_dest, skill_name, ctx.inst.project_path
             )
 
             if success:
+                ctx.installed_skills.add(skill_name)
                 skills_ok += 1
-                if verbose:
-                    console.print(f"      [green]{skill}[/green]")
+                if verbose and not owner:
+                    console.print(f"      [green]{skill_name}[/green]")
             else:
                 skills_failed += 1
                 if verbose:
@@ -928,7 +969,7 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                     continue
 
                 # Build context for update
-                ctx = _build_update_context(inst)
+                ctx = _build_update_context(inst, registry)
                 if not ctx:
                     console.print(
                         f"    [red]{inst.assistant}: failed to build context[/red]"
@@ -938,8 +979,8 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 # Process the installation update
                 result = _process_single_installation(ctx, verbose)
 
-                # Update the registry with current skills/commands/agents/mcps/instructions
-                inst.skills = list(ctx.current_skills)
+                # Update the registry with actual installed skills (may include prefixed names)
+                inst.skills = list(ctx.installed_skills)
                 inst.commands = list(ctx.current_commands)
                 inst.agents = list(ctx.current_agents)
                 inst.mcps = list(ctx.current_mcps)
