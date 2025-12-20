@@ -540,11 +540,18 @@ def _format_update_summary(result: UpdateResult) -> str:
     is_flag=True,
     help="Show detailed output for each skill and command",
 )
+@click.option(
+    "-f",
+    "--force",
+    is_flag=True,
+    help="Overwrite existing skills without prompting",
+)
 @click.argument("project_path", required=False, default="./")
 def install_cmd(
     module_name: str,
     assistant: Optional[str],
     verbose: bool,
+    force: bool,
     project_path: str,
 ):
     """
@@ -613,7 +620,7 @@ def install_cmd(
     total_installed = 0
     for asst in assistants_to_install:
         total_installed += install_to_assistant(
-            module, asst, scope, project_path, local_modules, registry, verbose
+            module, asst, scope, project_path, local_modules, registry, verbose, force
         )
 
     console.print()

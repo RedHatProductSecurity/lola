@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import click
 from rich.console import Console
 
 import lola.config as config
@@ -62,11 +63,34 @@ def copy_module_to_local(module: Module, local_modules_path: Path) -> Path:
     return dest
 
 
+def _check_skill_exists(
+    target: AssistantTarget,
+    skill_name: str,
+    project_path: str | None,
+) -> bool:
+    """Check if a skill already exists at the destination."""
+    if not project_path:
+        return False
+
+    skill_dest = target.get_skill_path(project_path)
+
+    if target.uses_managed_section:
+        # For managed sections, we allow overwriting since skills are grouped by module
+        return False
+    else:
+        # For file-based targets, check if directory/file exists
+        if target.name == "cursor":
+            return (skill_dest / f"{skill_name}.mdc").exists()
+        else:
+            return (skill_dest / skill_name).exists()
+
+
 def _install_skills(
     target: AssistantTarget,
     module: Module,
     local_module_path: Path,
     project_path: str | None,
+    force: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Install skills for a target. Returns (installed, failed) lists."""
     if not module.skills:
@@ -84,10 +108,9 @@ def _install_skills(
         batch_skills: list[tuple[str, str, Path]] = []
         for skill in module.skills:
             source = _skill_source_dir(local_module_path, skill)
-            prefixed = f"{module.name}.{skill}"
             if source.exists():
                 batch_skills.append((skill, _get_skill_description(source), source))
-                installed.append(prefixed)
+                installed.append(skill)
             else:
                 failed.append(skill)
         if batch_skills:
@@ -97,9 +120,30 @@ def _install_skills(
     else:
         for skill in module.skills:
             source = _skill_source_dir(local_module_path, skill)
-            prefixed = f"{module.name}.{skill}"
-            if target.generate_skill(source, skill_dest, prefixed, project_path):
-                installed.append(prefixed)
+            skill_name = skill  # Use unprefixed name by default
+
+            # Check if skill already exists
+            if _check_skill_exists(target, skill_name, project_path):
+                if force:
+                    # Force mode: overwrite without prompting
+                    pass
+                elif click.confirm(
+                    f"Skill '{skill_name}' already exists. Overwrite?", default=False
+                ):
+                    # User chose to overwrite
+                    pass
+                elif click.confirm(
+                    f"Use prefixed name '{module.name}_{skill}' instead?", default=True
+                ):
+                    # User chose to use prefixed name
+                    skill_name = f"{module.name}_{skill}"
+                else:
+                    # User declined both options, skip this skill
+                    console.print(f"  [yellow]Skipped {skill}[/yellow]")
+                    continue
+
+            if target.generate_skill(source, skill_dest, skill_name, project_path):
+                installed.append(skill_name)
             else:
                 failed.append(skill)
 
@@ -298,6 +342,7 @@ def install_to_assistant(
     local_modules: Path,
     registry: InstallationRegistry,
     verbose: bool = False,
+    force: bool = False,
 ) -> int:
     """Install module to a specific assistant."""
     # Late import to avoid circular imports - get_target is defined in __init__.py
@@ -311,7 +356,7 @@ def install_to_assistant(
     local_module_path = copy_module_to_local(module, local_modules)
 
     installed_skills, failed_skills = _install_skills(
-        target, module, local_module_path, project_path
+        target, module, local_module_path, project_path, force
     )
     installed_commands, failed_commands = _install_commands(
         target, module, local_module_path, project_path
