@@ -381,6 +381,83 @@ def detect_source_type(source: str) -> str:
     return "unknown"
 
 
+def predict_module_name(source: str) -> Optional[str]:
+    """
+    Predict the module name that will be derived from a source.
+
+    This function mirrors the name extraction logic used by source handlers,
+    allowing us to predict the module name before fetching. Used to check
+    for existing modules and prevent accidental overwrites.
+
+    Args:
+        source: Source location (git URL, zip path, tar path, folder path, or URL)
+
+    Returns:
+        Predicted module name (validated), or None if prediction not possible
+
+    Note:
+        For archive sources (zip/tar), this provides best-effort prediction based
+        on filename. The actual module name may differ if archive has complex structure.
+        Returns None in uncertain cases to skip checks conservatively.
+    """
+    module_name = None
+    source_type = detect_source_type(source)
+
+    try:
+        if source_type == "git":
+            # Extract repo name from git URL - urlparse handles trailing slashes
+            parsed = urlparse(source)
+            repo_name = Path(parsed.path).name
+            if repo_name.endswith(".git"):
+                repo_name = repo_name[:-4]
+            module_name = validate_module_name(repo_name)
+
+        elif source_type == "folder":
+            # Use folder name (same as FolderSourceHandler)
+            source_path = Path(source).resolve()
+            module_name = validate_module_name(source_path.name)
+
+        elif source_type == "zip":
+            # Best guess: use zip filename stem
+            # Note: Actual name might differ if archive has complex structure
+            module_name = validate_module_name(Path(source).stem)
+
+        elif source_type == "tar":
+            # Best guess: use tar filename stem after removing extensions
+            # Note: Actual name might differ if archive has complex structure
+            filename = Path(source).name
+            stem = filename
+            for ext in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tar"):
+                if stem.lower().endswith(ext):
+                    stem = stem[: -len(ext)]
+                    break
+            module_name = validate_module_name(stem)
+
+        elif source_type == "zipurl":
+            # Extract filename from URL and use stem
+            parsed = urlparse(source)
+            filename = Path(parsed.path).name
+            module_name = validate_module_name(Path(filename).stem)
+
+        elif source_type == "tarurl":
+            # Extract filename from URL and strip tar extensions
+            parsed = urlparse(source)
+            filename = Path(parsed.path).name
+            stem = filename
+            for ext in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tar"):
+                if stem.lower().endswith(ext):
+                    stem = stem[: -len(ext)]
+                    break
+            module_name = validate_module_name(stem)
+
+    except (ModuleNameError, Exception):
+        # If prediction fails (e.g., invalid name), return None
+        # This will skip the existence check (conservative approach)
+        module_name = None
+
+    return module_name
+
+
 def save_source_info(module_path: Path, source: str, source_type: str):
     """Save source information for a module."""
     source_file = module_path / SOURCE_FILE
