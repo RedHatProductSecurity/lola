@@ -240,9 +240,7 @@ def _remove_orphaned_mcps(ctx: UpdateContext, verbose: bool) -> int:
     return 0
 
 
-def _skill_owned_by_other_module(
-    ctx: UpdateContext, skill_name: str
-) -> str | None:
+def _skill_owned_by_other_module(ctx: UpdateContext, skill_name: str) -> str | None:
     """
     Check if a skill name is owned by another module.
 

@@ -464,7 +464,9 @@ class TestUpdateCmd:
         skills1_dir.mkdir()
         skill1_dir = skills1_dir / "shared"
         skill1_dir.mkdir()
-        (skill1_dir / "SKILL.md").write_text("---\ndescription: Shared skill\n---\nModule 1")
+        (skill1_dir / "SKILL.md").write_text(
+            "---\ndescription: Shared skill\n---\nModule 1"
+        )
 
         # Create module2 with skill "shared" (same name)
         module2_dir = modules_dir / "module2"
@@ -473,7 +475,9 @@ class TestUpdateCmd:
         skills2_dir.mkdir()
         skill2_dir = skills2_dir / "shared"
         skill2_dir.mkdir()
-        (skill2_dir / "SKILL.md").write_text("---\ndescription: Shared skill\n---\nModule 2")
+        (skill2_dir / "SKILL.md").write_text(
+            "---\ndescription: Shared skill\n---\nModule 2"
+        )
 
         # Create registry with both modules installed to same project/assistant
         registry = InstallationRegistry(installed_file)
@@ -501,7 +505,9 @@ class TestUpdateCmd:
         # Create mock target
         mock_target = MagicMock()
         mock_target.get_skill_path.return_value = skill_dest
-        mock_target.get_command_path.return_value = project_path / ".claude" / "commands"
+        mock_target.get_command_path.return_value = (
+            project_path / ".claude" / "commands"
+        )
         mock_target.get_agent_path.return_value = project_path / ".claude" / "agents"
         mock_target.get_mcp_path.return_value = project_path / ".claude" / "mcp.json"
         mock_target.get_instructions_path.return_value = None
@@ -521,7 +527,9 @@ class TestUpdateCmd:
         assert result.exit_code == 0
 
         # module2 should use prefixed name since module1 owns "shared"
-        updated_inst2 = [i for i in registry.find("module2") if i.project_path == str(project_path)][0]
+        updated_inst2 = [
+            i for i in registry.find("module2") if i.project_path == str(project_path)
+        ][0]
         assert "module2_shared" in updated_inst2.skills, (
             f"Expected 'module2_shared' in skills, got {updated_inst2.skills}"
         )
