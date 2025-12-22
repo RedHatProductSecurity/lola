@@ -20,7 +20,7 @@ from lola.exceptions import (
     PathNotFoundError,
     ValidationError,
 )
-from lola.models import Installation, Module
+from lola.models import Installation, InstallationRegistry, Module
 from lola.targets import (
     AssistantTarget,
     TARGETS,
@@ -73,7 +73,7 @@ class UpdateContext:
     global_module: Module
     source_module: Path
     target: AssistantTarget
-    registry: "InstallationRegistry"
+    registry: InstallationRegistry
     current_skills: set[str] = field(default_factory=set)
     current_commands: set[str] = field(default_factory=set)
     current_agents: set[str] = field(default_factory=set)
@@ -119,7 +119,7 @@ def _validate_installation_for_update(inst: Installation) -> tuple[bool, str | N
 
 
 def _build_update_context(
-    inst: Installation, registry: "InstallationRegistry"
+    inst: Installation, registry: InstallationRegistry
 ) -> UpdateContext | None:
     """
     Build the context needed for updating an installation.
