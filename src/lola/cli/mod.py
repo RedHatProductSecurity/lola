@@ -115,6 +115,44 @@ def mod():
     pass
 
 
+def _confirm_overwrite(source: str, module_name: str | None) -> bool:
+    """
+    Check if module exists and get user confirmation to overwrite.
+
+    Returns:
+        True to proceed, False to cancel
+    """
+    from lola.parsers import predict_module_name
+
+    # Skip if --name flag used
+    if module_name:
+        return True
+
+    predicted_name = predict_module_name(source)
+    if not predicted_name:
+        return True
+
+    # Check if module exists
+    existing_modules = list_registered_modules()
+    if not any(m.name == predicted_name for m in existing_modules):
+        return True
+
+    # Prompt for confirmation
+    console.print()
+    console.print(f"[yellow]Module '{predicted_name}' already exists.[/yellow]")
+    console.print()
+    console.print("[dim]To install as a different module, use:[/dim]")
+    console.print(f"[dim]  lola mod add {source} --name <different-name>[/dim]")
+    console.print()
+
+    if not click.confirm("Overwrite existing module?", default=False):
+        console.print("[yellow]Cancelled[/yellow]")
+        return False
+
+    console.print()
+    return True
+
+
 @mod.command(name="add")
 @click.argument("source")
 @click.option(
@@ -148,6 +186,10 @@ def add_module(source: str, module_name: str):
         _handle_lola_error(UnsupportedSourceError(source))
 
     console.print(f"Adding module from {source_type}...")
+
+    # Check if module exists and confirm overwrite
+    if not _confirm_overwrite(source, module_name):
+        return
 
     try:
         module_path = fetch_module(source, MODULES_DIR)
