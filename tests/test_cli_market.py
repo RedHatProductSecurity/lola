@@ -107,6 +107,36 @@ class TestMarketAdd:
         assert result.exit_code == 0
         assert "Error:" in result.output
 
+    def test_add_marketplace_invalid_name(self, cli_runner, tmp_path):
+        """Reject invalid marketplace names."""
+        market_dir = tmp_path / "market"
+        cache_dir = market_dir / "cache"
+
+        with (
+            patch("lola.cli.market.MARKET_DIR", market_dir),
+            patch("lola.cli.market.CACHE_DIR", cache_dir),
+        ):
+            # Test path separator
+            result = cli_runner.invoke(
+                market, ["add", "foo/bar", "https://example.com/mkt.yml"]
+            )
+            assert result.exit_code == 0
+            assert "path separators not allowed" in result.output
+
+            # Test dot prefix
+            result = cli_runner.invoke(
+                market, ["add", ".hidden", "https://example.com/mkt.yml"]
+            )
+            assert result.exit_code == 0
+            assert "cannot start with dot" in result.output
+
+            # Test path traversal
+            result = cli_runner.invoke(
+                market, ["add", "..", "https://example.com/mkt.yml"]
+            )
+            assert result.exit_code == 0
+            assert "path traversal not allowed" in result.output
+
 
 class TestMarketLs:
     """Tests for market ls command."""

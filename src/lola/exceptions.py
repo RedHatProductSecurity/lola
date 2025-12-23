@@ -276,3 +276,18 @@ To migrate:
   2. Move skills/, commands/, agents/, AGENTS.md, and mcps.json into module/
   3. Re-run 'lola install {module_name}'"""
         super().__init__(message)
+
+
+# =============================================================================
+# Marketplace-related exceptions
+# =============================================================================
+
+
+class MarketplaceNameError(LolaError):
+    """Raised when a marketplace name is invalid."""
+
+    def __init__(self, name: str, reason: str):
+        self.name = name
+        self.reason = reason
+        message = f"Invalid marketplace name '{name}': {reason}"
+        super().__init__(message)

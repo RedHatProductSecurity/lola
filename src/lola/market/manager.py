@@ -11,6 +11,7 @@ import yaml
 
 from lola.models import Marketplace
 from lola.market.search import search_market, display_market
+from lola.exceptions import MarketplaceNameError
 
 
 def parse_market_ref(module_name: str) -> tuple[str, str] | None:
@@ -30,6 +31,27 @@ def parse_market_ref(module_name: str) -> tuple[str, str] | None:
     return None
 
 
+def validate_marketplace_name(name: str) -> str:
+    """Validate marketplace name to ensure it's a valid filesystem name.
+
+    Raises:
+        MarketplaceNameError: If the name is invalid.
+
+    Returns:
+        The validated name.
+    """
+    if not name:
+        raise MarketplaceNameError(name, "name cannot be empty")
+    if name in (".", ".."):
+        raise MarketplaceNameError(name, "path traversal not allowed")
+    if "/" in name or "\\" in name:
+        raise MarketplaceNameError(name, "path separators not allowed")
+    if name.startswith("."):
+        raise MarketplaceNameError(name, "cannot start with dot")
+
+    return name
+
+
 class MarketplaceRegistry:
     """Manages marketplace references and caches."""
 
@@ -44,6 +66,12 @@ class MarketplaceRegistry:
 
     def add(self, name: str, url: str) -> None:
         """Add a new marketplace."""
+        try:
+            name = validate_marketplace_name(name)
+        except MarketplaceNameError as e:
+            self.console.print(f"[red]{e}[/red]")
+            return
+
         ref_file = self.market_dir / f"{name}.yml"
 
         if ref_file.exists():
