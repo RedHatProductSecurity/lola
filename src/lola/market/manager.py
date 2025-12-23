@@ -139,3 +139,28 @@ class MarketplaceRegistry:
             table.add_row(marketplace_ref.name, str(module_count), status)
 
         self.console.print(table)
+
+    def _set_enabled(self, name: str, enabled: bool) -> None:
+        """Set marketplace enabled status."""
+        ref_file = self.market_dir / f"{name}.yml"
+
+        if not ref_file.exists():
+            self.console.print(f"[red]Marketplace '{name}' not found[/red]")
+            return
+
+        marketplace_ref = Marketplace.from_reference(ref_file)
+        marketplace_ref.enabled = enabled
+
+        with open(ref_file, "w") as f:
+            yaml.dump(marketplace_ref.to_reference_dict(), f)
+
+        status = "enabled" if enabled else "disabled"
+        self.console.print(f"[green]Marketplace '{name}' {status}[/green]")
+
+    def enable(self, name: str) -> None:
+        """Enable a marketplace."""
+        self._set_enabled(name, True)
+
+    def disable(self, name: str) -> None:
+        """Disable a marketplace."""
+        self._set_enabled(name, False)
