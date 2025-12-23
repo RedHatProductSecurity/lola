@@ -259,6 +259,48 @@ class TestMarketplaceRegistryRemove:
         assert "not found" in captured.out
 
 
+class TestMarketplaceRegistrySearch:
+    """Tests for MarketplaceRegistry.search()."""
+
+    def test_search_with_results(self, marketplace_with_modules, capsys):
+        """Search displays results when matches found."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        registry.search("git")
+
+        captured = capsys.readouterr()
+        assert "Found 1 module" in captured.out
+        assert "git-tools" in captured.out
+        assert "Git utilities" in captured.out
+
+    def test_search_no_results(self, marketplace_with_modules, capsys):
+        """Search displays message when no matches."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        registry.search("nonexistent")
+
+        captured = capsys.readouterr()
+        assert "No modules found matching 'nonexistent'" in captured.out
+
+    def test_search_no_marketplaces(self, tmp_path, capsys):
+        """Search displays message when no marketplaces registered."""
+        market_dir = tmp_path / "market"
+        cache_dir = tmp_path / "cache"
+        market_dir.mkdir(parents=True)
+        cache_dir.mkdir(parents=True)
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        registry.search("git")
+
+        captured = capsys.readouterr()
+        assert "No marketplaces registered" in captured.out
+        assert "lola market add" in captured.out
+
+
 class TestMarketplaceRegistryUpdate:
     """Tests for MarketplaceRegistry update methods."""
 

@@ -10,6 +10,7 @@ from rich.table import Table
 import yaml
 
 from lola.models import Marketplace
+from lola.market.search import search_market, display_market
 
 
 def parse_market_ref(module_name: str) -> tuple[str, str] | None:
@@ -106,6 +107,21 @@ class MarketplaceRegistry:
                     return module, marketplace_ref.name
 
         return None
+
+    def search(self, query: str) -> None:
+        """Search for modules across all enabled marketplaces."""
+        ref_files = list(self.market_dir.glob("*.yml"))
+
+        if not ref_files:
+            self.console.print("[yellow]No marketplaces registered[/yellow]")
+            self.console.print(
+                "[dim]Use 'lola market add <name> <url>' to add a "
+                "marketplace[/dim]"
+            )
+            return
+
+        results = search_market(query, self.market_dir, self.cache_dir)
+        display_market(results, query, self.console)
 
     def list(self) -> None:
         """List all registered marketplaces."""
