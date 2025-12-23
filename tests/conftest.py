@@ -360,3 +360,86 @@ def registered_module_with_module_subdir(
     shutil.copytree(sample_module_with_module_subdir, dest)
 
     return dest
+
+
+@pytest.fixture
+def marketplace_with_modules(tmp_path):
+    """Create a marketplace with test modules."""
+    import yaml
+
+    market_dir = tmp_path / "market"
+    cache_dir = market_dir / "cache"
+    market_dir.mkdir(parents=True)
+    cache_dir.mkdir(parents=True)
+
+    ref_data = {
+        "name": "official",
+        "url": "https://example.com/market.yml",
+        "enabled": True,
+    }
+    cache_data = {
+        "name": "Official Marketplace",
+        "description": "Official catalog",
+        "version": "1.0.0",
+        "url": "https://example.com/market.yml",
+        "enabled": True,
+        "modules": [
+            {
+                "name": "git-tools",
+                "description": "Git utilities",
+                "version": "1.0.0",
+                "repository": "https://github.com/test/git-tools.git",
+            },
+            {
+                "name": "python-utils",
+                "description": "Python utilities",
+                "version": "1.2.0",
+                "repository": "https://github.com/test/python-utils.git",
+            },
+        ],
+    }
+
+    with open(market_dir / "official.yml", "w") as f:
+        yaml.dump(ref_data, f)
+    with open(cache_dir / "official.yml", "w") as f:
+        yaml.dump(cache_data, f)
+
+    return {"market_dir": market_dir, "cache_dir": cache_dir}
+
+
+@pytest.fixture
+def marketplace_disabled(tmp_path):
+    """Create a disabled marketplace."""
+    import yaml
+
+    market_dir = tmp_path / "market"
+    cache_dir = market_dir / "cache"
+    market_dir.mkdir(parents=True)
+    cache_dir.mkdir(parents=True)
+
+    ref_data = {
+        "name": "disabled-market",
+        "url": "https://example.com/disabled.yml",
+        "enabled": False,
+    }
+    cache_data = {
+        "name": "Disabled Marketplace",
+        "version": "1.0.0",
+        "url": "https://example.com/disabled.yml",
+        "enabled": False,
+        "modules": [
+            {
+                "name": "test-module",
+                "description": "Test module",
+                "version": "1.0.0",
+                "repository": "https://github.com/test/test.git",
+            }
+        ],
+    }
+
+    with open(market_dir / "disabled-market.yml", "w") as f:
+        yaml.dump(ref_data, f)
+    with open(cache_dir / "disabled-market.yml", "w") as f:
+        yaml.dump(cache_data, f)
+
+    return {"market_dir": market_dir, "cache_dir": cache_dir}

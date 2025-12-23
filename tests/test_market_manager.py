@@ -107,3 +107,42 @@ class TestMarketplaceRegistryAdd:
             # Verify error message was printed
             captured = capsys.readouterr()
             assert "Error:" in captured.out
+
+
+class TestMarketplaceRegistrySearchModule:
+    """Tests for MarketplaceRegistry.search_module()."""
+
+    def test_search_module_success(self, marketplace_with_modules):
+        """Search module in marketplace successfully."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.search_module("git-tools")
+
+        assert result is not None
+        module, marketplace_name = result
+        assert module["name"] == "git-tools"
+        assert module["repository"] == "https://github.com/test/git-tools.git"
+        assert marketplace_name == "official"
+
+    def test_search_module_not_found(self, marketplace_with_modules):
+        """Module not found in any marketplace."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.search_module("nonexistent-module")
+
+        assert result is None
+
+    def test_search_module_disabled_marketplace(self, marketplace_disabled):
+        """Skip disabled marketplaces when searching."""
+        market_dir = marketplace_disabled["market_dir"]
+        cache_dir = marketplace_disabled["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.search_module("test-module")
+
+        # Should not find module in disabled marketplace
+        assert result is None

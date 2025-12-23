@@ -56,3 +56,35 @@ class MarketplaceRegistry:
             )
         except ValueError as e:
             self.console.print(f"[red]Error: {e}[/red]")
+
+    def search_module(self, module_name: str) -> tuple[dict, str] | None:
+        """
+        Search for a module by name across all enabled marketplaces.
+
+        Args:
+            module_name: Name of the module to search for
+
+        Returns:
+            Tuple of (module_dict, marketplace_name) if found, None otherwise
+        """
+        # Iterate through all marketplace reference files
+        for ref_file in self.market_dir.glob("*.yml"):
+            # Load reference to check if marketplace is enabled
+            marketplace_ref = Marketplace.from_reference(ref_file)
+
+            if not marketplace_ref.enabled:
+                continue
+
+            # Load cache to get modules
+            cache_file = self.cache_dir / ref_file.name
+            if not cache_file.exists():
+                continue
+
+            marketplace = Marketplace.from_cache(cache_file)
+
+            # Search for module in this marketplace
+            for module in marketplace.modules:
+                if module.get("name") == module_name:
+                    return module, marketplace_ref.name
+
+        return None
