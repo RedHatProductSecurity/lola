@@ -23,9 +23,7 @@ class TestMarketplaceFromReference:
                 },
             ),
             (
-                "name: test\n"
-                "url: https://test.com/market.yml\n"
-                "enabled: false\n",
+                "name: test\nurl: https://test.com/market.yml\nenabled: false\n",
                 {
                     "name": "test",
                     "url": "https://test.com/market.yml",
@@ -88,9 +86,7 @@ class TestMarketplaceFromUrl:
         mock_response = mock_open(read_data=yaml_content.encode())()
 
         with patch("urllib.request.urlopen", return_value=mock_response):
-            marketplace = Marketplace.from_url(
-                "https://example.com/market.yml", "test"
-            )
+            marketplace = Marketplace.from_url("https://example.com/market.yml", "test")
             assert marketplace.name == "test"
             assert marketplace.url == "https://example.com/market.yml"
             assert marketplace.description == "Test catalog"
@@ -105,12 +101,8 @@ class TestMarketplaceFromUrl:
             "urllib.request.urlopen",
             side_effect=URLError("Connection failed"),
         ):
-            with pytest.raises(
-                ValueError, match="Failed to download marketplace"
-            ):
-                Marketplace.from_url(
-                    "https://invalid.com/market.yml", "test"
-                )
+            with pytest.raises(ValueError, match="Failed to download marketplace"):
+                Marketplace.from_url("https://invalid.com/market.yml", "test")
 
 
 class TestMarketplaceValidate:
@@ -155,9 +147,7 @@ class TestMarketplaceValidate:
             ),
         ],
     )
-    def test_validate(
-        self, marketplace_data, expected_valid, expected_error
-    ):
+    def test_validate(self, marketplace_data, expected_valid, expected_error):
         """Validate marketplace with various scenarios."""
         marketplace = Marketplace(**marketplace_data)
         is_valid, errors = marketplace.validate()
