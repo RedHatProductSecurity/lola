@@ -77,11 +77,27 @@ lola update
 
 Marketplaces let you discover and install modules from curated catalogs without manually finding repository URLs.
 
+### Official Lola Marketplace
+
+We maintain an official, community-driven marketplace with curated modules at [github.com/RedHatProductSecurity/lola-market](https://github.com/RedHatProductSecurity/lola-market).
+
+**Quick setup:**
+```bash
+lola market add general https://raw.githubusercontent.com/RedHatProductSecurity/lola-market/main/general-market.yml
+```
+
+This gives you instant access to community modules like workflow automation, code quality tools, and more. **We highly encourage you to:**
+- Use modules from the official marketplace
+- Contribute your own modules
+- Share feedback and improvements
+
+All contributions are welcome! See the [marketplace contributing guide](https://github.com/RedHatProductSecurity/lola-market/blob/main/CONTRIBUTING.md).
+
 ### Register a marketplace
 
 ```bash
 # Add a marketplace from a URL
-lola market add official https://example.com/marketplace.yml
+lola market add general https://raw.githubusercontent.com/RedHatProductSecurity/lola-market/main/general-market.yml
 
 # List registered marketplaces
 lola market ls
@@ -103,19 +119,19 @@ When a module exists in multiple marketplaces, Lola prompts you to select which 
 
 ```bash
 # Update marketplace cache
-lola market update official
+lola market update general
 
 # Update all marketplaces
 lola market update
 
 # Disable a marketplace (keeps it registered but excludes from search)
-lola market set --disable official
+lola market set --disable general
 
 # Re-enable a marketplace
-lola market set --enable official
+lola market set --enable general
 
 # Remove a marketplace
-lola market rm official
+lola market rm general
 ```
 
 ### Marketplace YAML format

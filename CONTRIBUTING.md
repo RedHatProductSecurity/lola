@@ -191,6 +191,28 @@ PRs will be closed if they:
 Good AI-assisted contributions are thoughtful, tested, and show
 human understanding. We value your work!
 
+## Contributing to the Official Marketplace
+
+Beyond contributing to Lola itself, you can share your modules with the community through the [Official Lola Marketplace](https://github.com/RedHatProductSecurity/lola-market).
+
+### Why Contribute Modules?
+
+- **Share your skills**: Help others benefit from your AI workflows
+- **Get feedback**: Improve your modules through community input
+- **Build reputation**: Showcase your expertise in AI-assisted development
+
+### How to Add Your Module
+
+1. **Create your module**: Follow Lola's module structure (skills/, commands/, agents/)
+2. **Fork the marketplace**: https://github.com/RedHatProductSecurity/lola-market
+3. **Add your module**: Edit `general-market.yml` with your module entry
+4. **Update catalog**: Add your module to `docs/modules-catalog.md`
+5. **Submit PR**: We'll review and merge!
+
+See the [marketplace contributing guide](https://github.com/RedHatProductSecurity/lola-market/blob/main/CONTRIBUTING.md) for detailed instructions.
+
+**All contributions welcome!** Whether it's a productivity booster, code quality checker, or creative demo - the community wants to see it.
+
 ## Testing Guidelines
 
 ### Running Tests
