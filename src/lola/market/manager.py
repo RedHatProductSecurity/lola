@@ -180,3 +180,58 @@ class MarketplaceRegistry:
             cache_file.unlink()
 
         self.console.print(f"[green]Removed marketplace '{name}'[/green]")
+
+    def update_one(self, name: str) -> bool:
+        """Update cache for a single marketplace."""
+        ref_file = self.market_dir / f"{name}.yml"
+
+        if not ref_file.exists():
+            self.console.print(f"[red]Marketplace '{name}' not found[/red]")
+            return False
+
+        marketplace_ref = Marketplace.from_reference(ref_file)
+
+        try:
+            marketplace = Marketplace.from_url(marketplace_ref.url, name)
+            is_valid, errors = marketplace.validate()
+
+            if not is_valid:
+                self.console.print(f"[red]Validation failed for '{name}':[/red]")
+                for err in errors:
+                    self.console.print(f"  - {err}")
+                return False
+
+            cache_file = self.cache_dir / f"{name}.yml"
+            with open(cache_file, "w") as f:
+                yaml.dump(marketplace.to_cache_dict(), f)
+
+            module_count = len(marketplace.modules)
+            self.console.print(
+                f"[green]Updated '{name}' with {module_count} modules[/green]"
+            )
+            return True
+        except ValueError as e:
+            self.console.print(f"[red]Failed to update '{name}': {e}[/red]")
+            return False
+
+    def update(self, name: str | None = None) -> None:
+        """Update marketplace cache(s)."""
+        if name:
+            self.update_one(name)
+            return
+
+        ref_files = list(self.market_dir.glob("*.yml"))
+        if not ref_files:
+            self.console.print("[yellow]No marketplaces registered[/yellow]")
+            return
+
+        success_count = 0
+        for ref_file in sorted(ref_files):
+            marketplace_ref = Marketplace.from_reference(ref_file)
+            if self.update_one(marketplace_ref.name):
+                success_count += 1
+
+        total = len(ref_files)
+        self.console.print(
+            f"[green]Updated {success_count}/{total} marketplaces[/green]"
+        )

@@ -73,3 +73,25 @@ def market_rm(name: str):
     """
     registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
     registry.remove(name)
+
+
+@market.command(name="update")
+@click.argument("name", required=False)
+@click.option("--all", "update_all", is_flag=True, help="Update all marketplaces")
+def market_update(name: str, update_all: bool):
+    """
+    Update marketplace cache.
+
+    NAME: Marketplace name (optional, updates all if not specified)
+    """
+    if name and update_all:
+        click.echo("Error: Cannot specify both NAME and --all")
+        raise SystemExit(1)
+
+    registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
+
+    if name:
+        registry.update(name)
+        return
+
+    registry.update()
