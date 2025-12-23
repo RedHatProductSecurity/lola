@@ -71,18 +71,53 @@ class TestGetEnabledMarketplaces:
 
         assert marketplaces == []
 
-    def test_get_enabled_missing_cache(self, marketplace_with_modules):
-        """Skip marketplace with missing cache file."""
+    def test_cache_recovery(self, marketplace_with_modules):
+        """Recover missing cache by re-downloading."""
+        from unittest.mock import patch, mock_open
+
         market_dir = marketplace_with_modules["market_dir"]
         cache_dir = marketplace_with_modules["cache_dir"]
 
-        # Remove cache file
         cache_file = cache_dir / "official.yml"
         cache_file.unlink()
 
-        marketplaces = get_enabled_marketplaces(market_dir, cache_dir)
+        yaml_content = (
+            "name: Official Marketplace\n"
+            "description: Official catalog\n"
+            "version: 1.0.0\n"
+            "modules:\n"
+            "  - name: git-tools\n"
+            "    description: Git utilities\n"
+            "    version: 1.0.0\n"
+            "    repository: https://github.com/test/git-tools.git\n"
+        )
+        mock_response = mock_open(read_data=yaml_content.encode())()
+
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            marketplaces = get_enabled_marketplaces(market_dir, cache_dir)
+
+        assert len(marketplaces) == 1
+        assert cache_file.exists()
+
+    def test_cache_recovery_fails(self, marketplace_with_modules):
+        """Skip marketplace when cache recovery fails."""
+        from unittest.mock import patch
+        from urllib.error import URLError
+
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        cache_file = cache_dir / "official.yml"
+        cache_file.unlink()
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=URLError("Connection failed"),
+        ):
+            marketplaces = get_enabled_marketplaces(market_dir, cache_dir)
 
         assert marketplaces == []
+        assert not cache_file.exists()
 
 
 class TestMatchModule:
