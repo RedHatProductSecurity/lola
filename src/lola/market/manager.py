@@ -6,6 +6,7 @@ market.manager:
 
 from pathlib import Path
 from rich.console import Console
+from rich.table import Table
 import yaml
 
 from lola.models import Marketplace
@@ -105,3 +106,36 @@ class MarketplaceRegistry:
                     return module, marketplace_ref.name
 
         return None
+
+    def list(self) -> None:
+        """List all registered marketplaces."""
+        ref_files = list(self.market_dir.glob("*.yml"))
+
+        if not ref_files:
+            self.console.print("[yellow]No marketplaces registered[/yellow]")
+            self.console.print(
+                "[dim]Use 'lola market add <name> <url>' to add a marketplace[/dim]"
+            )
+            return
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Name")
+        table.add_column("Modules", justify="right")
+        table.add_column("Status")
+
+        for ref_file in sorted(ref_files):
+            marketplace_ref = Marketplace.from_reference(ref_file)
+
+            cache_file = self.cache_dir / ref_file.name
+            module_count = 0
+            if cache_file.exists():
+                marketplace = Marketplace.from_cache(cache_file)
+                module_count = len(marketplace.modules)
+
+            status = "[red]disabled[/red]"
+            if marketplace_ref.enabled:
+                status = "[green]enabled[/green]"
+
+            table.add_row(marketplace_ref.name, str(module_count), status)
+
+        self.console.print(table)
