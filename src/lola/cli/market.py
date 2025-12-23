@@ -61,3 +61,15 @@ def market_set(name: str, action: str):
         registry.enable(name)
     elif action == "disable":
         registry.disable(name)
+
+
+@market.command(name="rm")
+@click.argument("name")
+def market_rm(name: str):
+    """
+    Remove a marketplace.
+
+    NAME: Marketplace name
+    """
+    registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
+    registry.remove(name)
