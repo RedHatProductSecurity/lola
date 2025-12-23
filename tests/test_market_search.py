@@ -1,7 +1,5 @@
 """Tests for marketplace search functionality."""
 
-from pathlib import Path
-
 from rich.console import Console
 
 from lola.market.search import (
