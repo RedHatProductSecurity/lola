@@ -12,7 +12,7 @@ from typing import NoReturn, Optional
 import click
 from rich.console import Console
 
-from lola.config import MODULES_DIR
+from lola.config import MODULES_DIR, MARKET_DIR, CACHE_DIR
 from lola.exceptions import (
     LolaError,
     ModuleInvalidError,
@@ -21,6 +21,9 @@ from lola.exceptions import (
     ValidationError,
 )
 from lola.models import Installation, InstallationRegistry, Module
+from lola.market.manager import parse_market_ref
+from lola.parsers import fetch_module, detect_source_type
+from lola.cli.mod import save_source_info
 from lola.targets import (
     AssistantTarget,
     TARGETS,
@@ -35,6 +38,70 @@ from lola.targets import (
 from lola.utils import ensure_lola_dirs, get_local_modules_path
 
 console = Console()
+
+
+def _fetch_from_marketplace(marketplace_name: str, module_name: str) -> Path:
+    """
+    Fetch module from specified marketplace.
+
+    Args:
+        marketplace_name: Name of the marketplace
+        module_name: Name of the module
+
+    Returns:
+        Path to the fetched module
+
+    Raises:
+        SystemExit: If marketplace/module not found or fetch fails
+    """
+    from lola.models import Marketplace
+
+    ref_file = MARKET_DIR / f"{marketplace_name}.yml"
+
+    if not ref_file.exists():
+        console.print(f"[red]Marketplace '{marketplace_name}' not found[/red]")
+        console.print("[dim]Use 'lola market ls' to see available marketplaces[/dim]")
+        raise SystemExit(1)
+
+    # Check if marketplace is enabled FIRST
+    marketplace_ref = Marketplace.from_reference(ref_file)
+    if not marketplace_ref.enabled:
+        console.print(f"[red]Marketplace '{marketplace_name}' is disabled[/red]")
+        raise SystemExit(1)
+
+    # Now load cache and look up module
+    cache_file = CACHE_DIR / f"{marketplace_name}.yml"
+    if not cache_file.exists():
+        console.print(f"[red]Marketplace '{marketplace_name}' cache not found[/red]")
+        console.print(f"[dim]Try 'lola market update {marketplace_name}'[/dim]")
+        raise SystemExit(1)
+
+    marketplace = Marketplace.from_cache(cache_file)
+
+    # Look up module directly
+    module_dict = next(
+        (m for m in marketplace.modules if m.get("name") == module_name), None
+    )
+
+    if not module_dict:
+        console.print(
+            f"[red]Module '{module_name}' not found in marketplace '{marketplace_name}'[/red]"
+        )
+        raise SystemExit(1)
+
+    repository = module_dict.get("repository")
+    console.print(f"[green]Found '{module_name}' in '{marketplace_name}'[/green]")
+    console.print(f"[dim]Repository: {repository}[/dim]")
+
+    try:
+        source_type = detect_source_type(repository)
+        module_path = fetch_module(repository, MODULES_DIR)
+        save_source_info(module_path, repository, source_type)
+        console.print(f"[green]Added {module_name}[/green]")
+        return module_path
+    except Exception as e:
+        console.print(f"[red]Failed to fetch module: {e}[/red]")
+        raise SystemExit(1)
 
 
 def _handle_lola_error(e: LolaError) -> NoReturn:
@@ -606,17 +673,29 @@ def install_cmd(
     """
     ensure_lola_dirs()
 
-    # Project scope only - validate project path
+    # Validate project path
     scope = "project"
     project_path = str(Path(project_path).resolve())
     if not Path(project_path).exists():
         _handle_lola_error(PathNotFoundError(project_path, "Project path"))
 
-    # Find module in global registry
+    # Default to global registry
     module_path = MODULES_DIR / module_name
+
+    # Override with marketplace if reference provided
+    marketplace_ref = parse_market_ref(module_name)
+    if marketplace_ref:
+        marketplace_name, current_module_name = marketplace_ref
+        module_path = _fetch_from_marketplace(marketplace_name, current_module_name)
+        module_name = current_module_name
+
+    # Verify module exists
     if not module_path.exists():
         console.print("[dim]Use 'lola mod ls' to see available modules[/dim]")
         console.print("[dim]Use 'lola mod add <source>' to add a module[/dim]")
+        console.print(
+            "[dim]Or install from marketplace: lola install @marketplace/module[/dim]"
+        )
         _handle_lola_error(ModuleNotFoundError(module_name))
 
     module = Module.from_path(module_path)

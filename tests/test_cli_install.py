@@ -4,7 +4,13 @@ import shutil
 from unittest.mock import patch
 
 
-from lola.cli.install import install_cmd, uninstall_cmd, update_cmd, list_installed_cmd
+from lola.cli.install import (
+    install_cmd,
+    uninstall_cmd,
+    update_cmd,
+    list_installed_cmd,
+)
+from lola.market.manager import parse_market_ref
 from lola.models import Installation, InstallationRegistry
 
 
@@ -92,6 +98,24 @@ class TestInstallCmd:
         assert result.exit_code == 0
         assert "Installing" in result.output
         mock_install.assert_called_once()
+
+
+class TestMarketplaceReference:
+    """Tests for marketplace reference parsing."""
+
+    def test_parse_market_ref_valid(self):
+        """Parse valid marketplace reference."""
+        result = parse_market_ref("@official/git-tools")
+        assert result is not None
+        marketplace_name, module_name = result
+        assert marketplace_name == "official"
+        assert module_name == "git-tools"
+
+    def test_parse_market_ref_invalid(self):
+        """Invalid marketplace reference returns None."""
+        assert parse_market_ref("git-tools") is None
+        assert parse_market_ref("official/git-tools") is None
+        assert parse_market_ref("@official") is None
 
 
 class TestUninstallCmd:

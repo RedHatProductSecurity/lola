@@ -11,6 +11,23 @@ import yaml
 from lola.models import Marketplace
 
 
+def parse_market_ref(module_name: str) -> tuple[str, str] | None:
+    """
+    Parse marketplace reference from module name.
+
+    Args:
+        module_name: Module name with marketplace prefix (@marketplace/module)
+
+    Returns:
+        Tuple of (marketplace_name, module_name) if valid, None otherwise
+    """
+    if module_name.startswith("@") and "/" in module_name:
+        parts = module_name[1:].split("/", 1)
+        if len(parts) == 2:
+            return parts[0], parts[1]
+    return None
+
+
 class MarketplaceRegistry:
     """Manages marketplace references and caches."""
 
