@@ -6,6 +6,7 @@ market.search:
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+import yaml
 
 from lola.models import Marketplace
 
@@ -31,7 +32,14 @@ def get_enabled_marketplaces(market_dir: Path, cache_dir: Path):
 
         cache_file = cache_dir / ref_file.name
         if not cache_file.exists():
-            continue
+            try:
+                marketplace = Marketplace.from_url(
+                    marketplace_ref.url, marketplace_ref.name
+                )
+                with open(cache_file, "w") as f:
+                    yaml.dump(marketplace.to_cache_dict(), f)
+            except Exception:
+                continue
 
         marketplace = Marketplace.from_cache(cache_file)
         marketplaces.append((marketplace, marketplace_ref.name))
