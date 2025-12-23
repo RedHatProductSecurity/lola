@@ -421,3 +421,223 @@ class TestMarketplaceRegistryUpdate:
 
         captured = capsys.readouterr()
         assert "No marketplaces registered" in captured.out
+
+
+class TestMarketplaceRegistrySearchModuleAll:
+    """Tests for MarketplaceRegistry.search_module_all()."""
+
+    def test_search_module_all_single_match(self, marketplace_with_modules):
+        """Find module in single marketplace."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        matches = registry.search_module_all("git-tools")
+
+        assert len(matches) == 1
+        module, marketplace_name = matches[0]
+        assert module["name"] == "git-tools"
+        assert marketplace_name == "official"
+
+    def test_search_module_all_multiple_matches(self, tmp_path):
+        """Find module in multiple marketplaces."""
+        import yaml
+
+        market_dir = tmp_path / "market"
+        cache_dir = tmp_path / "cache"
+        market_dir.mkdir(parents=True)
+        cache_dir.mkdir(parents=True)
+
+        # Create two marketplaces with the same module
+        for idx, name in enumerate(["market-a", "market-b"]):
+            ref = {
+                "name": name,
+                "url": f"https://example.com/{name}.yml",
+                "enabled": True,
+            }
+            cache = {
+                "name": f"Marketplace {name.upper()}",
+                "version": "1.0.0",
+                "url": f"https://example.com/{name}.yml",
+                "modules": [
+                    {
+                        "name": "shared-module",
+                        "description": f"Module from {name}",
+                        "version": f"1.{idx}.0",
+                        "repository": f"https://github.com/{name}/shared.git",
+                    }
+                ],
+            }
+
+            with open(market_dir / f"{name}.yml", "w") as f:
+                yaml.dump(ref, f)
+            with open(cache_dir / f"{name}.yml", "w") as f:
+                yaml.dump(cache, f)
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        matches = registry.search_module_all("shared-module")
+
+        assert len(matches) == 2
+        marketplaces = {m[1] for m in matches}
+        assert marketplaces == {"market-a", "market-b"}
+
+    def test_search_module_all_no_matches(self, marketplace_with_modules):
+        """Return empty list when module not found."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        matches = registry.search_module_all("nonexistent")
+
+        assert matches == []
+
+    def test_search_module_all_skips_disabled(self, tmp_path):
+        """Skip disabled marketplaces."""
+        import yaml
+
+        market_dir = tmp_path / "market"
+        cache_dir = tmp_path / "cache"
+        market_dir.mkdir(parents=True)
+        cache_dir.mkdir(parents=True)
+
+        # Create enabled marketplace
+        enabled_ref = {
+            "name": "enabled",
+            "url": "https://example.com/enabled.yml",
+            "enabled": True,
+        }
+        enabled_cache = {
+            "name": "Enabled",
+            "version": "1.0.0",
+            "url": "https://example.com/enabled.yml",
+            "modules": [{"name": "test-module", "description": "Test"}],
+        }
+
+        # Create disabled marketplace with same module
+        disabled_ref = {
+            "name": "disabled",
+            "url": "https://example.com/disabled.yml",
+            "enabled": False,
+        }
+        disabled_cache = {
+            "name": "Disabled",
+            "version": "1.0.0",
+            "url": "https://example.com/disabled.yml",
+            "modules": [{"name": "test-module", "description": "Test"}],
+        }
+
+        with open(market_dir / "enabled.yml", "w") as f:
+            yaml.dump(enabled_ref, f)
+        with open(cache_dir / "enabled.yml", "w") as f:
+            yaml.dump(enabled_cache, f)
+        with open(market_dir / "disabled.yml", "w") as f:
+            yaml.dump(disabled_ref, f)
+        with open(cache_dir / "disabled.yml", "w") as f:
+            yaml.dump(disabled_cache, f)
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        matches = registry.search_module_all("test-module")
+
+        # Should only find in enabled marketplace
+        assert len(matches) == 1
+        assert matches[0][1] == "enabled"
+
+
+class TestMarketplaceRegistrySelectMarketplace:
+    """Tests for MarketplaceRegistry.select_marketplace()."""
+
+    def test_select_single_match(self, marketplace_with_modules):
+        """Return marketplace name when only one match."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        matches = [({"name": "test", "description": "Test"}, "official")]
+
+        result = registry.select_marketplace("test", matches)
+
+        assert result == "official"
+
+    def test_select_no_matches(self, marketplace_with_modules):
+        """Return None when no matches."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.select_marketplace("test", [])
+
+        assert result is None
+
+    def test_select_multiple_matches_with_version(
+        self, marketplace_with_modules, monkeypatch
+    ):
+        """Prompt user to select when multiple matches (with version)."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        matches = [
+            (
+                {
+                    "name": "test",
+                    "description": "From market A",
+                    "version": "1.0.0",
+                },
+                "market-a",
+            ),
+            (
+                {
+                    "name": "test",
+                    "description": "From market B",
+                    "version": "2.0.0",
+                },
+                "market-b",
+            ),
+        ]
+
+        # Mock user selecting option 2
+        monkeypatch.setattr("click.prompt", lambda *args, **kwargs: 2)
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.select_marketplace("test", matches, show_version=True)
+
+        assert result == "market-b"
+
+    def test_select_multiple_matches_without_version(
+        self, marketplace_with_modules, monkeypatch, capsys
+    ):
+        """Display format without version when show_version=False."""
+        market_dir = marketplace_with_modules["market_dir"]
+        cache_dir = marketplace_with_modules["cache_dir"]
+
+        matches = [
+            (
+                {
+                    "name": "test",
+                    "description": "From market A",
+                    "version": "1.0.0",
+                },
+                "market-a",
+            ),
+            (
+                {
+                    "name": "test",
+                    "description": "From market B",
+                    "version": "2.0.0",
+                },
+                "market-b",
+            ),
+        ]
+
+        # Mock user selecting option 1
+        monkeypatch.setattr("click.prompt", lambda *args, **kwargs: 1)
+
+        registry = MarketplaceRegistry(market_dir, cache_dir)
+        result = registry.select_marketplace("test", matches, show_version=False)
+
+        assert result == "market-a"
+
+        # Verify output doesn't include version
+        captured = capsys.readouterr()
+        assert "@market-a/test - From market A" in captured.out
+        assert ":1.0.0" not in captured.out
+        assert ":2.0.0" not in captured.out
