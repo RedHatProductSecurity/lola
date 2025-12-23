@@ -7,7 +7,13 @@ import click
 from rich.console import Console
 
 from lola import __version__
-from lola.cli.install import install_cmd, list_installed_cmd, uninstall_cmd, update_cmd
+from lola.cli.install import (
+    install_cmd,
+    list_installed_cmd,
+    uninstall_cmd,
+    update_cmd,
+)
+from lola.cli.market import market
 from lola.cli.mod import mod
 
 console = Console()
@@ -45,6 +51,7 @@ def main(ctx, version):
 
 # Register command groups
 main.add_command(mod)
+main.add_command(market)
 
 # Register top-level commands
 main.add_command(install_cmd)
