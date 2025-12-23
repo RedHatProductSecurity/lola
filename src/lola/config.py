@@ -15,6 +15,10 @@ MODULES_DIR = LOLA_HOME / "modules"
 # Installation tracking file
 INSTALLED_FILE = LOLA_HOME / "installed.yml"
 
+# Marketplace directories
+MARKET_DIR = LOLA_HOME / "market"
+CACHE_DIR = MARKET_DIR / "cache"
+
 # Skill definition filename
 SKILL_FILE = "SKILL.md"
 

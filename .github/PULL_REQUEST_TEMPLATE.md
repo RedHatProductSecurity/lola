@@ -18,7 +18,7 @@
 
 - [ ] Tests pass (`pytest`)
 - [ ] Linting passes (`ruff check src tests`)
-- [ ] Type checking passes (`basedpyright src`)
+- [ ] Type checking passes (`ty check`)
 
 ## AI Disclosure
 

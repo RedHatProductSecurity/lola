@@ -36,3 +36,8 @@ htmlcov/
 .gemini/
 GEMINI.md
 .specify/
+
+# Environment and logs
+.env*
+*.log
+*.tmp
