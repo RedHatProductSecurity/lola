@@ -32,3 +32,10 @@ def market_add(name: str, url: str):
     """
     registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
     registry.add(name, url)
+
+
+@market.command(name="ls")
+def market_ls():
+    """List all registered marketplaces."""
+    registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
+    registry.list()
