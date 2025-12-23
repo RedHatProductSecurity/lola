@@ -314,6 +314,103 @@ class Module:
 
 
 @dataclass
+class Marketplace:
+    """Represents a marketplace catalog with modules."""
+
+    name: str
+    url: str
+    enabled: bool = True
+    description: str = ""
+    version: str = ""
+    modules: list[dict] = field(default_factory=list)
+
+    @classmethod
+    def from_reference(cls, ref_file: Path) -> "Marketplace":
+        """Load marketplace from reference file."""
+        with open(ref_file) as f:
+            data = yaml.safe_load(f)
+        return cls(
+            name=data.get("name", ""),
+            url=data.get("url", ""),
+            enabled=data.get("enabled", True),
+        )
+
+    @classmethod
+    def from_cache(cls, cache_file: Path) -> "Marketplace":
+        """Load marketplace from cache file."""
+        with open(cache_file) as f:
+            data = yaml.safe_load(f)
+        return cls(
+            name=data.get("name", ""),
+            url=data.get("url", ""),
+            enabled=data.get("enabled", True),
+            description=data.get("description", ""),
+            version=data.get("version", ""),
+            modules=data.get("modules", []),
+        )
+
+    @classmethod
+    def from_url(cls, url: str, name: str) -> "Marketplace":
+        """Download and parse marketplace from URL."""
+        from urllib.request import urlopen
+        from urllib.error import URLError
+
+        try:
+            with urlopen(url, timeout=10) as response:
+                data = yaml.safe_load(response.read())
+        except URLError as e:
+            raise ValueError(f"Failed to download marketplace: {e}")
+
+        return cls(
+            name=name,
+            url=url,
+            enabled=True,
+            description=data.get("description", ""),
+            version=data.get("version", ""),
+            modules=data.get("modules", []),
+        )
+
+    def validate(self) -> tuple[bool, list[str]]:
+        """Validate marketplace structure."""
+        errors = []
+
+        if not self.name:
+            errors.append("Missing required field: name")
+        if not self.url:
+            errors.append("Missing required field: url")
+
+        if self.modules and not self.version:
+            errors.append("Missing version for marketplace catalog")
+
+        for i, mod in enumerate(self.modules):
+            required = ["name", "description", "version", "repository"]
+            for field_name in required:
+                if field_name not in mod:
+                    errors.append(f"Module {i}: missing '{field_name}'")
+
+        return len(errors) == 0, errors
+
+    def to_reference_dict(self) -> dict:
+        """Convert to dict for reference file."""
+        return {
+            "name": self.name,
+            "url": self.url,
+            "enabled": self.enabled,
+        }
+
+    def to_cache_dict(self) -> dict:
+        """Convert to dict for cache file."""
+        return {
+            "name": self.description or self.name,
+            "description": self.description,
+            "version": self.version,
+            "url": self.url,
+            "enabled": self.enabled,
+            "modules": self.modules,
+        }
+
+
+@dataclass
 class Installation:
     """Represents an installed module."""
 
