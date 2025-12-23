@@ -73,6 +73,84 @@ lola mod update my-skills
 lola update
 ```
 
+## Using Marketplaces
+
+Marketplaces let you discover and install modules from curated catalogs without manually finding repository URLs.
+
+### Register a marketplace
+
+```bash
+# Add a marketplace from a URL
+lola market add official https://example.com/marketplace.yml
+
+# List registered marketplaces
+lola market ls
+```
+
+### Search and install from marketplace
+
+```bash
+# Search across all enabled marketplaces
+lola mod search authentication
+
+# Install directly from marketplace (auto-adds and installs)
+lola install git-workflow -a claude-code
+```
+
+When a module exists in multiple marketplaces, Lola prompts you to select which one to use.
+
+### Manage marketplaces
+
+```bash
+# Update marketplace cache
+lola market update official
+
+# Update all marketplaces
+lola market update
+
+# Disable a marketplace (keeps it registered but excludes from search)
+lola market set --disable official
+
+# Re-enable a marketplace
+lola market set --enable official
+
+# Remove a marketplace
+lola market rm official
+```
+
+### Marketplace YAML format
+
+Create your own marketplace by hosting a YAML file with this structure:
+
+```yaml
+name: My Marketplace
+description: Curated collection of AI skills
+version: 1.0.0
+modules:
+  - name: git-workflow
+    description: Git workflow automation skills
+    version: 1.0.0
+    repository: https://github.com/user/git-workflow.git
+    tags: [git, workflow]
+
+  - name: code-review
+    description: Code review assistant skills
+    version: 1.2.0
+    repository: https://github.com/user/code-review.git
+    tags: [review, quality]
+```
+
+**Fields:**
+- `name`: Marketplace display name
+- `description`: What this marketplace provides
+- `version`: Marketplace schema version
+- `modules`: List of available modules
+  - `name`: Module name (must match repository directory name)
+  - `description`: Brief description shown in search results
+  - `version`: Module version
+  - `repository`: Git URL, zip/tar URL, or local path
+  - `tags` (optional): Keywords for search
+
 ## CLI Reference
 
 ### Module Management (`lola mod`)
@@ -82,10 +160,22 @@ lola update
 | `lola mod add <source>` | Add a module from git, folder, zip, or tar |
 | `lola mod ls` | List registered modules |
 | `lola mod info <name>` | Show module details |
+| `lola mod search <query>` | Search for modules across enabled marketplaces |
 | `lola mod init [name]` | Initialize a new module |
 | `lola mod init [name] -c` | Initialize with a command template |
 | `lola mod update [name]` | Update module(s) from source |
 | `lola mod rm <name>` | Remove a module |
+
+### Marketplace Management (`lola market`)
+
+| Command | Description |
+|---------|-------------|
+| `lola market add <name> <url>` | Register a marketplace from URL or local path |
+| `lola market ls` | List all registered marketplaces |
+| `lola market update [name]` | Update marketplace cache (or all if no name) |
+| `lola market set --enable <name>` | Enable a marketplace for search and install |
+| `lola market set --disable <name>` | Disable a marketplace (keeps it registered) |
+| `lola market rm <name>` | Remove a marketplace |
 
 ### Installation
 
@@ -280,11 +370,13 @@ Commands are automatically converted to each assistant's format:
 
 ## How It Works
 
-1. **Registry**: Modules are stored in `~/.lola/modules/`
-2. **Installation**: Skills and commands are converted to each assistant's native format
-3. **Prefixing**: Skills and commands are prefixed with module name to avoid conflicts (e.g., `mymodule-skill`)
-4. **Project scope**: Copies modules to `.lola/modules/` within the project
-5. **Updates**: `lola mod update` re-fetches from original source; `lola update` regenerates files
+1. **Marketplaces**: Register catalogs at `~/.lola/market/` with cached data at `~/.lola/market/cache/`
+2. **Discovery**: Search across enabled marketplace caches to find modules
+3. **Registry**: Modules are stored in `~/.lola/modules/`
+4. **Installation**: Skills and commands are converted to each assistant's native format
+5. **Prefixing**: Skills and commands are prefixed with module name to avoid conflicts (e.g., `mymodule-skill`)
+6. **Project scope**: Copies modules to `.lola/modules/` within the project
+7. **Updates**: `lola mod update` re-fetches from original source; `lola update` regenerates files; `lola market update` refreshes marketplace caches
 
 ## Contributing
 
