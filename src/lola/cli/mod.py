@@ -1029,3 +1029,23 @@ def update_module_cmd(module_name: str | None):
         if updated > 0:
             console.print()
             console.print("[dim]Run 'lola update' to regenerate assistant files[/dim]")
+
+
+@mod.command(name="search")
+@click.argument("query")
+def mod_search(query: str):
+    """
+    Search for modules across all enabled marketplaces.
+
+    QUERY: Search term to match against module name, description, tags
+
+    \b
+    Example:
+        lola mod search git
+    """
+    from lola.config import MARKET_DIR, CACHE_DIR
+    from lola.market.manager import MarketplaceRegistry
+
+    ensure_lola_dirs()
+    registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
+    registry.search(query)
