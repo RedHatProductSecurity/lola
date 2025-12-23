@@ -136,6 +136,88 @@ class MarketplaceRegistry:
 
         return None
 
+    def search_module_all(self, module_name: str) -> list[tuple[dict, str]]:
+        """
+        Search for a module by name across all enabled marketplaces.
+
+        Returns all matches, not just the first one.
+
+        Args:
+            module_name: Name of the module to search for
+
+        Returns:
+            List of tuples (module_dict, marketplace_name)
+        """
+        matches = []
+
+        for ref_file in self.market_dir.glob("*.yml"):
+            marketplace_ref = Marketplace.from_reference(ref_file)
+
+            if not marketplace_ref.enabled:
+                continue
+
+            cache_file = self.cache_dir / ref_file.name
+            if not cache_file.exists():
+                continue
+
+            marketplace = Marketplace.from_cache(cache_file)
+
+            for module in marketplace.modules:
+                if module.get("name") == module_name:
+                    matches.append((module, marketplace_ref.name))
+
+        return matches
+
+    def select_marketplace(
+        self,
+        module_name: str,
+        matches: list[tuple[dict, str]],
+        show_version: bool = True,
+    ) -> str | None:
+        """
+        Prompt user to select a marketplace when multiple matches exist.
+
+        Args:
+            module_name: Name of the module
+            matches: List of (module_dict, marketplace_name) tuples
+            show_version: Whether to display version in the options
+
+        Returns:
+            Selected marketplace name, or None if cancelled
+        """
+        import click
+
+        if not matches:
+            return None
+
+        if len(matches) == 1:
+            return matches[0][1]
+
+        self.console.print(
+            f"[yellow]Module '{module_name}' found in multiple marketplaces:[/yellow]"
+        )
+        self.console.print()
+
+        for idx, (module, marketplace_name) in enumerate(matches, 1):
+            version = module.get("version", "")
+            description = module.get("description", "")
+
+            display = f"@{marketplace_name}/{module_name} - {description}"
+            if show_version and version:
+                display = f"@{marketplace_name}/{module_name}:{version} - {description}"
+
+            self.console.print(f"  {idx}. {display}")
+
+        self.console.print()
+
+        choice = click.prompt(
+            "Select marketplace",
+            type=click.IntRange(1, len(matches)),
+            default=1,
+        )
+
+        return matches[choice - 1][1]
+
     def search(self, query: str) -> None:
         """Search for modules across all enabled marketplaces."""
         ref_files = list(self.market_dir.glob("*.yml"))

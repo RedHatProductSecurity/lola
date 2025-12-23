@@ -21,7 +21,7 @@ from lola.exceptions import (
     ValidationError,
 )
 from lola.models import Installation, InstallationRegistry, Module
-from lola.market.manager import parse_market_ref
+from lola.market.manager import parse_market_ref, MarketplaceRegistry
 from lola.parsers import fetch_module, detect_source_type
 from lola.cli.mod import save_source_info
 from lola.targets import (
@@ -688,6 +688,18 @@ def install_cmd(
         marketplace_name, current_module_name = marketplace_ref
         module_path = _fetch_from_marketplace(marketplace_name, current_module_name)
         module_name = current_module_name
+
+    # If module not found locally and no marketplace specified, search marketplaces
+    if not module_path.exists() and not marketplace_ref:
+        from lola.config import MARKET_DIR, CACHE_DIR
+
+        registry = MarketplaceRegistry(MARKET_DIR, CACHE_DIR)
+        matches = registry.search_module_all(module_name)
+
+        if matches:
+            selected_marketplace = registry.select_marketplace(module_name, matches)
+            if selected_marketplace:
+                module_path = _fetch_from_marketplace(selected_marketplace, module_name)
 
     # Verify module exists
     if not module_path.exists():
