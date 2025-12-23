@@ -164,3 +164,19 @@ class MarketplaceRegistry:
     def disable(self, name: str) -> None:
         """Disable a marketplace."""
         self._set_enabled(name, False)
+
+    def remove(self, name: str) -> None:
+        """Remove a marketplace."""
+        ref_file = self.market_dir / f"{name}.yml"
+
+        if not ref_file.exists():
+            self.console.print(f"[red]Marketplace '{name}' not found[/red]")
+            return
+
+        cache_file = self.cache_dir / f"{name}.yml"
+
+        ref_file.unlink()
+        if cache_file.exists():
+            cache_file.unlink()
+
+        self.console.print(f"[green]Removed marketplace '{name}'[/green]")
