@@ -210,7 +210,10 @@ class TestFormatSearchResult:
 
         assert len(result["description"]) == 63  # 60 chars + "..."
         assert result["description"].endswith("...")
-        assert "This is a very long description that should be truncated" in result["description"]
+        assert (
+            "This is a very long description that should be truncated"
+            in result["description"]
+        )
 
     def test_format_handles_missing_fields(self):
         """Handle missing optional fields."""

@@ -69,9 +69,7 @@ def match_module(module: dict, query_lower: str) -> bool:
     )
 
 
-def format_search_result(
-    module: dict, marketplace_name: str
-) -> dict:
+def format_search_result(module: dict, marketplace_name: str) -> dict:
     """
     Format module data for search results display.
 
@@ -129,13 +127,8 @@ def display_market(results: list[dict], query: str, console: Console) -> None:
         console: Rich console for output
     """
     if not results:
-        console.print(
-            f"[yellow]No modules found matching '{query}'[/yellow]"
-        )
-        console.print(
-            "[dim]Tip: Check spelling or try a different search "
-            "term[/dim]"
-        )
+        console.print(f"[yellow]No modules found matching '{query}'[/yellow]")
+        console.print("[dim]Tip: Check spelling or try a different search term[/dim]")
         return
 
     table = Table(show_header=True, header_style="bold")
@@ -153,7 +146,5 @@ def display_market(results: list[dict], query: str, console: Console) -> None:
         )
 
     count_text = "s" if len(results) != 1 else ""
-    console.print(
-        f"\n[bold]Found {len(results)} module{count_text}[/bold]\n"
-    )
+    console.print(f"\n[bold]Found {len(results)} module{count_text}[/bold]\n")
     console.print(table)

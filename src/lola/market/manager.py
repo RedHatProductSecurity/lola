@@ -143,8 +143,7 @@ class MarketplaceRegistry:
         if not ref_files:
             self.console.print("[yellow]No marketplaces registered[/yellow]")
             self.console.print(
-                "[dim]Use 'lola market add <name> <url>' to add a "
-                "marketplace[/dim]"
+                "[dim]Use 'lola market add <name> <url>' to add a marketplace[/dim]"
             )
             return
 
