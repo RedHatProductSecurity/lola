@@ -707,6 +707,38 @@ class TestModInfoAdvanced:
         assert result.exit_code == 1
         assert "Path not found" in result.output
 
+    def test_info_module_subdir_shows_descriptions(self, cli_runner, tmp_path):
+        """Show descriptions for commands/agents in module/ subdirectory structure."""
+        # Create module with module/ subdirectory structure
+        module_dir = tmp_path / "test-mod"
+        module_dir.mkdir()
+        content_dir = module_dir / "module"
+        content_dir.mkdir()
+
+        # Create command with description
+        commands_dir = content_dir / "commands"
+        commands_dir.mkdir()
+        (commands_dir / "my-cmd.md").write_text(
+            "---\ndescription: My command description\n---\n\nCommand content"
+        )
+
+        # Create agent with description
+        agents_dir = content_dir / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "my-agent.md").write_text(
+            "---\ndescription: My agent description\n---\n\nAgent content"
+        )
+
+        with patch("lola.cli.mod.ensure_lola_dirs"):
+            result = cli_runner.invoke(mod, ["info", str(module_dir)])
+
+        assert result.exit_code == 0
+        assert "/test-mod.my-cmd" in result.output
+        assert "My command description" in result.output
+        assert "@test-mod.my-agent" in result.output
+        assert "My agent description" in result.output
+        assert "(not found)" not in result.output
+
 
 class TestModUpdate:
     """Tests for mod update command."""

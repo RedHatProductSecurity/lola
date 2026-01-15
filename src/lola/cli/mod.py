@@ -905,9 +905,7 @@ def module_info(module_name_or_path: str):
     else:
         from lola.frontmatter import parse_file as fm_parse_file
 
-        commands_dir = module.path / "commands"
-        for cmd_name in module.commands:
-            cmd_path = commands_dir / f"{cmd_name}.md"
+        for cmd_name, cmd_path in zip(module.commands, module.get_command_paths()):
             if cmd_path.exists():
                 console.print(f"  [green]/{module.name}.{cmd_name}[/green]")
                 # Show description from frontmatter
@@ -926,9 +924,7 @@ def module_info(module_name_or_path: str):
     else:
         from lola.frontmatter import parse_file as fm_parse_file
 
-        agents_dir = module.path / "agents"
-        for agent_name in module.agents:
-            agent_path = agents_dir / f"{agent_name}.md"
+        for agent_name, agent_path in zip(module.agents, module.get_agent_paths()):
             if agent_path.exists():
                 console.print(f"  [green]@{module.name}.{agent_name}[/green]")
                 # Show description from frontmatter
