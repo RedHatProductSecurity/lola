@@ -21,10 +21,10 @@ Lola fixes this. Write your skills and commands once as portable modules, then i
 
 ```bash
 # With uv (recommended)
-uv tool install git+https://github.com/seckatie/lola
+uv tool install git+https://github.com/RedHatProductSecurity/lola
 
 # Or clone and install locally
-git clone https://github.com/seckatie/lola
+git clone https://github.com/RedHatProductSecurity/lola
 cd lola
 uv tool install .
 ```
