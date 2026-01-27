@@ -120,11 +120,11 @@ class TestGetSkillPath:
         assert "GEMINI.md" in str(path)
 
     def test_cursor_project(self, tmp_path):
-        """Get cursor project skill path."""
+        """Get cursor project skill path (Cursor 2.4+)."""
         target = get_target("cursor")
         path = target.get_skill_path(str(tmp_path))
         assert isinstance(path, Path)
-        assert "rules" in str(path)
+        assert "skills" in str(path)
 
     def test_unknown_assistant(self):
         """Raise error for unknown assistant."""

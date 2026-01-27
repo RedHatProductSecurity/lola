@@ -1,48 +1,40 @@
 """
 Cursor target implementation for lola.
 
-Cursor uses .mdc rule files with alwaysApply: true for instructions,
-avoiding inconsistent AGENTS.md loading behavior.
+Cursor 2.4+ supports:
+- Skills in .cursor/skills/<skill-name>/SKILL.md (Agent Skills standard)
+- Subagents in .cursor/agents/<name>.md
+- Rules in .cursor/rules/*.mdc for always-on instructions
 """
 
 from __future__ import annotations
 
-import re
+import shutil
 from pathlib import Path
 
 import lola.config as config
-import lola.frontmatter as fm
-from .base import MCPSupportMixin, BaseAssistantTarget, _generate_passthrough_command
-
-
-def _rewrite_relative_paths(content: str, assets_path: str) -> str:
-    """Rewrite relative paths in content to point to the assets location."""
-    patterns = [
-        (r'(\s|^|"|\x27|\(|`)(\.\./[^\s"\x27)\]`]+)', r"\1" + assets_path + r"/\2"),
-        (r'(\s|^|"|\x27|\(|`)(\./([^\s"\x27)\]`]+))', r"\1" + assets_path + r"/\3"),
-    ]
-    result = content
-    for pattern, replacement in patterns:
-        result = re.sub(pattern, replacement, result)
-    result = re.sub(r"(?<!:)//+", "/", result)
-    return result
+from .base import (
+    MCPSupportMixin,
+    BaseAssistantTarget,
+    _generate_passthrough_command,
+    _generate_agent_with_frontmatter,
+)
 
 
 class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
-    """Target for Cursor assistant.
-
-    Cursor uses .mdc rule files with alwaysApply: true for instructions,
-    avoiding inconsistent AGENTS.md loading behavior.
-    """
+    """Target for Cursor assistant."""
 
     name = "cursor"
-    supports_agents = False
+    supports_agents = True
 
     def get_skill_path(self, project_path: str) -> Path:
-        return Path(project_path) / ".cursor" / "rules"
+        return Path(project_path) / ".cursor" / "skills"
 
     def get_command_path(self, project_path: str) -> Path:
         return Path(project_path) / ".cursor" / "commands"
+
+    def get_agent_path(self, project_path: str) -> Path:
+        return Path(project_path) / ".cursor" / "agents"
 
     def get_instructions_path(self, project_path: str) -> Path:
         return Path(project_path) / ".cursor" / "rules"
@@ -55,44 +47,36 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         source_path: Path,
         dest_path: Path,
         skill_name: str,
-        project_path: str | None = None,
+        project_path: str | None = None,  # noqa: ARG002
     ) -> bool:
-        """Convert skill to Cursor MDC format."""
+        """Copy skill directory with SKILL.md and supporting files.
+
+        Cursor 2.4+ uses the Agent Skills standard with SKILL.md files.
+        """
         if not source_path.exists():
             return False
 
-        dest_path.mkdir(parents=True, exist_ok=True)
+        skill_dest = dest_path / skill_name
+        skill_dest.mkdir(parents=True, exist_ok=True)
 
-        # Calculate assets path for relative path rewriting
-        if project_path:
-            try:
-                relative_source = source_path.relative_to(Path(project_path))
-                assets_path = str(relative_source)
-            except ValueError:
-                assets_path = str(source_path)
-        else:
-            assets_path = str(source_path)
-
-        # Convert SKILL.md to MDC format
+        # Copy SKILL.md
         skill_file = source_path / config.SKILL_FILE
         if not skill_file.exists():
             return False
 
-        content = skill_file.read_text()
-        frontmatter, body = fm.parse(content)
+        (skill_dest / "SKILL.md").write_text(skill_file.read_text())
 
-        if assets_path:
-            body = _rewrite_relative_paths(body, assets_path)
-
-        mdc_lines = ["---"]
-        mdc_lines.append(f"description: {frontmatter.get('description', '')}")
-        mdc_lines.append("globs:")
-        mdc_lines.append("alwaysApply: false")
-        mdc_lines.append("---")
-        mdc_lines.append("")
-        mdc_lines.append(body)
-
-        (dest_path / f"{skill_name}.mdc").write_text("\n".join(mdc_lines))
+        # Copy supporting files
+        for item in source_path.iterdir():
+            if item.name == "SKILL.md":
+                continue
+            dest_item = skill_dest / item.name
+            if item.is_dir():
+                if dest_item.exists():
+                    shutil.rmtree(dest_item)
+                shutil.copytree(item, dest_item)
+            else:
+                shutil.copy2(item, dest_item)
         return True
 
     def generate_command(
@@ -104,6 +88,29 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
     ) -> bool:
         filename = self.get_command_filename(module_name, cmd_name)
         return _generate_passthrough_command(source_path, dest_dir, filename)
+
+    def generate_agent(
+        self,
+        source_path: Path,
+        dest_dir: Path,
+        agent_name: str,
+        module_name: str,
+    ) -> bool:
+        """Generate agent file with Cursor-compatible frontmatter.
+
+        Cursor subagents use:
+        - name: unique identifier (defaults to filename)
+        - description: when to use this agent
+        - model: "fast", "inherit", or specific model ID
+        """
+        filename = self.get_agent_filename(module_name, agent_name)
+        agent_full_name = filename.removesuffix(".md")
+        return _generate_agent_with_frontmatter(
+            source_path,
+            dest_dir,
+            filename,
+            {"name": agent_full_name, "model": "inherit"},
+        )
 
     def generate_instructions(
         self,
@@ -134,14 +141,6 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         mdc_file = dest_path / f"{module_name}-instructions.mdc"
         mdc_file.write_text("\n".join(mdc_lines))
         return True
-
-    def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
-        """Remove .mdc file instead of directory."""
-        mdc_file = dest_path / f"{skill_name}.mdc"
-        if mdc_file.exists():
-            mdc_file.unlink()
-            return True
-        return False
 
     def remove_instructions(self, dest_path: Path, module_name: str) -> bool:
         """Remove the module's instructions .mdc file."""

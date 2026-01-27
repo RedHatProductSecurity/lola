@@ -51,10 +51,10 @@ Do things.
         assert result == skill_content
 
     def test_cursor_skill_generation(self, tmp_path):
-        """Generate skill for Cursor (MDC format)."""
+        """Generate skill for Cursor (2.4+ SKILL.md format)."""
         skill_dir = tmp_path / "myskill"
         skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text("""---
+        skill_content = """---
 name: myskill
 description: Test skill for cursor
 ---
@@ -62,19 +62,19 @@ description: Test skill for cursor
 # My Skill
 
 Content.
-""")
+"""
+        (skill_dir / "SKILL.md").write_text(skill_content)
 
         target = get_target("cursor")
         dest = tmp_path / "dest"
         success = target.generate_skill(skill_dir, dest, "test-myskill", str(tmp_path))
 
         assert success
-        mdc_file = dest / "test-myskill.mdc"
-        assert mdc_file.exists()
-        result = mdc_file.read_text()
-        assert "description: Test skill for cursor" in result
-        assert "globs:" in result
-        assert "alwaysApply: false" in result
+        skill_dest = dest / "test-myskill"
+        assert skill_dest.exists()
+        assert (skill_dest / "SKILL.md").exists()
+        result = (skill_dest / "SKILL.md").read_text()
+        assert result == skill_content
 
 
 class TestCommandConverters:

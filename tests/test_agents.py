@@ -163,10 +163,10 @@ class TestAgentConfig:
         target = get_target("claude-code")
         assert target.supports_agents is True
 
-    def test_cursor_does_not_support_agents(self):
-        """Cursor does not support agents."""
+    def test_cursor_supports_agents(self):
+        """Cursor 2.4+ supports subagents."""
         target = get_target("cursor")
-        assert target.supports_agents is False
+        assert target.supports_agents is True
 
     def test_gemini_does_not_support_agents(self):
         """Gemini doesn't support agents."""
@@ -178,6 +178,12 @@ class TestAgentConfig:
         target = get_target("claude-code")
         path = target.get_agent_path(str(tmp_path))
         assert path == tmp_path / ".claude" / "agents"
+
+    def test_get_agent_path_cursor_project(self, tmp_path):
+        """Get Cursor project agent path (2.4+)."""
+        target = get_target("cursor")
+        path = target.get_agent_path(str(tmp_path))
+        assert path == tmp_path / ".cursor" / "agents"
 
     def test_get_agent_path_gemini_returns_none(self):
         """Gemini's get_agent_path returns None."""

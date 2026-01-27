@@ -29,7 +29,7 @@ from lola.targets.base import (
 
 # Concrete target implementations
 from lola.targets.claude_code import ClaudeCodeTarget
-from lola.targets.cursor import CursorTarget, _rewrite_relative_paths
+from lola.targets.cursor import CursorTarget
 from lola.targets.gemini import GeminiTarget, _convert_to_gemini_args
 from lola.targets.opencode import OpenCodeTarget
 
@@ -90,7 +90,6 @@ __all__ = [
     "_get_content_path",
     "_get_skill_description",
     "_skill_source_dir",
-    "_rewrite_relative_paths",
     "_convert_to_gemini_args",
     "_generate_passthrough_command",
     "_generate_agent_with_frontmatter",

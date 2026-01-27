@@ -20,7 +20,6 @@ from lola.targets import (
     OpenCodeTarget,
     _convert_to_gemini_args,
     _get_skill_description,
-    _rewrite_relative_paths,
     get_target,
 )
 
@@ -336,20 +335,20 @@ Agent body content.
 
 
 class TestCursorTarget:
-    """Tests for CursorTarget implementation."""
+    """Tests for CursorTarget implementation (Cursor 2.4+)."""
 
     def test_name_and_attributes(self):
         """Verify target name and capability attributes."""
         target = CursorTarget()
         assert target.name == "cursor"
-        assert target.supports_agents is False
+        assert target.supports_agents is True  # Cursor 2.4+ supports subagents
         assert target.uses_managed_section is False
 
     def test_get_skill_path(self, tmp_path: Path):
-        """Skill path should be .cursor/rules."""
+        """Skill path should be .cursor/skills (Cursor 2.4+)."""
         target = CursorTarget()
         path = target.get_skill_path(str(tmp_path))
-        assert path == tmp_path / ".cursor" / "rules"
+        assert path == tmp_path / ".cursor" / "skills"
 
     def test_get_command_path(self, tmp_path: Path):
         """Command path should be .cursor/commands."""
@@ -357,69 +356,35 @@ class TestCursorTarget:
         path = target.get_command_path(str(tmp_path))
         assert path == tmp_path / ".cursor" / "commands"
 
-    def test_get_agent_path_returns_none(self, tmp_path: Path):
-        """Agent path should be None (agents not supported)."""
+    def test_get_agent_path(self, tmp_path: Path):
+        """Agent path should be .cursor/agents (Cursor 2.4+ supports subagents)."""
         target = CursorTarget()
         path = target.get_agent_path(str(tmp_path))
-        assert path is None
+        assert path == tmp_path / ".cursor" / "agents"
 
-    def test_generate_skill_creates_mdc_file(
-        self, skill_source: Path, dest_path: Path, tmp_path: Path
-    ):
-        """generate_skill should create .mdc file with proper format."""
+    def test_generate_skill_copies_skill_md(self, skill_source: Path, dest_path: Path):
+        """generate_skill should copy SKILL.md to destination (Cursor 2.4+)."""
         target = CursorTarget()
-        result = target.generate_skill(
-            skill_source, dest_path, "mymod-test-skill", str(tmp_path)
-        )
+        result = target.generate_skill(skill_source, dest_path, "mymod-test-skill")
 
         assert result is True
-        mdc_file = dest_path / "mymod-test-skill.mdc"
-        assert mdc_file.exists()
+        skill_dest = dest_path / "mymod-test-skill"
+        assert skill_dest.exists()
+        assert (skill_dest / "SKILL.md").exists()
 
-        content = mdc_file.read_text()
-        # Check MDC frontmatter structure
-        assert "---" in content
-        assert "description: Test skill for unit testing" in content
-        assert "globs:" in content
-        assert "alwaysApply: false" in content
+        content = (skill_dest / "SKILL.md").read_text()
+        assert "Test skill for unit testing" in content
 
-    def test_generate_skill_mdc_format_structure(
-        self, skill_source: Path, dest_path: Path, tmp_path: Path
+    def test_generate_skill_copies_supporting_files(
+        self, skill_source: Path, dest_path: Path
     ):
-        """MDC file should have correct structure: frontmatter + body."""
+        """generate_skill should copy supporting files and directories."""
         target = CursorTarget()
-        target.generate_skill(
-            skill_source, dest_path, "mymod-test-skill", str(tmp_path)
-        )
+        target.generate_skill(skill_source, dest_path, "mymod-test-skill")
 
-        mdc_file = dest_path / "mymod-test-skill.mdc"
-        content = mdc_file.read_text()
-        lines = content.split("\n")
-
-        # Should start with ---
-        assert lines[0] == "---"
-        # Should have description, globs, alwaysApply
-        assert any("description:" in line for line in lines)
-        assert any("globs:" in line for line in lines)
-        assert any("alwaysApply:" in line for line in lines)
-        # Body should contain skill content
-        assert "# Test Skill" in content
-
-    def test_generate_skill_rewrites_relative_paths(
-        self, skill_source: Path, dest_path: Path, tmp_path: Path
-    ):
-        """generate_skill should rewrite relative paths to point to source."""
-        target = CursorTarget()
-        target.generate_skill(
-            skill_source, dest_path, "mymod-test-skill", str(tmp_path)
-        )
-
-        mdc_file = dest_path / "mymod-test-skill.mdc"
-        content = mdc_file.read_text()
-
-        # Original: ./scripts/helper.py should be rewritten
-        # The path should contain the relative source path
-        assert "source/skills/test-skill" in content or "scripts/helper.py" in content
+        skill_dest = dest_path / "mymod-test-skill"
+        assert (skill_dest / "scripts" / "helper.py").exists()
+        assert (skill_dest / "notes.md").exists()
 
     def test_generate_skill_returns_false_for_missing_skill_md(
         self, tmp_path: Path, dest_path: Path
@@ -432,6 +397,24 @@ class TestCursorTarget:
         result = target.generate_skill(empty_dir, dest_path, "empty", str(tmp_path))
         assert result is False
 
+    def test_generate_skill_overwrites_existing_directories(
+        self, skill_source: Path, dest_path: Path
+    ):
+        """generate_skill should overwrite existing supporting directories."""
+        target = CursorTarget()
+        skill_dest = dest_path / "mymod-test-skill"
+
+        # First generation
+        target.generate_skill(skill_source, dest_path, "mymod-test-skill")
+
+        # Modify source
+        (skill_source / "scripts" / "new_file.py").write_text("new content")
+
+        # Second generation should overwrite
+        target.generate_skill(skill_source, dest_path, "mymod-test-skill")
+
+        assert (skill_dest / "scripts" / "new_file.py").exists()
+
     def test_generate_command_creates_file(self, command_source: Path, dest_path: Path):
         """generate_command should create properly named markdown file."""
         target = CursorTarget()
@@ -441,39 +424,88 @@ class TestCursorTarget:
         cmd_file = dest_path / "mymod.test-cmd.md"
         assert cmd_file.exists()
 
-    def test_generate_agent_returns_false(self, agent_source: Path, dest_path: Path):
-        """generate_agent should return False (not supported)."""
+    def test_generate_agent_adds_model_inherit(
+        self, agent_source: Path, dest_path: Path
+    ):
+        """generate_agent should add model: inherit to frontmatter (Cursor 2.4+)."""
         target = CursorTarget()
         result = target.generate_agent(agent_source, dest_path, "test-agent", "mymod")
-        assert result is False
 
-    def test_remove_skill_deletes_mdc_file(self, dest_path: Path):
-        """remove_skill should delete the .mdc file."""
+        assert result is True
+        agent_file = dest_path / "mymod.test-agent.md"
+        assert agent_file.exists()
+
+        content = agent_file.read_text()
+        assert "model: inherit" in content
+        assert "description: Test agent for troubleshooting" in content
+        assert "# Test Agent" in content
+
+    def test_generate_agent_preserves_existing_frontmatter(
+        self, tmp_path: Path, dest_path: Path
+    ):
+        """generate_agent should preserve existing frontmatter fields."""
+        agent_dir = tmp_path / "agents"
+        agent_dir.mkdir()
+        agent_file = agent_dir / "custom.md"
+        agent_file.write_text("""---
+description: Custom agent
+custom_field: custom_value
+tags:
+  - tag1
+  - tag2
+---
+
+Agent body content.
+""")
+
         target = CursorTarget()
-        mdc_file = dest_path / "mymod-skill.mdc"
-        mdc_file.write_text("content")
+        target.generate_agent(agent_file, dest_path, "custom", "mymod")
+
+        result_file = dest_path / "mymod.custom.md"
+        content = result_file.read_text()
+
+        assert "model: inherit" in content
+        assert "custom_field: custom_value" in content
+        assert "tag1" in content
+
+    def test_remove_skill_deletes_directory(self, dest_path: Path):
+        """remove_skill should delete the skill directory (Cursor 2.4+)."""
+        target = CursorTarget()
+        skill_dir = dest_path / "mymod-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("content")
 
         result = target.remove_skill(dest_path, "mymod-skill")
 
         assert result is True
-        assert not mdc_file.exists()
+        assert not skill_dir.exists()
 
     def test_remove_skill_returns_false_when_not_exists(self, dest_path: Path):
-        """remove_skill should return False when file doesn't exist."""
+        """remove_skill should return False when directory doesn't exist."""
         target = CursorTarget()
         result = target.remove_skill(dest_path, "nonexistent")
         assert result is False
 
-    def test_remove_agent_returns_true_for_non_agent_supporting_target(
-        self, dest_path: Path
-    ):
-        """remove_agent should return True for targets without agent support."""
-        target = CursorTarget()  # Cursor doesn't support agents
+    def test_remove_agent_deletes_file(self, dest_path: Path):
+        """remove_agent should delete the agent file (Cursor 2.4+)."""
+        target = CursorTarget()
+        agents_dir = dest_path
+        agent_file = agents_dir / "mymod.code-reviewer.md"
+        agent_file.write_text("# Code Reviewer Agent")
+
+        result = target.remove_agent(agents_dir, "code-reviewer", "mymod")
+
+        assert result is True
+        assert not agent_file.exists()
+
+    def test_remove_agent_idempotent_when_file_missing(self, dest_path: Path):
+        """remove_agent should succeed even if file doesn't exist."""
+        target = CursorTarget()
         agents_dir = dest_path
 
-        result = target.remove_agent(agents_dir, "any-agent", "mymod")
+        result = target.remove_agent(agents_dir, "nonexistent", "mymod")
 
-        assert result is True  # No-op for unsupported targets
+        assert result is True  # Idempotent - no error
 
 
 # =============================================================================
@@ -833,47 +865,6 @@ class TestManagedSectionTarget:
 # =============================================================================
 
 
-class TestRewriteRelativePaths:
-    """Tests for _rewrite_relative_paths helper."""
-
-    def test_rewrites_dot_slash_paths(self):
-        """Should rewrite ./path to assets/path."""
-        content = "Read ./scripts/helper.py for details."
-        result = _rewrite_relative_paths(content, "assets/skill")
-        assert "assets/skill/scripts/helper.py" in result
-
-    def test_rewrites_dot_dot_slash_paths(self):
-        """Should rewrite ../path to assets/../path."""
-        content = "See ../shared/utils.py"
-        result = _rewrite_relative_paths(content, "assets/skill")
-        assert "assets/skill/../shared/utils.py" in result
-
-    def test_handles_quoted_paths(self):
-        """Should rewrite paths in quotes."""
-        content = 'Read "./data/config.json" now.'
-        result = _rewrite_relative_paths(content, "assets")
-        assert "assets/data/config.json" in result
-
-    def test_handles_backtick_paths(self):
-        """Should rewrite paths in backticks."""
-        content = "Run `./scripts/run.sh` to start."
-        result = _rewrite_relative_paths(content, "assets")
-        assert "assets/scripts/run.sh" in result
-
-    def test_preserves_absolute_paths(self):
-        """Should not modify absolute paths."""
-        content = "Config at /etc/myapp/config.yml"
-        result = _rewrite_relative_paths(content, "assets")
-        assert "/etc/myapp/config.yml" in result
-
-    def test_removes_double_slashes(self):
-        """Should clean up double slashes."""
-        content = "./path//to//file"
-        result = _rewrite_relative_paths(content, "assets")
-        # Should not have // (except in protocols)
-        assert "//" not in result or "://" in result
-
-
 class TestGetSkillDescription:
     """Tests for _get_skill_description helper."""
 
@@ -992,7 +983,7 @@ class TestTargetIntegration:
     def test_full_skill_installation_workflow_cursor(
         self, skill_source: Path, tmp_path: Path
     ):
-        """Test complete skill installation for Cursor."""
+        """Test complete skill installation for Cursor (2.4+)."""
         project_path = tmp_path / "project"
         project_path.mkdir()
 
@@ -1006,16 +997,15 @@ class TestTargetIntegration:
         )
 
         assert result is True
-        mdc_file = skill_dest / "mymod-test-skill.mdc"
-        assert mdc_file.exists()
-
-        content = mdc_file.read_text()
-        assert "alwaysApply: false" in content
+        skill_dir = skill_dest / "mymod-test-skill"
+        assert skill_dir.exists()
+        assert (skill_dir / "SKILL.md").exists()
+        assert (skill_dir / "scripts" / "helper.py").exists()
 
         # Remove skill
         result = target.remove_skill(skill_dest, "mymod-test-skill")
         assert result is True
-        assert not mdc_file.exists()
+        assert not skill_dir.exists()
 
     def test_full_skill_installation_workflow_gemini(
         self, skill_source: Path, tmp_path: Path
@@ -1082,6 +1072,17 @@ class TestTargetIntegration:
         content = (claude_dest / "mymod.agent.md").read_text()
         assert "model: inherit" in content
 
+        # Cursor (2.4+) - should add model: inherit (supports subagents)
+        cursor_dest = tmp_path / "cursor"
+        cursor_dest.mkdir()
+        cursor_target = CursorTarget()
+        result = cursor_target.generate_agent(
+            agent_source, cursor_dest, "agent", "mymod"
+        )
+        assert result is True
+        content = (cursor_dest / "mymod.agent.md").read_text()
+        assert "model: inherit" in content
+
         # OpenCode - should add mode: subagent
         opencode_dest = tmp_path / "opencode"
         opencode_dest.mkdir()
@@ -1092,12 +1093,3 @@ class TestTargetIntegration:
         assert result is True
         content = (opencode_dest / "mymod.agent.md").read_text()
         assert "mode: subagent" in content
-
-        # Cursor - should return False (not supported)
-        cursor_dest = tmp_path / "cursor"
-        cursor_dest.mkdir()
-        cursor_target = CursorTarget()
-        result = cursor_target.generate_agent(
-            agent_source, cursor_dest, "agent", "mymod"
-        )
-        assert result is False
