@@ -628,12 +628,21 @@ class ManagedInstructionsTarget:
             # Clean up extra newlines
             section_content = re.sub(r"\n{3,}", "\n\n", section_content)
 
-        new_section = (
-            self.INSTRUCTIONS_START_MARKER
-            + section_content
-            + self.INSTRUCTIONS_END_MARKER
-        )
-        content = content[:start_idx] + new_section + content[end_idx:]
+        # Check if any module blocks remain
+        remaining_blocks = self._extract_module_blocks(section_content)
+        if remaining_blocks:
+            new_section = (
+                self.INSTRUCTIONS_START_MARKER
+                + section_content
+                + self.INSTRUCTIONS_END_MARKER
+            )
+            content = content[:start_idx] + new_section + content[end_idx:]
+        else:
+            # No modules left - remove the entire managed section and leading newlines
+            prefix = content[:start_idx].rstrip("\n")
+            suffix = content[end_idx:]
+            content = prefix + suffix
+
         dest_path.write_text(content)
         return True
 

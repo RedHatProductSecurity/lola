@@ -206,7 +206,7 @@ class TestClaudeCodeInstructions:
         assert alpha_pos < zeta_pos
 
     def test_remove_instructions(self, tmp_path):
-        """remove_instructions removes module from managed section."""
+        """remove_instructions removes module and cleans up empty section."""
         target = ClaudeCodeTarget()
         dest = tmp_path / "CLAUDE.md"
 
@@ -222,6 +222,33 @@ class TestClaudeCodeInstructions:
         assert result is True
         content = dest.read_text()
         assert "test-module" not in content
+        # Managed section markers should be removed when empty
+        assert "<!-- lola:instructions:start -->" not in content
+        assert "<!-- lola:instructions:end -->" not in content
+
+    def test_remove_instructions_keeps_other_modules(self, tmp_path):
+        """remove_instructions keeps section when other modules remain."""
+        target = ClaudeCodeTarget()
+        dest = tmp_path / "CLAUDE.md"
+
+        # Add two modules
+        source1 = tmp_path / "source1" / "AGENTS.md"
+        source1.parent.mkdir()
+        source1.write_text("# Module One")
+        target.generate_instructions(source1, dest, "module-one")
+
+        source2 = tmp_path / "source2" / "AGENTS.md"
+        source2.parent.mkdir()
+        source2.write_text("# Module Two")
+        target.generate_instructions(source2, dest, "module-two")
+
+        # Remove one module
+        result = target.remove_instructions(dest, "module-one")
+
+        assert result is True
+        content = dest.read_text()
+        assert "module-one" not in content
+        assert "module-two" in content
         # Managed section markers should still exist
         assert "<!-- lola:instructions:start -->" in content
 
@@ -684,3 +711,146 @@ Beta content
         assert "# Version 1" not in content
         # Should only have one module section
         assert content.count("lola:module:test-module:start") == 1
+
+
+# =============================================================================
+# Regression Tests
+# =============================================================================
+
+
+class TestInstructionsRegressions:
+    """Regression tests for instructions-related bugs."""
+
+    def test_remove_last_module_cleans_up_markers(self, tmp_path):
+        """
+        Regression: When the last module is removed, the entire managed section
+        should be removed, not just the module content.
+
+        Previously, empty markers were left behind:
+        <!-- lola:instructions:start --><!-- lola:instructions:end -->
+        """
+        target = ClaudeCodeTarget()
+        dest = tmp_path / "CLAUDE.md"
+
+        # Add some existing content before instructions
+        dest.write_text("# My Project\n\nSome content here.\n\n")
+
+        # Add instructions
+        source = tmp_path / "source" / "AGENTS.md"
+        source.parent.mkdir()
+        source.write_text("# Module Instructions")
+        target.generate_instructions(source, dest, "test-module")
+
+        # Verify instructions were added
+        content = dest.read_text()
+        assert "<!-- lola:instructions:start -->" in content
+        assert "test-module" in content
+
+        # Remove the module
+        target.remove_instructions(dest, "test-module")
+
+        # The file should not have any lola markers at all
+        content = dest.read_text()
+        assert "<!-- lola:instructions:start -->" not in content
+        assert "<!-- lola:instructions:end -->" not in content
+        assert "lola:module" not in content
+        # Original content should be preserved
+        assert "# My Project" in content
+
+    def test_update_removes_instructions_with_stale_registry(self, tmp_path):
+        """
+        Regression: When AGENTS.md is deleted and user reinstalls, the installation
+        record has has_instructions=False. Update should still remove any existing
+        instructions from the target file.
+
+        Previously, instructions were only removed if has_instructions=True in the
+        installation record, leaving orphaned instructions in CLAUDE.md.
+        """
+        from lola.cli.install import update_cmd
+
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / ".lola" / "installed.yml"
+
+        # Create module WITHOUT instructions (AGENTS.md deleted)
+        module_dir = modules_dir / "test-module"
+        module_dir.mkdir()
+        skills_dir = module_dir / "skills" / "skill1"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text("---\ndescription: Test\n---\nContent")
+        # Note: No AGENTS.md file
+
+        # Create project dir
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Create registry with stale installation (has_instructions=False due to reinstall)
+        registry = InstallationRegistry(installed_file)
+        inst = Installation(
+            module_name="test-module",
+            assistant="claude-code",
+            scope="project",
+            project_path=str(project_dir),
+            skills=["skill1"],
+            has_instructions=False,  # Stale: was reinstalled after AGENTS.md deleted
+        )
+        registry.add(inst)
+
+        # Create paths
+        skill_dest = project_dir / ".claude" / "skills"
+        skill_dest.mkdir(parents=True)
+        command_dest = project_dir / ".claude" / "commands"
+        command_dest.mkdir()
+
+        # Create CLAUDE.md with orphaned instructions (from before reinstall)
+        claude_md = project_dir / "CLAUDE.md"
+        claude_md.write_text(
+            "# My Project\n\n"
+            "<!-- lola:instructions:start -->\n"
+            "<!-- lola:module:test-module:start -->\n"
+            "# Old Instructions\n"
+            "<!-- lola:module:test-module:end -->\n"
+            "<!-- lola:instructions:end -->\n"
+        )
+
+        # Create local module copy (without AGENTS.md)
+        local_modules = project_dir / ".lola" / "modules"
+        local_modules.mkdir(parents=True)
+        shutil.copytree(module_dir, local_modules / "test-module")
+
+        # Create mock target that uses real remove_instructions
+        real_target = ClaudeCodeTarget()
+        mock_target = MagicMock()
+        mock_target.uses_managed_section = False
+        mock_target.supports_agents = True
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = command_dest
+        mock_target.get_agent_path.return_value = None
+        mock_target.get_mcp_path.return_value = None
+        mock_target.get_instructions_path.return_value = claude_md
+        mock_target.remove_skill.return_value = True
+        mock_target.generate_skill.return_value = True
+        # Use real remove_instructions to test the actual fix
+        mock_target.remove_instructions = real_target.remove_instructions
+
+        runner = CliRunner()
+        with (
+            patch("lola.cli.install.MODULES_DIR", modules_dir),
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch(
+                "lola.cli.install.get_local_modules_path", return_value=local_modules
+            ),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = runner.invoke(update_cmd, ["test-module"])
+
+        assert result.exit_code == 0
+
+        # The orphaned instructions should be removed
+        content = claude_md.read_text()
+        assert "<!-- lola:instructions:start -->" not in content
+        assert "test-module" not in content
+        assert "Old Instructions" not in content
+        # Original content should be preserved
+        assert "# My Project" in content

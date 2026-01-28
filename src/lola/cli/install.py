@@ -489,8 +489,8 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
     from lola.models import INSTRUCTIONS_FILE
 
     if not ctx.has_instructions or not ctx.inst.project_path:
-        # If module no longer has instructions but installation did, remove them
-        if ctx.inst.has_instructions and ctx.inst.project_path:
+        # Always attempt removal - handles stale installation records
+        if ctx.inst.project_path:
             instructions_dest = ctx.target.get_instructions_path(ctx.inst.project_path)
             ctx.target.remove_instructions(instructions_dest, ctx.inst.module_name)
             if verbose:
