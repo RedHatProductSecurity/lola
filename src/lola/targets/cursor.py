@@ -70,7 +70,7 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         if not skill_file.exists():
             return False
 
-        (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+        (skill_dest / "SKILL.md").write_text(skill_file.read_text(encoding="utf-8-sig"))
 
         # Copy supporting files
         for item in source_path.iterdir():
@@ -145,7 +145,7 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         ]
 
         mdc_file = dest_path / f"{module_name}-instructions.mdc"
-        mdc_file.write_text("\n".join(mdc_lines))
+        mdc_file.write_text("\n".join(mdc_lines), encoding="utf-8")
         return True
 
     def remove_instructions(self, dest_path: Path, module_name: str) -> bool:
