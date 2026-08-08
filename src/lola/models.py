@@ -244,7 +244,7 @@ class Module:
             lola_yaml = content_path / "lola.yml"
         if lola_yaml.exists():
             try:
-                with open(lola_yaml) as f:
+                with open(lola_yaml, encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 hooks = config.get("hooks", {})
                 pre_install_hook = (

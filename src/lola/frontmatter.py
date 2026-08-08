@@ -42,14 +42,13 @@ def parse_file(file_path: Path) -> tuple[dict, str]:
         Tuple of (frontmatter dict, body content)
     """
     try:
-        post = frontmatter.load(str(file_path))
-        return dict(post.metadata), post.content
+        # Read with utf-8-sig so a leading BOM is stripped before delimiter
+        # detection. frontmatter.load() leaves the BOM in place and then misses
+        # the --- fence, returning empty metadata without raising.
+        content = file_path.read_text(encoding="utf-8-sig")
     except Exception:
-        # If parsing fails, return empty frontmatter and file content
-        try:
-            return {}, file_path.read_text(encoding="utf-8-sig")
-        except Exception:
-            return {}, ""
+        return {}, ""
+    return parse(content)
 
 
 def validate_command(command_file: Path) -> list[str]:

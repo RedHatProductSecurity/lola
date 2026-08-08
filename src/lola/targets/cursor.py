@@ -70,7 +70,9 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         if not skill_file.exists():
             return False
 
-        (skill_dest / "SKILL.md").write_text(skill_file.read_text(encoding="utf-8-sig"))
+        (skill_dest / "SKILL.md").write_text(
+            skill_file.read_text(encoding="utf-8-sig"), encoding="utf-8"
+        )
 
         # Copy supporting files
         for item in source_path.iterdir():
