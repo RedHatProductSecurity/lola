@@ -1028,5 +1028,7 @@ def _remove_mcps_from_file(
     if not existing_config["mcpServers"] and remaining_keys == {"mcpServers"}:
         dest_path.unlink()
     else:
-        dest_path.write_text(json.dumps(existing_config, indent=2) + "\n", encoding="utf-8")
+        dest_path.write_text(
+            json.dumps(existing_config, indent=2) + "\n", encoding="utf-8"
+        )
     return True

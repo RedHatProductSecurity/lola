@@ -292,7 +292,9 @@ def _remove_mcps_from_vscode_file(
     if not existing_config["servers"] and remaining_keys == {"servers"}:
         dest_path.unlink()
     else:
-        dest_path.write_text(json.dumps(existing_config, indent=2) + "\n", encoding="utf-8")
+        dest_path.write_text(
+            json.dumps(existing_config, indent=2) + "\n", encoding="utf-8"
+        )
     return True
 
 

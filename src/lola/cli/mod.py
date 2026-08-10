@@ -1036,7 +1036,9 @@ def module_info(module_name_or_path: str | None):
         mcps_data = {}
         if mcps_file.exists():
             try:
-                mcps_data = json.loads(mcps_file.read_text(encoding="utf-8-sig")).get("mcpServers", {})
+                mcps_data = json.loads(mcps_file.read_text(encoding="utf-8-sig")).get(
+                    "mcpServers", {}
+                )
             except (json.JSONDecodeError, OSError):
                 pass
 
