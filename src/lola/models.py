@@ -231,7 +231,7 @@ class Module:
         mcps_file = content_path / MCPS_FILE
         if mcps_file.exists():
             try:
-                data = json.loads(mcps_file.read_text())
+                data = json.loads(mcps_file.read_text(encoding="utf-8-sig"))
                 mcps = sorted(data.get("mcpServers", {}).keys())
             except (json.JSONDecodeError, OSError):
                 pass
@@ -244,7 +244,7 @@ class Module:
             lola_yaml = content_path / "lola.yml"
         if lola_yaml.exists():
             try:
-                with open(lola_yaml) as f:
+                with open(lola_yaml, encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 hooks = config.get("hooks", {})
                 pre_install_hook = (

@@ -463,7 +463,7 @@ description: [REPLACE: Brief description of what this skill does and when to use
 
 [REPLACE: Tips and guidelines for effective skill usage]
 """
-            (skill_dir / "SKILL.md").write_text(skill_content)
+            (skill_dir / "SKILL.md").write_text(skill_content, encoding="utf-8")
 
     # Create initial command if requested
     if final_command_name:
@@ -494,7 +494,7 @@ Use `$ARGUMENTS` to access any arguments passed to this command.
 
 [REPLACE: Describe what the command should produce or accomplish]
 """
-            command_file.write_text(command_content)
+            command_file.write_text(command_content, encoding="utf-8")
 
     # Create initial agent if requested
     if final_agent_name:
@@ -529,7 +529,7 @@ description: [REPLACE: Brief description of what this agent does and when to del
 1. [REPLACE: Describe the agent's typical workflow]
 2. [REPLACE: Continue as needed]
 """
-            agent_file.write_text(agent_content)
+            agent_file.write_text(agent_content, encoding="utf-8")
 
     # Create mcps.json if not skipped (in module/)
     if not no_mcps:
@@ -554,7 +554,7 @@ description: [REPLACE: Brief description of what this agent does and when to del
   }
 }
 """
-            mcps_file.write_text(mcps_content)
+            mcps_file.write_text(mcps_content, encoding="utf-8")
 
     # Create AGENTS.md if not skipped (in module/)
     if not no_instructions:
@@ -601,7 +601,7 @@ description: [REPLACE: Brief description of what this agent does and when to del
 
 [REPLACE: Additional guidance for AI assistants using this module]
 """
-            agents_md_file.write_text(agents_md_content)
+            agents_md_file.write_text(agents_md_content, encoding="utf-8")
 
     # Create README.md at repo root
     readme_file = repo_dir / "README.md"
@@ -673,7 +673,7 @@ Edit files in `module/` (or `lola-module/`) to customize the content that gets i
 
 [REPLACE: Your license here]
 """
-        readme_file.write_text(readme_content)
+        readme_file.write_text(readme_content, encoding="utf-8")
 
     console.print(f"[green]Initialized module {module_name}[/green]")
     console.print(f"  [dim]Path:[/dim] {repo_dir}")
@@ -1036,7 +1036,9 @@ def module_info(module_name_or_path: str | None):
         mcps_data = {}
         if mcps_file.exists():
             try:
-                mcps_data = json.loads(mcps_file.read_text()).get("mcpServers", {})
+                mcps_data = json.loads(mcps_file.read_text(encoding="utf-8-sig")).get(
+                    "mcpServers", {}
+                )
             except (json.JSONDecodeError, OSError):
                 pass
 
