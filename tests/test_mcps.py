@@ -9,6 +9,7 @@ from lola import frontmatter as fm
 from lola.models import Installation, Module
 from lola.targets import (
     ClaudeCodeTarget,
+    CopilotVSCodeTarget,
     CursorTarget,
     GeminiTarget,
     OpenCodeTarget,
@@ -384,6 +385,76 @@ class TestTargetMCPGeneration:
         content = json.loads(mcp_path.read_text())
         assert "github" in content["mcpServers"]
 
+    def test_cursor_converts_env_var_syntax(self, tmp_path):
+        """CursorTarget converts ${VAR} to ${env:VAR} syntax in env values."""
+        target = CursorTarget()
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        mcp_path = cursor_dir / "mcp.json"
+
+        servers = {
+            "jira": {
+                "command": "uv",
+                "args": ["run", "jira-mcp"],
+                "env": {
+                    "JIRA_URL": "https://issues.example.com",
+                    "JIRA_TOKEN": "${JIRA_TOKEN}",
+                },
+            },
+        }
+
+        result = target.generate_mcps(servers, mcp_path, "tools")
+
+        assert result is True
+        content = json.loads(mcp_path.read_text())
+        server = content["mcpServers"]["jira"]
+        # Static values preserved, ${VAR} converted to ${env:VAR}
+        assert server["env"]["JIRA_URL"] == "https://issues.example.com"
+        assert server["env"]["JIRA_TOKEN"] == "${env:JIRA_TOKEN}"
+
+    def test_cursor_converts_env_var_syntax_in_remote_headers_and_url(self, tmp_path):
+        """CursorTarget converts ${VAR} in url/headers for remote HTTP servers."""
+        target = CursorTarget()
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        mcp_path = cursor_dir / "mcp.json"
+
+        servers = {
+            "aap-mcp": {
+                "type": "http",
+                "url": "https://${AAP_MCP_SERVER}/job_management/mcp",
+                "headers": {"Authorization": "Bearer ${AAP_API_TOKEN}"},
+            },
+        }
+
+        result = target.generate_mcps(servers, mcp_path, "tools")
+
+        assert result is True
+        content = json.loads(mcp_path.read_text())
+        server = content["mcpServers"]["aap-mcp"]
+        assert server["url"] == "https://${env:AAP_MCP_SERVER}/job_management/mcp"
+        assert server["headers"]["Authorization"] == "Bearer ${env:AAP_API_TOKEN}"
+
+    def test_cursor_preserves_already_converted_env_var(self, tmp_path):
+        """CursorTarget doesn't double-convert an already-${env:VAR} reference."""
+        target = CursorTarget()
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        mcp_path = cursor_dir / "mcp.json"
+
+        servers = {
+            "server": {
+                "command": "npx",
+                "args": [],
+                "env": {"TOKEN": "${env:TOKEN}"},
+            },
+        }
+
+        target.generate_mcps(servers, mcp_path, "tools")
+
+        content = json.loads(mcp_path.read_text())
+        assert content["mcpServers"]["server"]["env"]["TOKEN"] == "${env:TOKEN}"
+
     def test_gemini_generates_settings_json(self, tmp_path):
         """GeminiTarget creates .gemini/settings.json correctly."""
         target = GeminiTarget()
@@ -475,6 +546,122 @@ class TestTargetMCPGeneration:
         assert server["environment"]["JIRA_URL"] == "https://issues.example.com"
         assert server["environment"]["JIRA_TOKEN"] == "{env:JIRA_TOKEN}"
         assert server["environment"]["API_KEY"] == "{env:API_KEY}"
+
+    def test_opencode_normalizes_cursor_style_env_var(self, tmp_path):
+        """OpenCodeTarget maps ${env:VAR} to {env:VAR}, not {env:env:VAR}."""
+        target = OpenCodeTarget()
+        mcp_path = tmp_path / "opencode.json"
+
+        servers = {
+            "server": {
+                "command": "npx",
+                "args": [],
+                "env": {"TOKEN": "${env:TOKEN}"},
+            },
+        }
+
+        target.generate_mcps(servers, mcp_path, "tools")
+
+        content = json.loads(mcp_path.read_text())
+        assert content["mcp"]["server"]["environment"]["TOKEN"] == "{env:TOKEN}"
+
+    def test_opencode_preserves_already_converted_env_var(self, tmp_path):
+        """OpenCodeTarget leaves an already-{env:VAR} reference unchanged."""
+        target = OpenCodeTarget()
+        mcp_path = tmp_path / "opencode.json"
+
+        servers = {
+            "server": {
+                "command": "npx",
+                "args": [],
+                "env": {"TOKEN": "{env:TOKEN}"},
+            },
+        }
+
+        target.generate_mcps(servers, mcp_path, "tools")
+
+        content = json.loads(mcp_path.read_text())
+        assert content["mcp"]["server"]["environment"]["TOKEN"] == "{env:TOKEN}"
+
+
+# =============================================================================
+# VS Code (Copilot) MCP Env Var Conversion Tests
+# =============================================================================
+
+
+class TestVSCodeMCPGeneration:
+    """Tests for CopilotVSCodeTarget's env var syntax conversion."""
+
+    def test_vscode_converts_env_var_syntax(self, tmp_path):
+        """CopilotVSCodeTarget converts ${VAR} to ${env:VAR} syntax in env values."""
+        target = CopilotVSCodeTarget()
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        mcp_path = vscode_dir / "mcp.json"
+
+        servers = {
+            "jira": {
+                "command": "uv",
+                "args": ["run", "jira-mcp"],
+                "env": {
+                    "JIRA_URL": "https://issues.example.com",
+                    "JIRA_TOKEN": "${JIRA_TOKEN}",
+                },
+            },
+        }
+
+        result = target.generate_mcps(servers, mcp_path, "tools")
+
+        assert result is True
+        content = json.loads(mcp_path.read_text())
+        server = content["servers"]["jira"]
+        assert server["type"] == "stdio"
+        assert server["env"]["JIRA_URL"] == "https://issues.example.com"
+        assert server["env"]["JIRA_TOKEN"] == "${env:JIRA_TOKEN}"
+
+    def test_vscode_converts_env_var_syntax_in_remote_headers_and_url(self, tmp_path):
+        """CopilotVSCodeTarget converts ${VAR} in url/headers for remote servers."""
+        target = CopilotVSCodeTarget()
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        mcp_path = vscode_dir / "mcp.json"
+
+        servers = {
+            "aap-mcp": {
+                "type": "http",
+                "url": "https://${AAP_MCP_SERVER}/job_management/mcp",
+                "headers": {"Authorization": "Bearer ${AAP_API_TOKEN}"},
+            },
+        }
+
+        result = target.generate_mcps(servers, mcp_path, "tools")
+
+        assert result is True
+        content = json.loads(mcp_path.read_text())
+        server = content["servers"]["aap-mcp"]
+        assert server["type"] == "http"
+        assert server["url"] == "https://${env:AAP_MCP_SERVER}/job_management/mcp"
+        assert server["headers"]["Authorization"] == "Bearer ${env:AAP_API_TOKEN}"
+
+    def test_vscode_preserves_already_converted_env_var(self, tmp_path):
+        """CopilotVSCodeTarget doesn't double-convert an already-${env:VAR} ref."""
+        target = CopilotVSCodeTarget()
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        mcp_path = vscode_dir / "mcp.json"
+
+        servers = {
+            "server": {
+                "command": "npx",
+                "args": [],
+                "env": {"TOKEN": "${env:TOKEN}"},
+            },
+        }
+
+        target.generate_mcps(servers, mcp_path, "tools")
+
+        content = json.loads(mcp_path.read_text())
+        assert content["servers"]["server"]["env"]["TOKEN"] == "${env:TOKEN}"
 
 
 # =============================================================================

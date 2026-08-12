@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ import lola.config as config
 from .base import (
     BaseAssistantTarget,
     ManagedInstructionsTarget,
+    _convert_env_var_to_opencode,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
 )
@@ -21,11 +21,6 @@ from .base import (
 # =============================================================================
 # OpenCode-specific MCP helpers
 # =============================================================================
-
-
-def _convert_env_var_syntax(value: str) -> str:
-    """Convert ${VAR} syntax to OpenCode's {env:VAR} syntax."""
-    return re.sub(r"\$\{([^}]+)\}", r"{env:\1}", value)
 
 
 # Lola standard: http and sse only. OpenCode uses "remote" as its canonical type.
@@ -102,7 +97,7 @@ def _transform_mcp_to_opencode(server_config: dict[str, Any]) -> dict[str, Any]:
         # Remote server: convert to OpenCode's "remote" type
         url = server_config.get("url")
         if isinstance(url, str):
-            url = _convert_env_var_syntax(url)
+            url = _convert_env_var_to_opencode(url)
         remote_result: dict[str, Any] = {
             "type": "remote",
         }
@@ -111,7 +106,7 @@ def _transform_mcp_to_opencode(server_config: dict[str, Any]) -> dict[str, Any]:
         headers = server_config.get("headers", {})
         if headers:
             remote_result["headers"] = {
-                k: _convert_env_var_syntax(v) if isinstance(v, str) else v
+                k: _convert_env_var_to_opencode(v) if isinstance(v, str) else v
                 for k, v in headers.items()
             }
         return remote_result
@@ -126,7 +121,7 @@ def _transform_mcp_to_opencode(server_config: dict[str, Any]) -> dict[str, Any]:
     env = server_config.get("env", {})
     if env:
         result["environment"] = {
-            k: _convert_env_var_syntax(v) if isinstance(v, str) else v
+            k: _convert_env_var_to_opencode(v) if isinstance(v, str) else v
             for k, v in env.items()
         }
 

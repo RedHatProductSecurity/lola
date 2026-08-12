@@ -821,6 +821,62 @@ class MCPSupportMixin:
 
 
 # =============================================================================
+# MCP environment variable syntax converters
+# =============================================================================
+#
+# Lola's canonical mcps.json format uses POSIX-style ``${VAR}`` for env var
+# references. Different assistants expect different substitution syntaxes,
+# so each target converts the canonical form to its own during install.
+
+
+def _convert_env_var_to_opencode(value: str) -> str:
+    """Convert ${VAR} (or ${env:VAR}) syntax to OpenCode's {env:VAR} syntax.
+
+    Accepts both Lola's canonical ``${VAR}`` and Cursor/VS Code's
+    ``${env:VAR}`` so a mis-prefixed input becomes ``{env:VAR}`` rather
+    than ``{env:env:VAR}``. Already-OpenCode ``{env:VAR}`` is untouched
+    (no leading ``$``).
+    """
+    return re.sub(r"\$\{(?:env:)?([^}]+)\}", r"{env:\1}", value)
+
+
+def _convert_env_var_to_cursor_vscode(value: str) -> str:
+    """Convert ${VAR} syntax to Cursor/VS Code's ${env:VAR} syntax."""
+    return re.sub(r"\$\{([^}:]+)\}", r"${env:\1}", value)
+
+
+def _transform_mcp_env_vars(
+    server_config: dict[str, Any],
+    converter: Callable[[str], str],
+) -> dict[str, Any]:
+    """Apply an env var syntax converter to a server config's env/url/headers.
+
+    Leaves the rest of the config structure (command, args, type, etc.)
+    untouched; only string values in ``env``, ``url``, and ``headers`` are
+    passed through ``converter``.
+    """
+    result = dict(server_config)
+
+    env = result.get("env")
+    if isinstance(env, dict):
+        result["env"] = {
+            k: converter(v) if isinstance(v, str) else v for k, v in env.items()
+        }
+
+    url = result.get("url")
+    if isinstance(url, str):
+        result["url"] = converter(url)
+
+    headers = result.get("headers")
+    if isinstance(headers, dict):
+        result["headers"] = {
+            k: converter(v) if isinstance(v, str) else v for k, v in headers.items()
+        }
+
+    return result
+
+
+# =============================================================================
 # Shared helper functions
 # =============================================================================
 

@@ -11,14 +11,18 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 import lola.config as config
 from .base import (
     MCPSupportMixin,
     BaseAssistantTarget,
+    _convert_env_var_to_cursor_vscode,
     _generate_passthrough_command,
     _generate_agent_with_frontmatter,
+    _merge_mcps_into_file,
     _transform_claude_agent_frontmatter,
+    _transform_mcp_env_vars,
 )
 
 
@@ -47,6 +51,21 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
     def get_mcp_path(self, project_path: str, scope: str = "project") -> Path:
         base = Path.home() if scope == "user" else Path(project_path)
         return base / ".cursor" / "mcp.json"
+
+    def generate_mcps(
+        self,
+        mcps: dict[str, dict[str, Any]],
+        dest_path: Path,
+        module_name: str,
+    ) -> bool:
+        """Merge MCP servers, converting env var refs to Cursor's ${env:VAR} syntax."""
+        if not mcps:
+            return False
+        transformed = {
+            name: _transform_mcp_env_vars(cfg, _convert_env_var_to_cursor_vscode)
+            for name, cfg in mcps.items()
+        }
+        return _merge_mcps_into_file(dest_path, module_name, transformed)
 
     def generate_skill(
         self,
