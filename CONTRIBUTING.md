@@ -141,6 +141,30 @@ PR updates automatically!
 **Note**: For large changes, open an issue first to discuss your
 approach.
 
+## Spec-Driven Development
+
+LoLa follows spec-driven development (SDD). See the full
+decision in `docs/adr/spec-driven-development.md`.
+
+**When to write an ADR**: Architectural or process changes
+require an ADR in `docs/adr/` before implementation. Copy
+`docs/adr/template.md` and open a PR.
+
+**When to write a spec**: Significant features (3+ stories or
+cross-module scope) benefit from a proposal in
+`openspec/changes/` or `specs/`. No specific format is
+mandated — use whatever workflow fits.
+
+**For small changes**: Bug fixes and minor improvements can go
+straight to a PR. Link the relevant issue if one exists.
+
+**Project standards**: Read `.specify/memory/constitution.md`
+for the full set of principles, quality gates, and complexity
+budgets that all contributions must follow.
+
+**AI agents**: Start from `AGENTS.md` — it contains a topic
+guide pointing to the right documentation for any task.
+
 ## AI-Assisted Contributions
 
 We welcome contributions made with AI coding assistants! As an

@@ -38,7 +38,8 @@ htmlcov/
 .cursor/
 .gemini/
 GEMINI.md
-.specify/
+.specify/*
+!.specify/memory/
 
 # MkDocs build output
 site/
@@ -80,3 +81,6 @@ bin/
 
 ### SuperPowers ###
 docs/superpowers/
+
+### SDD — optional contributor tooling (not committed) ###
+.opencode/

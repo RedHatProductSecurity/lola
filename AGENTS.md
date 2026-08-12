@@ -1,214 +1,133 @@
-# AGENTS.md
+# Lola — Agent Instructions
 
-This file provides guidance to coding agents when working with code in this repository.
+Lola is an AI skills package manager. Write AI context and skills
+once, install them everywhere — Claude Code, Cursor, Gemini CLI,
+OpenCode, and more.
 
-## What is Lola
+## Working in this repo
 
-Lola is an AI Skills Package Manager that lets you write AI context/skills once and install them to multiple AI assistants (Claude Code, Cursor, Gemini CLI, OpenCode, etc.). Skills are portable modules with a SKILL.md file that get converted to each assistant's native format.
+- Before making changes: read the topic guide below and follow
+  the referenced file for your task
+- Commit format: Conventional Commits (feat, fix, docs, chore,
+  test, refactor)
+- Line limit: 80 characters — code, markdown, and comments
+- Python: `ruff check src tests` and `basedpyright src` must pass
+- Go: `golangci-lint run` and `go vet ./...` must pass
+- Tests: `pytest` (Python), `go test -race ./...` (Go)
+- Coverage: >80% on changed files
+- New CLI commands require e2e BDD tests in `e2e/features/`
+- Use `uv` for Python deps, standard Go toolchain for Go code
+- Never commit secrets, API keys, or internal hostnames
 
 ## Development Commands
 
-Remember to source the virtual environment before running commands:
 ```bash
+# Python
 source .venv/bin/activate
-```
-
-```bash
-# Install in development mode with dev dependencies
 uv sync --group dev
-
-# Run tests
 pytest                        # All tests
-pytest tests/test_cli_mod.py  # Single test file
-pytest -k test_add            # Tests matching pattern
-pytest --cov=src/lola         # With coverage
+pytest tests/test_cli_mod.py  # Single file
+pytest -k test_add            # Pattern match
+pytest --cov=src/lola         # Coverage
+ruff check src tests          # Linting
+basedpyright src              # Type checking
 
-# Run linting and type checking
-ruff check src tests
-basedpyright src
+# Go
+go test -race ./...           # All Go tests
+golangci-lint run             # Go linting
+go vet ./...                  # Go vet
 
-# Run the CLI
+# E2E
+make e2e                      # BDD tests (behave)
+make e2e-wip                  # @wip tagged only
+
+# CLI
 lola --help
 lola mod ls
 lola install <module> -a claude-code
 ```
 
+## Topic Guide
+
+| Task | Read this |
+|------|-----------|
+| Project principles and standards | `.specify/memory/constitution.md` |
+| SDD process | `docs/adr/spec-driven-development.md` |
+| Contribution workflow | `CONTRIBUTING.md` |
+| Architectural decisions | `docs/adr/` |
+| Roles and decision-making | `GOVERNANCE.md` |
+| Architecture overview | `docs/dev-guide/architecture.md` |
+| E2E tests | `docs/dev-guide/design/e2e-bdd.md` |
+| CLI reference | `docs/cli-reference/` |
+| Proposing a change | `openspec/changes/` or `specs/` |
+
 ## Architecture
 
 ### Core Data Flow
 
-1. **Module Registration**: `lola mod add <source>` fetches modules (from git, zip, tar, or folder) to `~/.lola/modules/`
-2. **Installation**: `lola install <module>` copies modules to project's `.lola/modules/` and generates assistant-specific files
-3. **Updates**: `lola update` regenerates assistant files from source modules
-4. **Marketplace Registration**: `lola market add <name> <url>` fetches marketplace catalogs to `~/.lola/market/` (reference) and `~/.lola/market/cache/` (full catalog)
-5. **Module Discovery**: `lola search <query>` searches both the local module registry and enabled marketplace caches (use `--mod` or `--market` to scope); `lola mod search <query>` is a deprecated alias for `lola search <query> --mod`; `lola install <module>` auto-adds from marketplace if not in registry
-
-### Installation Scopes
-
-Lola supports two installation scopes:
-
-- **Project scope** (default): Installs to project directories (`.claude/`, `.cursor/`, etc.)
-- **User scope**: Installs to user home directories (`~/.claude/`, `~/.cursor/`, etc.)
-
-#### Examples
-
-Install to current project (default):
-```bash
-lola install my-module
-```
-
-Install globally for your user:
-```bash
-lola install my-module --scope user
-```
-
-Install to specific project:
-```bash
-lola install my-module /path/to/project
-```
-
-List all installations:
-```bash
-lola list
-```
-
-Uninstall from user scope only:
-```bash
-lola uninstall my-module --scope user
-```
+1. **Module Registration**: `lola mod add <source>` fetches
+   modules (from git, zip, tar, or folder) to `~/.lola/modules/`
+2. **Installation**: `lola install <module>` copies modules to
+   project's `.lola/modules/` and generates assistant-specific
+   files
+3. **Updates**: `lola update` regenerates assistant files from
+   source modules
+4. **Marketplace**: `lola market add <name> <url>` fetches
+   catalogs; `lola search <query>` searches across all sources
 
 ### Key Source Files
 
-- `src/lola/main.py` - CLI entry point, registers all commands
-- `src/lola/cli/mod.py` - Module management: add, rm, ls, info, init, update, search
-- `src/lola/cli/install.py` - Install/uninstall/update commands (with marketplace integration)
-- `src/lola/cli/market.py` - Marketplace management: add, ls, update, set (enable/disable), rm
-- `src/lola/models.py` - Data models: Module, Skill, Command, Agent, Installation, InstallationRegistry, Marketplace
-- `src/lola/market/manager.py` - MarketplaceRegistry class for marketplace operations
-- `src/lola/market/search.py` - Search functionality across marketplace caches
-- `src/lola/config.py` - Global paths (LOLA_HOME, MODULES_DIR, INSTALLED_FILE, MARKET_DIR, CACHE_DIR)
-- `src/lola/targets.py` - Assistant definitions and file generators (ASSISTANTS dict, generate_* functions)
-- `src/lola/parsers.py` - Source fetching (SourceHandler classes) and skill/command parsing
-- `src/lola/frontmatter.py` - YAML frontmatter parsing
-
-### Module Structure
-
-Modules use auto-discovery. Skills, commands, and agents are discovered from directory structure:
-
-```
-my-module/
-  skills/              # Skills directory (required for skills)
-    skill-name/
-      SKILL.md         # Required: skill definition with frontmatter
-      scripts/         # Optional: supporting files
-  commands/            # Slash commands (*.md files)
-    deploy.md          # Command entry file
-    deploy/            # Optional: co-named sidecar directory
-      step1.md         # Supporting procedure files
-      step2.md
-  agents/              # Subagents (*.md files)
-```
-
-Commands can be multi-file: an entry file `commands/<cmd>.md` plus a co-named
-sidecar directory `commands/<cmd>/` holding procedure files. During installation,
-both the entry file and its sidecar directory (if present) are copied to the
-target assistant's command directory. The sidecar is also removed on uninstall.
-
-### Marketplace Structure
-
-Marketplaces are YAML files with module catalogs:
-
-```yaml
-name: Marketplace Name
-description: Description of the marketplace
-version: 1.0.0
-modules:
-  - name: module-name
-    description: Module description
-    version: 1.0.0
-    repository: https://github.com/user/repo.git
-    tags: [tag1, tag2]
-```
-
-**Storage locations:**
-- **Reference files**: `~/.lola/market/<name>.yml` - Contains source URL and enabled status
-- **Cache files**: `~/.lola/market/cache/<name>.yml` - Full marketplace catalog
-
-**Key operations:**
-- `MarketplaceRegistry.add(name, url)` - Downloads and validates marketplace, saves reference and cache
-- `MarketplaceRegistry.search_module_all(name)` - Finds module across all enabled marketplaces
-- `MarketplaceRegistry.select_marketplace(name, matches)` - Prompts user when module exists in multiple marketplaces
-- `MarketplaceRegistry.update(name)` - Re-fetches marketplace from source URL
-- Cache recovery: Automatically re-downloads from source URL if cache is missing
+- `src/lola/main.py` — CLI entry point
+- `src/lola/cli/mod.py` — Module management
+- `src/lola/cli/install.py` — Install/uninstall/update
+- `src/lola/cli/market.py` — Marketplace management
+- `src/lola/models.py` — Data models
+- `src/lola/config.py` — Global paths
+- `src/lola/targets.py` — Assistant definitions
+- `src/lola/parsers.py` — Source fetching (strategy pattern)
 
 ### Target Assistants
 
-Defined in `targets.py` TARGETS dict. Each assistant has different output formats:
-
 | Assistant | Skills | Commands | Agents |
 |-----------|--------|----------|--------|
-| claude-code | `.claude/skills/<skill>/SKILL.md` | `.claude/commands/<cmd>.md` | `.claude/agents/<agent>.md` |
-| copilot-cli | `.github/skills/<skill>/SKILL.md` (project) / `~/.copilot/skills/<skill>/SKILL.md` (user) | `.github/prompts/<cmd>.prompt.md` (project) / `~/.copilot/prompts/<cmd>.prompt.md` (user) | `.github/agents/<agent>.agent.md` (project) / `~/.copilot/agents/<agent>.agent.md` (user) |
-| copilot-vscode | `.github/skills/<skill>/SKILL.md` (project) / `~/.copilot/skills/<skill>/SKILL.md` (user) | `.github/prompts/<cmd>.prompt.md` (project only) | `.github/agents/<agent>.agent.md` (project) / `~/.copilot/agents/<agent>.agent.md` (user) |
-| cursor | `.cursor/skills/<skill>/SKILL.md` | `.cursor/commands/<cmd>.md` | `.cursor/agents/<agent>.md` |
-| gemini-cli | `GEMINI.md` (managed section) | `.gemini/commands/<cmd>.toml` | N/A |
-| openclaw | `~/.openclaw/workspace/skills/<skill>/SKILL.md` | N/A | N/A |
-| opencode | `AGENTS.md` (managed section) | `.opencode/commands/<cmd>.md` | `.opencode/agents/<agent>.md` |
+| claude-code | `.claude/skills/` | `.claude/commands/` | `.claude/agents/` |
+| cursor | `.cursor/skills/` | `.cursor/commands/` | `.cursor/agents/` |
+| gemini-cli | `GEMINI.md` | `.gemini/commands/` | N/A |
+| opencode | `AGENTS.md` | `.opencode/commands/` | `.opencode/agents/` |
+| copilot | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
 
-`copilot-cli` and `copilot-vscode` share the same `.github/` (project) and
-`~/.copilot/` (user) files and differ only in MCP handling: `copilot-cli` writes
-MCP servers with the `mcpServers` key (`~/.copilot/mcp-config.json` at user
-scope), while `copilot-vscode` writes them to `.vscode/mcp.json` using VS Code's
-`servers` key. VS Code has no user-scope location for slash commands or MCP, so
-those are skipped (with a warning) when installing `copilot-vscode` at user
-scope. When no assistant is selected explicitly, `copilot-vscode` is preferred
-over `copilot-cli` to avoid writing the same project files twice.
+### Module Structure
 
-Agent frontmatter is modified during generation:
-- Claude Code: `name` (agent name) and `model: inherit` are added
-- Copilot: `generate_agent` is passthrough (content copied as-is); skill frontmatter is rewritten to include `name` and `description`
-- Cursor: `name` (agent name) and `model: inherit` are added
-- OpenCode: `mode: subagent` is added
-
-**Backwards compatibility:** Uninstall also checks for old prefixed filenames
-(`<module>.<cmd>.md`, `<module>.<agent>.md`) so installs made before prefix
-removal are cleaned up correctly.
-
-### Source Handlers
-
-`parsers.py` uses strategy pattern for fetching modules:
-- `GitSourceHandler` - git clone with depth 1
-- `ZipSourceHandler` / `ZipUrlSourceHandler` - local/remote zip files
-- `TarSourceHandler` / `TarUrlSourceHandler` - local/remote tar archives
-- `FolderSourceHandler` - local directory copy
+```
+my-module/
+  skills/
+    skill-name/
+      SKILL.md           # Required: skill definition
+      scripts/            # Optional: supporting files
+  commands/
+    deploy.md            # Command entry file
+    deploy/              # Optional: sidecar directory
+      step1.md
+  agents/
+    reviewer.md          # Subagent definition
+```
 
 ### Testing Patterns
 
-Tests use Click's `CliRunner` for CLI testing. Key fixtures in `tests/conftest.py`:
-- `mock_lola_home` - patches LOLA_HOME, MODULES_DIR, INSTALLED_FILE to temp directory
-- `sample_module` - creates test module with skill, command, and agent
-- `registered_module` - sample_module copied into mock_lola_home
-- `mock_assistant_paths` - creates mock assistant output directories
-- `marketplace_with_modules` - creates marketplace with test modules
-- `marketplace_disabled` - creates disabled marketplace for testing
+Tests use Click's `CliRunner` for CLI testing. Key fixtures
+in `tests/conftest.py`: `mock_lola_home`, `sample_module`,
+`registered_module`, `mock_assistant_paths`,
+`marketplace_with_modules`.
 
-**Marketplace testing patterns:**
-- HTTP requests are mocked using `unittest.mock.patch` with `urllib.request.urlopen`
-- Marketplace YAML validation uses actual `Marketplace` model validation
-- Tests verify both reference and cache files are created correctly
-- Cache recovery is tested with missing cache files
-- Multi-marketplace conflicts tested with multiple marketplace fixtures
+## Review Council Configuration
+
+Constitution: .specify/memory/constitution.md
 
 ## Lola Skills
 
-These skills are installed by Lola and provide specialized capabilities.
-When a task matches a skill's description, read the skill's SKILL.md file
-to learn the detailed instructions and workflows.
-
-**How to use skills:**
-1. Check if your task matches any skill description below
-2. Use `read_file` to read the skill's SKILL.md for detailed instructions
-3. Follow the instructions in the SKILL.md file
+These skills are installed by Lola and provide specialized
+capabilities. When a task matches a skill's description, read
+the skill's SKILL.md file for detailed instructions.
 
 <!-- lola:skills:start -->
 <!-- lola:skills:end -->
