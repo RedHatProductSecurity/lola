@@ -6,7 +6,17 @@
 
 ## Related Issues
 
-<!-- Link any related issues: Fixes #123, Relates to #456 -->
+<!-- Fixes #123, Relates to #456 -->
+
+## Spec / ADR Reference
+
+<!-- If this PR implements an architectural decision or a     -->
+<!-- spec, link it here. Leave blank for small fixes and docs. -->
+<!--                                                           -->
+<!-- Examples:                                                 -->
+<!--   ADR: docs/adr/spec-driven-development.md               -->
+<!--   Spec: openspec/changes/local-market-support/proposal.md -->
+<!--   Spec: specs/004-marketplace/spec.md                     -->
 
 ## Test Plan
 
@@ -16,12 +26,15 @@
 
 ## Checklist
 
-- [ ] Tests pass (`pytest`)
-- [ ] Linting passes (`ruff check src tests`)
-- [ ] Type checking passes (`ty check`)
+- [ ] Tests pass (`pytest` / `go test -race ./...`)
+- [ ] Linting passes (`ruff check src tests` / `golangci-lint run`)
+- [ ] `go vet ./...` passes (Go changes only, N/A otherwise)
+- [ ] Type checking passes (`uv run ty check`)
+- [ ] Coverage >80% on changed source files (N/A for docs/config)
+- [ ] E2E BDD tests added for new CLI commands (N/A if none)
+- [ ] Commit subjects ≤ 50 chars, body wrapped at 72
 
 ## AI Disclosure
 
-<!-- If you used AI tools, mention them here or in your commit message -->
-<!-- Examples: "AI-assisted with Claude Code", "Used GitHub Copilot" -->
-<!-- Delete this section if not applicable -->
+<!-- If you used AI tools, mention them here or in your commit -->
+<!-- "AI-assisted with Claude Code" — delete if not applicable -->

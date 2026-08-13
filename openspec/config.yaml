@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  Lola is an AI skills package manager — write AI context/skills
+  once, install them to Claude Code, Cursor, Gemini CLI, OpenCode,
+  and more.
+
+  Tech stack: Python 3.13+ (src/lola/) and Go 1.26+ (cmd/, internal/)
+  Constitution: .specify/memory/constitution.md
+  ADRs: docs/adr/ (kebab-case filenames, no numbers)
+  SDD process: docs/adr/spec-driven-development.md
+
+  Key conventions:
+  - Conventional Commits (feat, fix, docs, chore, test, refactor)
+  - 80-character line limit (code, markdown, comments)
+  - Python: ruff + ty check + mypy, uv for deps
+  - Go: gofmt + golangci-lint, testify + -race
+  - >80% test coverage on changed source files
+  - E2E BDD tests required for new CLI commands (e2e/features/)
+  - Commit subjects: max 50 chars (tpope 50/72 rule)
+
+rules:
+  proposal:
+    - Keep proposals under 500 words
+    - Always include a "Non-goals" section
+    - Reference the relevant ADR if one exists
+  tasks:
+    - Each task must be independently testable
