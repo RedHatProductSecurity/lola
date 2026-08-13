@@ -162,6 +162,11 @@ straight to a PR. Link the relevant issue if one exists.
 for the full set of principles, quality gates, and complexity
 budgets that all contributions must follow.
 
+**PR template**: Every pull request uses
+`.github/PULL_REQUEST_TEMPLATE.md`. It includes a
+`Spec / ADR Reference` field — fill it in when your PR
+implements an architectural decision or spec.
+
 **AI agents**: Start from `AGENTS.md` — it contains a topic
 guide pointing to the right documentation for any task.
 

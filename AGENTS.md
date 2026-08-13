@@ -11,10 +11,10 @@ OpenCode, and more.
 - Commit format: Conventional Commits (feat, fix, docs, chore,
   test, refactor)
 - Line limit: 80 characters — code, markdown, and comments
-- Python: `ruff check src tests` and `basedpyright src` must pass
+- Python: `ruff check src tests` and `uv run ty check` must pass
 - Go: `golangci-lint run` and `go vet ./...` must pass
 - Tests: `pytest` (Python), `go test -race ./...` (Go)
-- Coverage: >80% on changed files
+- Coverage: >80% on changed source files
 - New CLI commands require e2e BDD tests in `e2e/features/`
 - Use `uv` for Python deps, standard Go toolchain for Go code
 - Never commit secrets, API keys, or internal hostnames
@@ -30,7 +30,8 @@ pytest tests/test_cli_mod.py  # Single file
 pytest -k test_add            # Pattern match
 pytest --cov=src/lola         # Coverage
 ruff check src tests          # Linting
-basedpyright src              # Type checking
+uv run ty check               # Type checking (primary)
+uv run mypy src               # Type checking (secondary)
 
 # Go
 go test -race ./...           # All Go tests
@@ -60,6 +61,7 @@ lola install <module> -a claude-code
 | E2E tests | `docs/dev-guide/design/e2e-bdd.md` |
 | CLI reference | `docs/cli-reference/` |
 | Proposing a change | `openspec/changes/` or `specs/` |
+| PR template | `.github/PULL_REQUEST_TEMPLATE.md` |
 
 ## Architecture
 
@@ -83,7 +85,7 @@ lola install <module> -a claude-code
 - `src/lola/cli/market.py` — Marketplace management
 - `src/lola/models.py` — Data models
 - `src/lola/config.py` — Global paths
-- `src/lola/targets.py` — Assistant definitions
+- `src/lola/targets/` — Assistant definitions
 - `src/lola/parsers.py` — Source fetching (strategy pattern)
 
 ### Target Assistants
@@ -94,11 +96,12 @@ lola install <module> -a claude-code
 | cursor | `.cursor/skills/` | `.cursor/commands/` | `.cursor/agents/` |
 | gemini-cli | `GEMINI.md` | `.gemini/commands/` | N/A |
 | opencode | `AGENTS.md` | `.opencode/commands/` | `.opencode/agents/` |
-| copilot | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
+| copilot-cli | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
+| copilot-vscode | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
 
 ### Module Structure
 
-```
+```text
 my-module/
   skills/
     skill-name/

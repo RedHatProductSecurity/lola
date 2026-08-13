@@ -27,8 +27,11 @@
 ## Checklist
 
 - [ ] Tests pass (`pytest` / `go test -race ./...`)
-- [ ] Linting passes (`ruff check src tests` / `golangci-lint`)
-- [ ] Type checking passes (`basedpyright src`)
+- [ ] Linting passes (`ruff check src tests` / `golangci-lint run`)
+- [ ] `go vet ./...` passes (Go changes only, N/A otherwise)
+- [ ] Type checking passes (`uv run ty check`)
+- [ ] Coverage >80% on changed source files (N/A for docs/config)
+- [ ] E2E BDD tests added for new CLI commands (N/A if none)
 - [ ] Commit subjects ≤ 50 chars, body wrapped at 72
 
 ## AI Disclosure

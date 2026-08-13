@@ -27,7 +27,8 @@ Leverage Python 3.13+ features for code quality:
 - Use modern syntax: `list[str]` not `List[str]`
 - Dataclasses for data models
 - Immutable data structures preferred
-- Pass basedpyright type checker in standard mode
+- Pass type checking: `uv run ty check` (primary),
+  `uv run mypy src` (secondary)
 - No `typing.Any` without justification
 
 ### IV. Testing Philosophy (NON-NEGOTIABLE)
@@ -107,7 +108,7 @@ See `docs/adr/spec-driven-development.md` for the full decision.
 - Minimal dependency footprint in both languages
 
 ### File Organization
-```
+```text
 src/lola/                     # Python source
 ├── cli/                      # Command implementations
 ├── targets/                  # Assistant-specific generators
@@ -141,7 +142,7 @@ e2e/features/                 # BDD Gherkin tests
 ## Quality Gates
 
 ### Pre-Commit (Automated)
-- Python: Ruff linting, basedpyright type checking
+- Python: Ruff linting, ty check, mypy
 - Go: golangci-lint, go vet
 - 80-character line limit enforced
 - No trailing whitespace
@@ -149,7 +150,7 @@ e2e/features/                 # BDD Gherkin tests
 
 ### Pre-Merge (Required)
 - All tests pass (`pytest` + `go test -race ./...`)
-- Code coverage >80% for changed files
+- Code coverage >80% for changed source files
 - No new type errors introduced
 - New CLI commands have e2e BDD tests
 - Updated AGENTS.md if dev workflow changes
@@ -164,6 +165,7 @@ e2e/features/                 # BDD Gherkin tests
 - **Test files**: No limit (clarity over brevity)
 
 ### Violations Requiring Justification
+
 | Pattern | When Allowed | Justification Required |
 |---------|--------------|------------------------|
 | Circular imports | Never | Hard error |
@@ -178,13 +180,13 @@ e2e/features/                 # BDD Gherkin tests
 - This constitution supersedes code review preferences
 - All PRs must verify compliance via checklist
 - Violations require justification in PR description
-- Amendments require approval from both maintainers
+- Amendments require approval from at least two maintainers
 
 ### Amendment Process
 1. Propose change with rationale
 2. Discuss impact on existing code
 3. Document migration plan if breaking
-4. Require unanimous maintainer approval
+4. Require approval from at least two maintainers
 5. Update constitution and announce
 
 ### Runtime Guidance
