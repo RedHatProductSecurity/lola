@@ -12,7 +12,9 @@ from .base import (
     BaseAssistantTarget,
     ManagedInstructionsTarget,
     MCPSupportMixin,
+    _convert_env_var_to_cursor_vscode,
     _generate_passthrough_command,
+    _transform_mcp_env_vars,
 )
 
 
@@ -229,8 +231,10 @@ def _transform_mcp_to_vscode(server_config: dict[str, Any]) -> dict[str, Any]:
     VS Code expects an explicit ``type`` field: ``stdio`` for command-based
     servers and ``http``/``sse`` for remote servers. Remote configs already
     carry their ``type``; command-based (stdio) configs do not, so it is added.
+    Env var references are converted from Lola's ``${VAR}`` syntax to VS
+    Code's ``${env:VAR}`` syntax.
     """
-    result = dict(server_config)
+    result = _transform_mcp_env_vars(server_config, _convert_env_var_to_cursor_vscode)
     if "type" not in result:
         result["type"] = "http" if "url" in result else "stdio"
     return result

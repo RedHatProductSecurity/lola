@@ -18,6 +18,8 @@ from lola.targets.base import (
     ManagedInstructionsTarget,
     ManagedSectionTarget,
     MCPSupportMixin,
+    _convert_env_var_to_cursor_vscode,
+    _convert_env_var_to_opencode,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
     _get_content_path,
@@ -25,6 +27,7 @@ from lola.targets.base import (
     _merge_mcps_into_file,
     _remove_mcps_from_file,
     _skill_source_dir,
+    _transform_mcp_env_vars,
 )
 
 # Concrete target implementations
@@ -121,4 +124,7 @@ __all__ = [
     "_generate_agent_with_frontmatter",
     "_merge_mcps_into_file",
     "_remove_mcps_from_file",
+    "_convert_env_var_to_cursor_vscode",
+    "_convert_env_var_to_opencode",
+    "_transform_mcp_env_vars",
 ]
