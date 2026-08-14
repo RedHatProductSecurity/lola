@@ -613,7 +613,7 @@ def _update_mcps(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
         return 0, len(ctx.global_module.mcps)
 
     try:
-        mcps_data = json.loads(mcps_file.read_text())
+        mcps_data = json.loads(mcps_file.read_text(encoding="utf-8-sig"))
         servers = mcps_data.get("mcpServers", {})
     except json.JSONDecodeError:
         return 0, len(ctx.global_module.mcps)

@@ -61,7 +61,10 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         # Copy SKILL.md
         skill_file = source_path / config.SKILL_FILE
         if skill_file.exists():
-            (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+            (skill_dest / "SKILL.md").write_text(
+                skill_file.read_text(encoding="utf-8-sig"),
+                encoding="utf-8",
+            )
 
         # Copy supporting files
         for item in source_path.iterdir():

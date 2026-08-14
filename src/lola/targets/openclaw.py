@@ -70,7 +70,10 @@ class OpenClawTarget(BaseAssistantTarget):
         if not skill_file.exists():
             return False
 
-        (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+        (skill_dest / "SKILL.md").write_text(
+            skill_file.read_text(encoding="utf-8-sig"),
+            encoding="utf-8",
+        )
 
         for item in source_path.iterdir():
             if item.name == "SKILL.md":

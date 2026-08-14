@@ -52,7 +52,7 @@ class GeminiTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTar
             return False
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        content = source_path.read_text()
+        content = source_path.read_text(encoding="utf-8-sig")
         frontmatter, body = fm.parse(content)
         description = frontmatter.get("description", "")
         prompt = _convert_to_gemini_args(body)
@@ -68,7 +68,7 @@ class GeminiTarget(MCPSupportMixin, ManagedInstructionsTarget, ManagedSectionTar
         ]
 
         filename = self.get_command_filename(module_name, cmd_name)
-        (dest_dir / filename).write_text("\n".join(toml_lines))
+        (dest_dir / filename).write_text("\n".join(toml_lines), encoding="utf-8")
         return True
 
     def get_command_filename(self, module_name: str, cmd_name: str) -> str:  # noqa: ARG002

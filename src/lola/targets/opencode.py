@@ -148,7 +148,7 @@ def _merge_mcps_into_opencode_file(
     # Read existing config
     if dest_path.exists():
         try:
-            existing_config = json.loads(dest_path.read_text())
+            existing_config = json.loads(dest_path.read_text(encoding="utf-8-sig"))
         except json.JSONDecodeError:
             existing_config = {}
     else:
@@ -171,7 +171,7 @@ def _merge_mcps_into_opencode_file(
     # Ensure $schema is first by rebuilding dict
     ordered_config: dict[str, Any] = {"$schema": existing_config.pop("$schema")}
     ordered_config.update(existing_config)
-    dest_path.write_text(json.dumps(ordered_config, indent=2) + "\n")
+    dest_path.write_text(json.dumps(ordered_config, indent=2) + "\n", encoding="utf-8")
     return True
 
 
@@ -188,7 +188,7 @@ def _remove_mcps_from_opencode_file(
         return True
 
     try:
-        existing_config = json.loads(dest_path.read_text())
+        existing_config = json.loads(dest_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
         return True
 
@@ -203,7 +203,9 @@ def _remove_mcps_from_opencode_file(
     if not existing_config["mcp"] and remaining_keys == {"mcp"}:
         dest_path.unlink()
     else:
-        dest_path.write_text(json.dumps(existing_config, indent=2) + "\n")
+        dest_path.write_text(
+            json.dumps(existing_config, indent=2) + "\n", encoding="utf-8"
+        )
     return True
 
 
