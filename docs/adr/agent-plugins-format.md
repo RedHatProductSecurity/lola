@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-08-13
-**Last Updated**: 2026-08-13
+**Last Updated**: 2026-08-14
 **Authors**: Lola maintainers
 **Reviewers**: Lola maintainers
 
@@ -26,15 +26,33 @@ module identity. Lola validates the manifest locally without retrieving its
 schema and discovers skills and MCP servers only from their fixed portable
 locations.
 
+Manifest validation follows the v1.0.0 closed schema: the canonical
+`$schema` value is required, unsupported versions are rejected before
+discovery, and unknown top-level fields are reported as warnings then
+ignored. Unknown extension namespaces are ignored without validating their
+contents, as the specification requires.
+
 Lola owns the stable `dev.getlola` extension namespace. Commands, agents, and
 instructions emitted by Lola live under the top-level `dev.getlola/` directory
 and are declared by plugin-relative paths in the manifest extension object.
 
 Lola also reads `commands`, `agents`, and `instructions` path declarations from
-known client namespaces. It ignores unknown namespaces without validation, as
-required by Agent Plugins. When component names collide, later namespaces in
-Lola's compatibility order win, with `dev.getlola` last and therefore
-authoritative.
+known client namespaces. In compatibility order, Lola checks:
+
+1. `com.anthropic.claude`
+2. `com.anthropic.claude-code`
+3. `com.cursor.editor`
+4. `com.github.copilot`
+5. `com.google.gemini-cli`
+6. `com.openai`
+7. `com.openai.codex`
+8. `ai.opencode`
+9. `dev.getlola` (authoritative)
+
+Unknown namespaces are ignored without validation, as required by Agent
+Plugins. When component names collide, later namespaces in this order win,
+so `dev.getlola` is authoritative. This collision precedence is Lola-specific:
+Agent Plugins 1.0 deliberately defines no cross-namespace precedence rules.
 
 `lola mod init` emits the portable package root directly by default, without a
 native `module/` wrapper. The legacy layout remains available via
@@ -57,11 +75,19 @@ native Lola modules retain backward compatibility.
 - Client-specific commands and agents can use Lola's existing target
   translators.
 - Invalid skills and MCP entries fail independently as required by the spec.
+- MCP failures respect two boundaries: an invalid or incompatible root
+  `mcp.json` disables MCP for the entire plugin, while invalid server
+  entries, unsupported transports, and connection failures skip only the
+  affected server.
 
 ### Negative Consequences
 
 - Lola must maintain compatibility mappings for client-owned namespaces.
-- Portable MCP paths and placeholders require normalization at install time.
+- Portable MCP paths and placeholders are never rewritten in the source
+  package. Install and update operations rebase component paths onto the
+  project-local package copy; `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are
+  expanded only when that copy is materialized, and the per-module
+  `PLUGIN_DATA` directory is preserved across plugin updates.
 - `plugin.json.name` can differ from a repository name, so registry directories
   must be aligned after fetching.
 
@@ -85,9 +111,12 @@ native Lola modules retain backward compatibility.
 
 ## Implementation Notes
 
-The adapter lives in `src/lola/agent_plugins.py`. The common `Module` model
-stores explicit component paths and normalized MCP data. Install and update
-operations rebase those paths onto the project-local package copy.
+The adapter lives in `src/lola/agent_plugins.py`. It resolves every component
+path against the resolved plugin root and rejects traversal, symlink, or
+junction escapes before constructing `Module` paths or invoking installation.
+The common `Module` model stores explicit component paths and normalized MCP
+data. Install and update operations rebase those paths onto the project-local
+package copy.
 
 ## References
 
