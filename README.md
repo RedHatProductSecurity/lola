@@ -186,7 +186,8 @@ modules:
 | `lola mod ls` | List registered modules |
 | `lola mod info <name>` | Show module details |
 | `lola mod search <query>` | Search for modules across enabled marketplaces |
-| `lola mod init [name]` | Initialize a new module |
+| `lola mod init [name]` | Initialize an Agent Plugins package |
+| `lola mod init [name] --format lola` | Initialize a legacy Lola module |
 | `lola mod init [name] -c` | Initialize with a command template |
 | `lola mod update [name]` | Update module(s) from source |
 | `lola mod rm <name>` | Remove a module |
@@ -248,18 +249,24 @@ lola mod init my-skills
 cd my-skills
 ```
 
-This creates:
+This creates an Agent Plugins 1.0 package:
 
 ```
 my-skills/
+  plugin.json          # Package manifest
   skills/
     example-skill/
       SKILL.md         # Initial skill (unless --no-skill)
-  commands/            # Created by default
-    example-command.md # (unless --no-command)
-  agents/              # Created by default
-    example-agent.md   # (unless --no-agent)
+  mcp.json             # MCP servers (unless --no-mcps)
+  dev.getlola/         # Lola extension namespace
+    commands/
+      example-command.md # (unless --no-command)
+    agents/
+      example-agent.md   # (unless --no-agent)
+    AGENTS.md            # (unless --no-instructions)
 ```
+
+Use `--format lola` for the legacy `module/` layout.
 
 ### 2. Edit the skill
 

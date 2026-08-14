@@ -10,7 +10,8 @@ Complete command reference for the Lola CLI. Use `lola --help` or `lola <command
 | `lola mod add <source> --ref <ref>`                  | Add from a specific git branch, tag, or SHA    |
 | `lola mod ls`                                        | List registered modules                        |
 | `lola mod info <name>`                               | Show module details                            |
-| `lola mod init [name]`                               | Initialize a new module                        |
+| `lola mod init [name]`                               | Initialize an Agent Plugins package            |
+| `lola mod init [name] --format lola`                 | Initialize a legacy Lola module                |
 | `lola mod update [name]`                             | Update module(s) from source                   |
 | `lola mod rm <name>`                                 | Remove a module                                |
 

@@ -1,5 +1,6 @@
 """Step definitions for filesystem preconditions and assertions."""
 
+import json
 from pathlib import Path
 
 from behave import given, then
@@ -18,6 +19,28 @@ def step_module_full(context, name):
     source_dir.mkdir(exist_ok=True)
     module_path = create_module_full(source_dir, name)
     context.modules[name] = module_path
+
+
+@given('an Agent Plugins package in "{directory}" named "{name}"')
+def step_agent_plugin(context, directory, name):
+    """Create a portable plugin whose directory and manifest names differ."""
+    source_dir = context.tmp_dir / "sources" / directory
+    skill_dir = source_dir / "skills" / "skill1"
+    skill_dir.mkdir(parents=True)
+    (source_dir / "plugin.json").write_text(
+        json.dumps(
+            {
+                "$schema": (
+                    "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+                ),
+                "name": name,
+            }
+        )
+    )
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: skill1\ndescription: Test skill\n---\n"
+    )
+    context.modules[name] = source_dir
 
 
 @given('the module "{name}" is registered')

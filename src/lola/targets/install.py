@@ -337,11 +337,9 @@ def _install_commands(
         )
         return [], []
 
-    content_dirname = _get_content_dirname(module)
-    content_path = _get_content_path(local_module_path, content_dirname)
-    commands_dir = content_path / "commands"
-    for cmd in module.commands:
-        source = commands_dir / f"{cmd}.md"
+    for cmd, source in zip(
+        module.commands, module.get_command_paths_from(local_module_path)
+    ):
         effective_cmd = cmd
 
         dest_file = command_dest / target.get_command_filename(module.name, cmd)
@@ -391,11 +389,9 @@ def _install_agents(
     installed: list[str] = []
     failed: list[str] = []
 
-    content_dirname = _get_content_dirname(module)
-    content_path = _get_content_path(local_module_path, content_dirname)
-    agents_dir = content_path / "agents"
-    for agent in module.agents:
-        source = agents_dir / f"{agent}.md"
+    for agent, source in zip(
+        module.agents, module.get_agent_paths_from(local_module_path)
+    ):
         effective_agent = agent
 
         dest_file = agent_dest / target.get_agent_filename(module.name, agent)
@@ -434,7 +430,6 @@ def _install_instructions(
     scope: str = "project",
 ) -> bool:
     """Install module instructions for a target. Returns True if installed."""
-    from lola.models import INSTRUCTIONS_FILE
 
     if not module.has_instructions:
         return False
@@ -501,9 +496,7 @@ def _install_instructions(
     if not module.has_instructions:
         return False
 
-    content_dirname = _get_content_dirname(module)
-    content_path = _get_content_path(local_module_path, content_dirname)
-    instructions_source = content_path / INSTRUCTIONS_FILE
+    instructions_source = module.get_instructions_path_from(local_module_path)
     if not instructions_source.exists():
         return False
 
@@ -533,6 +526,16 @@ def _install_mcps(
             f"https://github.com/LobsterTrap/lola[/yellow]"
         )
         return [], []
+
+    if module.mcps_data:
+        from lola.agent_plugins import materialize_module_mcps
+
+        servers = materialize_module_mcps(
+            module.mcps_data, local_module_path, module.name, scope, project_path
+        )
+        if target.generate_mcps(servers, mcp_dest, module.name):
+            return list(servers), []
+        return [], list(module.mcps)
 
     # Load mcps.json from local module (respecting module/ subdirectory)
     content_dirname = _get_content_dirname(module)

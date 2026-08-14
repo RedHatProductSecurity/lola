@@ -473,11 +473,10 @@ def _update_commands(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     command_dest = ctx.target.get_command_path(path_context, scope)
     if command_dest is None:
         return 0, 0
-    content_path = _get_content_path(ctx.source_module)
-    commands_dir = content_path / "commands"
-
-    for cmd_name in ctx.global_module.commands:
-        source = commands_dir / f"{cmd_name}.md"
+    for cmd_name, source in zip(
+        ctx.global_module.commands,
+        ctx.global_module.get_command_paths_from(ctx.source_module),
+    ):
         success = ctx.target.generate_command(
             source, command_dest, cmd_name, ctx.inst.module_name
         )
@@ -514,10 +513,10 @@ def _update_agents(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     agents_ok = 0
     agents_failed = 0
 
-    content_path = _get_content_path(ctx.source_module)
-    agents_dir = content_path / "agents"
-    for agent_name in ctx.global_module.agents:
-        source = agents_dir / f"{agent_name}.md"
+    for agent_name, source in zip(
+        ctx.global_module.agents,
+        ctx.global_module.get_agent_paths_from(ctx.source_module),
+    ):
         success = ctx.target.generate_agent(
             source, agent_dest, agent_name, ctx.inst.module_name
         )
@@ -542,7 +541,6 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
 
     Returns True if instructions were successfully installed.
     """
-    from lola.models import INSTRUCTIONS_FILE
 
     path_context = ctx.inst.project_path or ""
     scope = ctx.inst.scope
@@ -573,8 +571,9 @@ def _update_instructions(ctx: UpdateContext, verbose: bool) -> bool:
             console.print("      [green]instructions (appended)[/green]")
         return success
 
-    content_path = _get_content_path(ctx.source_module)
-    instructions_source = content_path / INSTRUCTIONS_FILE
+    instructions_source = ctx.global_module.get_instructions_path_from(
+        ctx.source_module
+    )
     if not instructions_source.exists():
         return False
 
@@ -606,17 +605,28 @@ def _update_mcps(ctx: UpdateContext, verbose: bool) -> tuple[int, int]:
     if not mcp_dest:
         return 0, 0
 
-    # Load mcps.json from source module (respecting module/ subdirectory)
-    content_path = _get_content_path(ctx.source_module)
-    mcps_file = content_path / MCPS_FILE
-    if not mcps_file.exists():
-        return 0, len(ctx.global_module.mcps)
+    if ctx.global_module.mcps_data:
+        from lola.agent_plugins import materialize_module_mcps
 
-    try:
-        mcps_data = json.loads(mcps_file.read_text())
-        servers = mcps_data.get("mcpServers", {})
-    except json.JSONDecodeError:
-        return 0, len(ctx.global_module.mcps)
+        servers = materialize_module_mcps(
+            ctx.global_module.mcps_data,
+            ctx.source_module,
+            ctx.inst.module_name,
+            scope,
+            ctx.inst.project_path,
+        )
+    else:
+        # Load mcps.json from source module (respecting module/ subdirectory)
+        content_path = _get_content_path(ctx.source_module)
+        mcps_file = content_path / MCPS_FILE
+        if not mcps_file.exists():
+            return 0, len(ctx.global_module.mcps)
+
+        try:
+            mcps_data = json.loads(mcps_file.read_text())
+            servers = mcps_data.get("mcpServers", {})
+        except json.JSONDecodeError:
+            return 0, len(ctx.global_module.mcps)
 
     # Generate MCPs
     if ctx.target.generate_mcps(servers, mcp_dest, ctx.inst.module_name):

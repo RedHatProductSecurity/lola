@@ -2,13 +2,41 @@
 
 Lola modules can be a single [Agent Skill](https://agentskills.io/specification) or a full [AI Context Module](../concepts/skills-and-modules.md). An Agent Skill is a standalone `SKILL.md` with optional supporting files. An AI Context Module is a superset - it wraps one or more skills alongside `AGENTS.md`, `commands/`, and `mcps.json` inside a `module/` directory.
 
-## Initialize an AI Context Module
+## Initialize a Module
 
 ```bash
-lola mod init my-module
+lola mod init my-plugin
 ```
 
-This creates the AI Context Module structure:
+By default this emits an Agent Plugins 1.0 package:
+
+```text
+my-plugin/
+  plugin.json
+  skills/
+    example-skill/
+      SKILL.md
+  mcp.json
+  dev.getlola/
+    commands/
+      example-command.md
+    agents/
+      example-agent.md
+    AGENTS.md
+```
+
+The `name` in `plugin.json` is the module identity used by Lola when the
+package is registered. Portable skills and MCP servers stay at the package
+root. Lola-specific commands, agents, and instructions live in Lola's
+`dev.getlola` extension namespace.
+
+## Initialize a Legacy AI Context Module
+
+```bash
+lola mod init my-module --format lola
+```
+
+This creates Lola's legacy AI Context Module structure:
 
 ```
 my-module/
@@ -23,9 +51,6 @@ my-module/
       example-agent.md
     mcps.json           # MCP settings
 ```
-
-!!! note
-    `lola mod init` currently creates only the AI Context Module pattern. Standalone Agent Skill initialization (`lola skill init`) is planned for a future release.
 
 ## Edit the skill
 

@@ -84,3 +84,6 @@ docs/superpowers/
 
 ### SDD — optional contributor tooling (not committed) ###
 .opencode/
+
+### E2E — behave generated output ###
+e2e/features/*.output

@@ -12,6 +12,7 @@ import click
 from rich.console import Console
 from rich.tree import Tree
 
+from lola.agent_plugins import is_agent_plugin
 from lola.cli.completions import complete_module_names
 from lola.config import MCPS_FILE, MODULES_DIR, INSTALLED_FILE
 from lola.exceptions import (
@@ -54,7 +55,10 @@ def load_registered_module(module_path: Path) -> Optional[Module]:
     """
     source_info = load_source_info(module_path)
     content_dirname = source_info.get("content_dirname") if source_info else None
-    return Module.from_path(module_path, content_dirname)
+    try:
+        return Module.from_path(module_path, content_dirname)
+    except LolaError:
+        return None
 
 
 def list_registered_modules() -> list[Module]:
@@ -241,7 +245,8 @@ def add_module(
         raise SystemExit(1)
 
     # Rename if name override provided
-    if module_name and module_path.name != module_name:
+    is_plugin = is_agent_plugin(module_path)
+    if module_name and module_path.name != module_name and not is_plugin:
         # Validate the provided module name to prevent directory traversal
         try:
             module_name = validate_module_name(module_name)
@@ -258,7 +263,10 @@ def add_module(
         module_path = new_path
 
     # Validate module structure
-    module = Module.from_path(module_path, module_content_dirname)
+    try:
+        module = Module.from_path(module_path, module_content_dirname)
+    except LolaError as error:
+        handle_lola_error(error)
     if not module:
         error_msg = "[yellow]No skills or commands found[/yellow]"
         if module_content_dirname:
@@ -270,6 +278,35 @@ def add_module(
             "[dim]Add skill folders with SKILL.md or commands/*.md files[/dim]"
         )
         return
+
+    # Agent Plugins declare their identity in plugin.json. Align the registry
+    # directory unless the user explicitly selected an identity with --name.
+    if is_plugin and module_name and module_name != module.name:
+        shutil.rmtree(module.path)
+        handle_lola_error(
+            ModuleNameError(
+                module_name,
+                "Agent Plugins use plugin.json.name as their identity",
+            )
+        )
+    if is_plugin and module.path.name != module.name:
+        new_path = MODULES_DIR / validate_module_name(module.name)
+        if new_path.exists():
+            console.print()
+            console.print(f"[yellow]Module '{module.name}' already exists.[/yellow]")
+            if not click.confirm("Overwrite existing module?", default=False):
+                shutil.rmtree(module.path)
+                console.print("[yellow]Cancelled[/yellow]")
+                return
+            shutil.rmtree(new_path)
+        module.path.rename(new_path)
+        module_path = new_path
+        module = Module.from_path(module_path, module_content_dirname)
+        if module is None:
+            raise SystemExit(1)
+
+    for warning in module.format_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
 
     is_valid, errors = module.validate()
     if not is_valid:
@@ -338,6 +375,14 @@ def add_module(
 @click.option(
     "--minimal", is_flag=True, help="Create only empty directories, no example content"
 )
+@click.option(
+    "--format",
+    "format_name",
+    type=click.Choice(["agent-plugins", "lola"]),
+    default="agent-plugins",
+    show_default=True,
+    help="Package format to create",
+)
 @click.option("--force", is_flag=True, help="Overwrite existing directory")
 def init_module(
     name: str | None,
@@ -350,32 +395,64 @@ def init_module(
     no_mcps: bool,
     no_instructions: bool,
     minimal: bool,
+    format_name: str,
     force: bool,
 ):
     """
-    Initialize a new lola module.
+    Initialize a new module.
 
-    Creates a module folder structure with a module/ subdirectory containing
-    skills, commands, agents, mcps.json, and AGENTS.md. A README.md is created
-    at the repository root.
+    By default, creates an Agent Plugins 1.0 package: plugin.json, portable
+    skills/ and mcp.json at the root, plus Lola's commands, agents, and
+    AGENTS.md under the dev.getlola/ extension namespace. Use --format lola
+    for the legacy layout with a module/ subdirectory.
 
-    By default, creates example content in the module/ directory. Use --minimal
-    to create only empty directories, or use --no-skill, --no-command, --no-agent,
-    --no-mcps, or --no-instructions to skip specific components.
+    By default, creates example content. Use --minimal to create only empty
+    directories, or use --no-skill, --no-command, --no-agent, --no-mcps, or
+    --no-instructions to skip specific components.
 
     \b
     Examples:
         lola mod init                           # Use current folder name
         lola mod init my-skills                 # Create my-skills/ subdirectory
+        lola mod init --format lola             # Legacy module/ layout
         lola mod init --minimal                 # Empty structure, no example content
         lola mod init --force                   # Overwrite existing directory
         lola mod init -s code-review            # Custom skill name
         lola mod init --no-skill                # Skip initial skill
         lola mod init -c review-pr              # Custom command name
         lola mod init -g my-agent               # Custom agent name
-        lola mod init --no-mcps                 # Skip creating mcps.json
+        lola mod init --no-mcps                 # Skip creating mcp.json
         lola mod init --no-instructions         # Skip creating AGENTS.md
     """
+    if format_name == "agent-plugins":
+        from lola.agent_plugin_scaffold import (
+            ScaffoldOptions,
+            plugin_name_from_directory,
+            scaffold_agent_plugin,
+        )
+
+        repo_dir = Path.cwd() / name if name else Path.cwd()
+        module_name = name or plugin_name_from_directory(repo_dir.name)
+        if name and repo_dir.exists():
+            if force:
+                shutil.rmtree(repo_dir)
+            else:
+                handle_lola_error(PathExistsError(repo_dir, "Directory"))
+        options = ScaffoldOptions(
+            skill_name=None if minimal or no_skill else skill_name,
+            command_name=None if minimal or no_command else command_name,
+            agent_name=None if minimal or no_agent else agent_name,
+            include_mcps=not (minimal or no_mcps),
+            include_instructions=not (minimal or no_instructions),
+        )
+        try:
+            scaffold_agent_plugin(repo_dir, module_name, options)
+        except LolaError as error:
+            handle_lola_error(error)
+        console.print(f"[green]Initialized module {module_name}[/green]")
+        console.print(f"  [dim]Path:[/dim] {repo_dir}")
+        return
+
     if name:
         # Create a new subdirectory
         repo_dir = Path.cwd() / name
@@ -946,7 +1023,10 @@ def module_info(module_name_or_path: str | None):
         if not module_path.is_dir():
             console.print(f"[red]Not a directory: {module_name_or_path}[/red]")
             raise SystemExit(1)
-        module = Module.from_path(module_path)
+        try:
+            module = Module.from_path(module_path)
+        except LolaError as error:
+            handle_lola_error(error)
     else:
         # Treat as a registered module name (load with content_dirname)
         module_path = MODULES_DIR / module_name_or_path
@@ -1033,8 +1113,8 @@ def module_info(module_name_or_path: str | None):
         from lola.config import MCPS_FILE
 
         mcps_file = module.path / MCPS_FILE
-        mcps_data = {}
-        if mcps_file.exists():
+        mcps_data = dict(module.mcps_data)
+        if not mcps_data and mcps_file.exists():
             try:
                 mcps_data = json.loads(mcps_file.read_text()).get("mcpServers", {})
             except (json.JSONDecodeError, OSError):
@@ -1044,7 +1124,8 @@ def module_info(module_name_or_path: str | None):
             console.print(f"  [green]{mcp_name}[/green]")
             mcp_info = mcps_data.get(mcp_name, {})
             cmd = mcp_info.get("command", "")
-            args = mcp_info.get("args", [])
+            raw_args = mcp_info.get("args", [])
+            args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
             if cmd:
                 cmd_str = f"{cmd} {' '.join(args[:2])}"
                 if len(args) > 2:

@@ -1,10 +1,26 @@
 """Tests for the mod CLI commands."""
 
+import json
 import shutil
 from unittest.mock import patch
 
 
+from lola.agent_plugins import PLUGIN_SCHEMA
 from lola.cli.mod import mod, list_registered_modules
+
+
+def _plugin_source(tmp_path, dirname, name):
+    """Create an Agent Plugins source folder with one skill."""
+    source = tmp_path / dirname
+    skill = source / "skills" / "review"
+    skill.mkdir(parents=True)
+    (source / "plugin.json").write_text(
+        json.dumps({"$schema": PLUGIN_SCHEMA, "name": name})
+    )
+    (skill / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Review code\n---\n"
+    )
+    return source
 
 
 class TestModGroup:
@@ -21,6 +37,76 @@ class TestModGroup:
         result = cli_runner.invoke(mod, [])
         # Click groups with no args show usage/help
         assert "Manage lola modules" in result.output or "Usage" in result.output
+
+
+class TestAgentPluginInit:
+    """Tests for Agent Plugins scaffolding."""
+
+    def test_init_defaults_to_agent_plugins(self, cli_runner, tmp_path, monkeypatch):
+        """Bare init creates the portable core and Lola extension namespace."""
+        monkeypatch.chdir(tmp_path)
+
+        result = cli_runner.invoke(mod, ["init", "my-plugin"])
+
+        assert result.exit_code == 0
+        root = tmp_path / "my-plugin"
+        manifest = json.loads((root / "plugin.json").read_text())
+        mcps = json.loads((root / "mcp.json").read_text())
+        assert manifest["name"] == "my-plugin"
+        assert "dev.getlola" in manifest["extensions"]
+        assert mcps["$schema"].endswith("/1.0.0/mcp.schema.json")
+        assert (root / "skills" / "example-skill" / "SKILL.md").exists()
+        assert (root / "dev.getlola" / "commands" / "example-command.md").exists()
+        assert (root / "dev.getlola" / "agents" / "example-agent.md").exists()
+        assert (root / "dev.getlola" / "AGENTS.md").exists()
+        assert not (root / "module").exists()
+
+    def test_init_agent_plugin_existing_dir_needs_force(
+        self, cli_runner, tmp_path, monkeypatch
+    ):
+        """An existing directory errors unless --force is given."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "my-plugin").mkdir()
+
+        result = cli_runner.invoke(
+            mod, ["init", "my-plugin", "--format", "agent-plugins"]
+        )
+        assert result.exit_code == 1
+        assert "already exists" in result.output
+
+        result = cli_runner.invoke(
+            mod,
+            ["init", "my-plugin", "--format", "agent-plugins", "--force"],
+        )
+        assert result.exit_code == 0
+        assert (tmp_path / "my-plugin" / "plugin.json").exists()
+
+    def test_init_agent_plugin_rerun_in_cwd(self, cli_runner, tmp_path, monkeypatch):
+        """Re-running init inside the package directory succeeds."""
+        plugin_dir = tmp_path / "my-plugin"
+        plugin_dir.mkdir()
+        monkeypatch.chdir(plugin_dir)
+
+        first = cli_runner.invoke(mod, ["init", "--format", "agent-plugins"])
+        second = cli_runner.invoke(mod, ["init", "--format", "agent-plugins"])
+
+        assert first.exit_code == 0
+        assert second.exit_code == 0
+        assert (plugin_dir / "plugin.json").exists()
+
+    def test_init_agent_plugin_rejects_invalid_name(
+        self, cli_runner, tmp_path, monkeypatch
+    ):
+        """Plugin scaffolds enforce the v1 manifest name constraints."""
+        monkeypatch.chdir(tmp_path)
+
+        result = cli_runner.invoke(
+            mod,
+            ["init", "Bad_Name", "--format", "agent-plugins"],
+        )
+
+        assert result.exit_code == 1
+        assert "invalid Agent Plugins name" in result.output
 
 
 class TestModAdd:
@@ -47,6 +133,95 @@ class TestModAdd:
         assert result.exit_code == 0
         assert "Added" in result.output
         assert (modules_dir / "sample-module").exists()
+
+    def test_add_agent_plugin_uses_manifest_name(self, cli_runner, tmp_path):
+        """Register Agent Plugins by plugin.json.name, not source dirname."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["add", str(source)])
+
+        assert result.exit_code == 0
+        assert "Added manifest-name" in result.output
+        assert (modules_dir / "manifest-name").exists()
+        assert not (modules_dir / "repository-name").exists()
+
+    def test_add_agent_plugin_rejects_name_override(self, cli_runner, tmp_path):
+        """Do not override the identity declared by plugin.json.name."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(
+                mod,
+                ["add", str(source), "--name", "override"],
+            )
+
+        assert result.exit_code == 1
+        assert "plugin.json.name" in result.output
+
+    def test_add_agent_plugin_conflict_declined(self, cli_runner, tmp_path):
+        """Declining the manifest-name conflict keeps the existing module."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        existing = modules_dir / "manifest-name"
+        existing.mkdir(parents=True)
+        (existing / "keep.txt").write_text("original")
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["add", str(source)], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        assert (existing / "keep.txt").exists()
+        assert not (modules_dir / "repository-name").exists()
+
+    def test_add_agent_plugin_conflict_overwrites(self, cli_runner, tmp_path):
+        """Accepting the manifest-name conflict replaces the module."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        existing = modules_dir / "manifest-name"
+        existing.mkdir(parents=True)
+        (existing / "keep.txt").write_text("original")
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["add", str(source)], input="y\n")
+
+        assert result.exit_code == 0
+        assert "Added manifest-name" in result.output
+        assert (modules_dir / "manifest-name" / "plugin.json").exists()
+        assert not (existing / "keep.txt").exists()
+
+    def test_add_agent_plugin_invalid_manifest_errors(self, cli_runner, tmp_path):
+        """A broken plugin.json fails cleanly instead of crashing."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+        (source / "plugin.json").write_text(json.dumps({"name": "manifest-name"}))
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["add", str(source)])
+
+        assert result.exit_code == 1
+        assert "$schema" in result.output
 
     def test_add_with_name_override(self, cli_runner, sample_module, tmp_path):
         """Add module with custom name."""
@@ -219,6 +394,25 @@ class TestModList:
         assert result.exit_code == 0
         assert "sample-module" in result.output
 
+    def test_ls_skips_broken_plugin(self, cli_runner, sample_module, tmp_path):
+        """A registered module with a broken manifest is skipped, not fatal."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        shutil.copytree(sample_module, modules_dir / "sample-module")
+        broken = modules_dir / "broken-plugin"
+        broken.mkdir()
+        (broken / "plugin.json").write_text("{not json")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["ls"])
+
+        assert result.exit_code == 0
+        assert "sample-module" in result.output
+        assert "broken-plugin" not in result.output
+
 
 class TestModRemove:
     """Tests for mod rm command."""
@@ -365,7 +559,7 @@ class TestModInit:
         """Show init help."""
         result = cli_runner.invoke(mod, ["init", "--help"])
         assert result.exit_code == 0
-        assert "Initialize a new lola module" in result.output
+        assert "Initialize a new module" in result.output
 
     def test_init_current_dir(self, cli_runner, tmp_path):
         """Initialize module in current directory."""
@@ -375,7 +569,7 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init"])
+            result = cli_runner.invoke(mod, ["init", "--format", "lola"])
 
             assert result.exit_code == 0
             assert "Initialized module" in result.output
@@ -396,7 +590,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "my-new-module"])
+            result = cli_runner.invoke(
+                mod, ["init", "my-new-module", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             assert "my-new-module" in result.output
@@ -430,7 +626,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod", "--no-skill"])
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "--no-skill", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             # Module directory should exist
@@ -458,7 +656,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod", "-s", "custom-skill"])
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "-s", "custom-skill", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             assert (
@@ -475,7 +675,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod", "-c", "my-cmd"])
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "-c", "my-cmd", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             assert (tmp_path / "mymod" / "module" / "commands" / "my-cmd.md").exists()
@@ -491,7 +693,7 @@ class TestModInit:
         try:
             os.chdir(tmp_path)
             (tmp_path / "existing").mkdir()
-            result = cli_runner.invoke(mod, ["init", "existing"])
+            result = cli_runner.invoke(mod, ["init", "existing", "--format", "lola"])
 
             assert result.exit_code == 1
             assert "already exists" in result.output
@@ -510,7 +712,7 @@ class TestModInit:
             (tmp_path / "module").mkdir()
             (tmp_path / "module" / "skills").mkdir()
             (tmp_path / "module" / "skills" / "example-skill").mkdir()
-            result = cli_runner.invoke(mod, ["init"])
+            result = cli_runner.invoke(mod, ["init", "--format", "lola"])
 
             # Command should succeed but warn about skipping existing skill
             assert result.exit_code == 0
@@ -528,7 +730,7 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod"])
+            result = cli_runner.invoke(mod, ["init", "mymod", "--format", "lola"])
 
             assert result.exit_code == 0
             mcps_file = tmp_path / "mymod" / "module" / MCPS_FILE
@@ -549,7 +751,7 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod"])
+            result = cli_runner.invoke(mod, ["init", "mymod", "--format", "lola"])
 
             assert result.exit_code == 0
             agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
@@ -572,7 +774,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod", "--no-mcps"])
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "--no-mcps", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             mcps_file = tmp_path / "mymod" / "module" / MCPS_FILE
@@ -588,7 +792,9 @@ class TestModInit:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "mymod", "--no-instructions"])
+            result = cli_runner.invoke(
+                mod, ["init", "mymod", "--no-instructions", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             agents_file = tmp_path / "mymod" / "module" / "AGENTS.md"
@@ -607,7 +813,8 @@ class TestModInit:
         try:
             os.chdir(tmp_path)
             result = cli_runner.invoke(
-                mod, ["init", "mymod", "--no-mcps", "--no-instructions"]
+                mod,
+                ["init", "mymod", "--no-mcps", "--no-instructions", "--format", "lola"],
             )
 
             assert result.exit_code == 0
@@ -635,6 +842,8 @@ class TestModInit:
                 [
                     "init",
                     "mymod",
+                    "--format",
+                    "lola",
                     "--no-skill",
                     "--no-command",
                     "--no-agent",
@@ -666,7 +875,18 @@ class TestModInit:
             os.chdir(tmp_path)
             result = cli_runner.invoke(
                 mod,
-                ["init", "mymod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"],
+                [
+                    "init",
+                    "mymod",
+                    "-s",
+                    "my-skill",
+                    "-c",
+                    "my-cmd",
+                    "-g",
+                    "my-agent",
+                    "--format",
+                    "lola",
+                ],
             )
 
             assert result.exit_code == 0
@@ -1097,7 +1317,7 @@ class TestModInitModuleSubdir:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "my-module"])
+            result = cli_runner.invoke(mod, ["init", "my-module", "--format", "lola"])
 
             assert result.exit_code == 0
             assert "Initialized module" in result.output
@@ -1130,7 +1350,7 @@ class TestModInitModuleSubdir:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "my-module"])
+            result = cli_runner.invoke(mod, ["init", "my-module", "--format", "lola"])
 
             assert result.exit_code == 0
             # README.md at repo root
@@ -1152,7 +1372,7 @@ class TestModInitModuleSubdir:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "my-module"])
+            result = cli_runner.invoke(mod, ["init", "my-module", "--format", "lola"])
 
             assert result.exit_code == 0
             # Check README.md has markers
@@ -1203,7 +1423,7 @@ class TestModInitModuleSubdir:
 
         try:
             os.chdir(named_dir)
-            result = cli_runner.invoke(mod, ["init"])
+            result = cli_runner.invoke(mod, ["init", "--format", "lola"])
 
             assert result.exit_code == 0
             assert "my-project" in result.output
@@ -1227,7 +1447,18 @@ class TestModInitModuleSubdir:
             os.chdir(tmp_path)
             result = cli_runner.invoke(
                 mod,
-                ["init", "my-mod", "-s", "my-skill", "-c", "my-cmd", "-g", "my-agent"],
+                [
+                    "init",
+                    "my-mod",
+                    "-s",
+                    "my-skill",
+                    "-c",
+                    "my-cmd",
+                    "-g",
+                    "my-agent",
+                    "--format",
+                    "lola",
+                ],
             )
 
             assert result.exit_code == 0
@@ -1246,7 +1477,9 @@ class TestModInitModuleSubdir:
 
         try:
             os.chdir(tmp_path)
-            result = cli_runner.invoke(mod, ["init", "my-module", "--minimal"])
+            result = cli_runner.invoke(
+                mod, ["init", "my-module", "--minimal", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             # Empty directories exist
@@ -1284,7 +1517,9 @@ class TestModInitModuleSubdir:
             existing.mkdir()
             (existing / "old-file.txt").write_text("old content")
 
-            result = cli_runner.invoke(mod, ["init", "my-module", "--force"])
+            result = cli_runner.invoke(
+                mod, ["init", "my-module", "--force", "--format", "lola"]
+            )
 
             assert result.exit_code == 0
             # New structure created
@@ -1306,7 +1541,7 @@ class TestModInitModuleSubdir:
             # Create existing directory
             (tmp_path / "existing").mkdir()
 
-            result = cli_runner.invoke(mod, ["init", "existing"])
+            result = cli_runner.invoke(mod, ["init", "existing", "--format", "lola"])
 
             assert result.exit_code == 1
             assert "already exists" in result.output

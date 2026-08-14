@@ -143,6 +143,11 @@ class Module:
     commands: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
     mcps: list[str] = field(default_factory=list)
+    command_paths: dict[str, Path] = field(default_factory=dict)
+    agent_paths: dict[str, Path] = field(default_factory=dict)
+    instructions_path: Path | None = None
+    mcps_data: dict[str, dict[str, object]] = field(default_factory=dict)
+    format_warnings: list[str] = field(default_factory=list)
     has_instructions: bool = False
     uses_module_subdir: bool = False  # True if content is in module/ subdirectory
     is_single_skill: bool = (
@@ -174,6 +179,36 @@ class Module:
         """
         if not module_path.exists() or not module_path.is_dir():
             return None
+
+        from lola.agent_plugins import is_agent_plugin, load_agent_plugin
+
+        if content_dirname in (None, "/") and is_agent_plugin(module_path):
+            plugin = load_agent_plugin(module_path)
+            # Same emptiness rule as the native path below: a package with
+            # nothing installable is not a module.
+            if not (
+                plugin.skills
+                or plugin.command_paths
+                or plugin.agent_paths
+                or plugin.mcps_data
+                or plugin.instructions_path
+            ):
+                return None
+            return cls(
+                name=plugin.name,
+                path=module_path,
+                content_path=module_path,
+                skills=plugin.skills,
+                commands=plugin.commands,
+                agents=plugin.agents,
+                mcps=plugin.mcps,
+                command_paths=plugin.command_paths,
+                agent_paths=plugin.agent_paths,
+                instructions_path=plugin.instructions_path,
+                mcps_data=plugin.mcps_data,
+                format_warnings=plugin.warnings,
+                has_instructions=plugin.instructions_path is not None,
+            )
 
         content_path, uses_module_subdir = cls._resolve_content_path(
             module_path, content_dirname
@@ -330,13 +365,35 @@ class Module:
 
     def get_command_paths(self) -> list[Path]:
         """Get the full paths to all commands in this module."""
+        if self.command_paths:
+            return [self.command_paths[name] for name in self.commands]
         commands_dir = self.content_path / "commands"
         return [commands_dir / f"{cmd}.md" for cmd in self.commands]
 
+    def get_command_paths_from(self, module_path: Path) -> list[Path]:
+        """Get command paths rebased onto another copy of the module."""
+        return [
+            module_path / path.relative_to(self.path)
+            for path in self.get_command_paths()
+        ]
+
     def get_agent_paths(self) -> list[Path]:
         """Get the full paths to all agents in this module."""
+        if self.agent_paths:
+            return [self.agent_paths[name] for name in self.agents]
         agents_dir = self.content_path / "agents"
         return [agents_dir / f"{agent}.md" for agent in self.agents]
+
+    def get_agent_paths_from(self, module_path: Path) -> list[Path]:
+        """Get agent paths rebased onto another copy of the module."""
+        return [
+            module_path / path.relative_to(self.path) for path in self.get_agent_paths()
+        ]
+
+    def get_instructions_path_from(self, module_path: Path) -> Path:
+        """Get the instructions path rebased onto another module copy."""
+        source = self.instructions_path or self.content_path / INSTRUCTIONS_FILE
+        return module_path / source.relative_to(self.path)
 
     def validate(self) -> tuple[bool, list[str]]:
         """
@@ -360,9 +417,7 @@ class Module:
                     errors.append(f"{skill_name}/{SKILL_FILE}: {err}")
 
         # Check each command exists and has valid frontmatter
-        commands_dir = self.content_path / "commands"
-        for cmd_name in self.commands:
-            cmd_path = commands_dir / f"{cmd_name}.md"
+        for cmd_name, cmd_path in zip(self.commands, self.get_command_paths()):
             if not cmd_path.exists():
                 errors.append(f"Command file not found: commands/{cmd_name}.md")
             else:
@@ -371,9 +426,7 @@ class Module:
                     errors.append(f"commands/{cmd_name}.md: {err}")
 
         # Check each agent exists and has valid frontmatter
-        agents_dir = self.content_path / "agents"
-        for agent_name in self.agents:
-            agent_path = agents_dir / f"{agent_name}.md"
+        for agent_name, agent_path in zip(self.agents, self.get_agent_paths()):
             if not agent_path.exists():
                 errors.append(f"Agent file not found: agents/{agent_name}.md")
             else:
@@ -382,7 +435,7 @@ class Module:
                     errors.append(f"agents/{agent_name}.md: {err}")
 
         # Check mcps.json if module has MCPs
-        if self.mcps:
+        if self.mcps and not self.mcps_data:
             mcps_file = self.content_path / MCPS_FILE
             if not mcps_file.exists():
                 errors.append(f"MCP file not found: {MCPS_FILE}")
