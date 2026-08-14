@@ -58,6 +58,42 @@ def test_loads_portable_core_and_manifest_name(tmp_path: Path) -> None:
     assert plugin.mcps == ["reviewer"]
 
 
+def test_module_loads_plugin_from_content_dirname(tmp_path: Path) -> None:
+    """A plugin selected by content_dirname uses the plugin adapter."""
+    nested = tmp_path / "packages" / "plugin"
+    nested.mkdir(parents=True)
+    _write_manifest(nested)
+    _write_skill(nested, "review")
+
+    module = Module.from_path(tmp_path, content_dirname="packages/plugin")
+
+    assert module is not None
+    assert module.name == "portable-plugin"
+    assert module.content_path == nested
+
+
+def test_loopback_http_mcp_url_is_allowed(tmp_path: Path) -> None:
+    """Plain HTTP is portable only for loopback hosts."""
+    _write_manifest(tmp_path)
+    (tmp_path / "mcp.json").write_text(
+        json.dumps(
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "local": {
+                        "type": "streamable-http",
+                        "url": "http://127.0.0.1:8080/mcp",
+                    }
+                },
+            }
+        )
+    )
+
+    plugin = load_agent_plugin(tmp_path)
+
+    assert plugin.mcps == ["local"]
+
+
 def test_module_reads_lola_namespace(tmp_path: Path) -> None:
     """Lola extensions provide non-portable commands and agents."""
     _write_manifest(
@@ -356,6 +392,69 @@ def test_extension_path_validation_and_conventional_directory(
                 },
             },
             "cannot contain placeholders",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {"type": "stdio", "command": "/tmp/server"},
+                },
+            },
+            "bare name or a ./ plugin path",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {"type": "stdio", "command": "bin/server"},
+                },
+            },
+            "bare name or a ./ plugin path",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {
+                        "type": "streamable-http",
+                        "url": "http://example.com/mcp",
+                    }
+                },
+            },
+            "https for non-loopback hosts",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {
+                        "type": "sse",
+                        "url": "https://user:pw@example.com/mcp",
+                    }
+                },
+            },
+            "userinfo or a fragment",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {
+                        "type": "sse",
+                        "url": "https://example.com/mcp#frag",
+                    }
+                },
+            },
+            "userinfo or a fragment",
+        ),
+        (
+            {
+                "$schema": MCP_SCHEMA,
+                "mcpServers": {
+                    "bad": {"type": "sse", "url": "https:///mcp"},
+                },
+            },
+            "absolute http or https URL",
         ),
     ],
 )

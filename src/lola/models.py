@@ -182,8 +182,22 @@ class Module:
 
         from lola.agent_plugins import is_agent_plugin, load_agent_plugin
 
-        if content_dirname in (None, "/") and is_agent_plugin(module_path):
-            plugin = load_agent_plugin(module_path)
+        content_path, uses_module_subdir = cls._resolve_content_path(
+            module_path, content_dirname
+        )
+
+        if content_path is None:
+            return None
+
+        # A plugin package can sit at the module root or in the
+        # subdirectory selected by a marketplace path / --module-content.
+        plugin_root = (
+            module_path
+            if content_dirname is None and is_agent_plugin(module_path)
+            else content_path
+        )
+        if is_agent_plugin(plugin_root):
+            plugin = load_agent_plugin(plugin_root)
             # Same emptiness rule as the native path below: a package with
             # nothing installable is not a module.
             if not (
@@ -197,7 +211,7 @@ class Module:
             return cls(
                 name=plugin.name,
                 path=module_path,
-                content_path=module_path,
+                content_path=plugin_root,
                 skills=plugin.skills,
                 commands=plugin.commands,
                 agents=plugin.agents,
@@ -209,13 +223,6 @@ class Module:
                 format_warnings=plugin.warnings,
                 has_instructions=plugin.instructions_path is not None,
             )
-
-        content_path, uses_module_subdir = cls._resolve_content_path(
-            module_path, content_dirname
-        )
-
-        if content_path is None:
-            return None
 
         skills = []
         is_single_skill = False

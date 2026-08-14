@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import ipaddress
 import json
 from pathlib import Path
 import re
@@ -407,8 +408,12 @@ def _validate_stdio_server(root: Path, config: dict[object, object]) -> str | No
         or any(char.isspace() for char in command)
     ):
         return "command must be one executable token"
-    if command.startswith("./") and not _valid_package_path(root, command):
-        return "command is outside plugin root"
+    if command.startswith("./"):
+        if not _valid_package_path(root, command):
+            return "command is outside plugin root"
+    elif "/" in command or "\\" in command:
+        # v1 allows a bare executable name or a plugin-relative ./ path only.
+        return "command must be a bare name or a ./ plugin path"
     args = config.get("args", [])
     if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
         return "args must be an array of strings"
@@ -429,12 +434,9 @@ def _validate_stdio_server(root: Path, config: dict[object, object]) -> str | No
 def _validate_remote_server(config: dict[object, object]) -> str | None:
     if set(config) - {"type", "url", "headers"}:
         return "unknown field"
-    url = config.get("url")
-    if not isinstance(url, str) or urlparse(url).scheme not in {
-        "http",
-        "https",
-    }:
-        return "url must use http or https"
+    url_error = _validate_remote_url(config.get("url"))
+    if url_error:
+        return url_error
     headers = config.get("headers", {})
     if not isinstance(headers, dict) or any(
         not isinstance(key, str) or not isinstance(value, str)
@@ -445,6 +447,28 @@ def _validate_remote_server(config: dict[object, object]) -> str | None:
     if any("${" in value for value in typed_headers.values()):
         return "headers cannot contain placeholders"
     return None
+
+
+def _validate_remote_url(url: object) -> str | None:
+    if not isinstance(url, str):
+        return "url must use http or https"
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return "url must be an absolute http or https URL"
+    if parsed.username or parsed.password or parsed.fragment:
+        return "url cannot contain userinfo or a fragment"
+    if parsed.scheme == "http" and not _is_loopback(parsed.hostname):
+        return "url must use https for non-loopback hosts"
+    return None
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _valid_cwd(root: Path, value: str) -> bool:
