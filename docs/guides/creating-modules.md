@@ -1,6 +1,16 @@
 # Creating Modules
 
-Lola modules can be a single [Agent Skill](https://agentskills.io/specification) or a full [AI Context Module](../concepts/skills-and-modules.md). An Agent Skill is a standalone `SKILL.md` with optional supporting files. An AI Context Module is a superset - it wraps one or more skills alongside `AGENTS.md`, `commands/`, and `mcps.json` inside a `module/` directory.
+A Lola module can be an [Agent Plugins 1.0](https://agent-plugins.org/specification)
+package, a single [Agent Skill](https://agentskills.io/specification), or a
+legacy [AI Context Module](../concepts/skills-and-modules.md).
+
+An Agent Plugins package is the default `lola mod init` layout: a
+`plugin.json` manifest with portable `skills/` and `mcp.json` at the root,
+plus Lola's commands, agents, and instructions under the `dev.getlola`
+extension namespace. An Agent Skill is a standalone `SKILL.md` with optional
+supporting files. An AI Context Module is Lola's legacy layout - it wraps one
+or more skills alongside `AGENTS.md`, `commands/`, and `mcps.json` inside a
+`module/` directory, and now requires `lola mod init --format lola`.
 
 ## Initialize a Module
 

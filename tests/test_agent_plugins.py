@@ -72,6 +72,31 @@ def test_module_loads_plugin_from_content_dirname(tmp_path: Path) -> None:
     assert module.content_path == nested
 
 
+def test_skips_hidden_skill_directories(tmp_path: Path) -> None:
+    """Dot-prefixed directories are not skills, matching the legacy loader."""
+    _write_manifest(tmp_path)
+    _write_skill(tmp_path, "review")
+    _write_skill(tmp_path, ".cache")
+
+    plugin = load_agent_plugin(tmp_path)
+
+    assert plugin.skills == ["review"]
+
+
+def test_empty_instructions_file_is_not_instructions(tmp_path: Path) -> None:
+    """A zero-byte AGENTS.md must not install an empty block."""
+    _write_manifest(tmp_path)
+    _write_skill(tmp_path, "review")
+    extension = tmp_path / "dev.getlola"
+    extension.mkdir()
+    (extension / "AGENTS.md").write_text("")
+
+    module = Module.from_path(tmp_path)
+
+    assert module is not None
+    assert module.has_instructions is False
+
+
 def test_loopback_http_mcp_url_is_allowed(tmp_path: Path) -> None:
     """Plain HTTP is portable only for loopback hosts."""
     _write_manifest(tmp_path)
@@ -207,18 +232,20 @@ def test_ignores_unknown_manifest_fields_with_warning(tmp_path: Path) -> None:
 
 def test_rejects_extension_path_outside_plugin(tmp_path: Path) -> None:
     """Extension paths cannot escape the plugin root through symlinks."""
-    outside = tmp_path.parent / "outside-commands"
+    root = tmp_path / "plugin"
+    root.mkdir()
+    outside = tmp_path / "outside-commands"
     outside.mkdir()
     (outside / "bad.md").write_text("# Bad")
-    (tmp_path / "escape").symlink_to(outside, target_is_directory=True)
+    (root / "escape").symlink_to(outside, target_is_directory=True)
     _write_manifest(
-        tmp_path,
+        root,
         extensions={
             "dev.getlola": {"commands": "./escape"},
         },
     )
 
-    plugin = load_agent_plugin(tmp_path)
+    plugin = load_agent_plugin(root)
 
     assert plugin.commands == []
     assert "outside plugin root" in plugin.warnings[0]

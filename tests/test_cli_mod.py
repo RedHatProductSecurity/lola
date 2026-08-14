@@ -180,6 +180,7 @@ class TestModAdd:
         with (
             patch("lola.cli.mod.MODULES_DIR", modules_dir),
             patch("lola.cli.mod.ensure_lola_dirs"),
+            patch("lola.cli.mod.is_interactive", return_value=True),
         ):
             result = cli_runner.invoke(mod, ["add", str(source)], input="n\n")
 
@@ -199,6 +200,7 @@ class TestModAdd:
         with (
             patch("lola.cli.mod.MODULES_DIR", modules_dir),
             patch("lola.cli.mod.ensure_lola_dirs"),
+            patch("lola.cli.mod.is_interactive", return_value=True),
         ):
             result = cli_runner.invoke(mod, ["add", str(source)], input="y\n")
 
@@ -222,6 +224,27 @@ class TestModAdd:
 
         assert result.exit_code == 1
         assert "$schema" in result.output
+        assert not (modules_dir / "repository-name").exists()
+
+    def test_add_agent_plugin_conflict_non_interactive(self, cli_runner, tmp_path):
+        """The overwrite prompt is not reachable without a TTY."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        existing = modules_dir / "manifest-name"
+        existing.mkdir(parents=True)
+        (existing / "keep.txt").write_text("original")
+        source = _plugin_source(tmp_path, "repository-name", "manifest-name")
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+            patch("lola.cli.mod.is_interactive", return_value=False),
+        ):
+            result = cli_runner.invoke(mod, ["add", str(source)])
+
+        assert result.exit_code == 1
+        assert "non-interactive" in result.output
+        assert (existing / "keep.txt").exists()
+        assert not (modules_dir / "repository-name").exists()
 
     def test_add_with_name_override(self, cli_runner, sample_module, tmp_path):
         """Add module with custom name."""
@@ -581,6 +604,61 @@ class TestModInit:
             assert (tmp_path / "module" / "agents" / "example-agent.md").exists()
         finally:
             os.chdir(original_dir)
+
+    def test_init_rejects_traversal_name(self, cli_runner, tmp_path):
+        """A name is a directory component, never a path to delete."""
+        import os
+
+        victim = tmp_path / "victim"
+        victim.mkdir()
+        (victim / "keep.txt").write_text("original")
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(workdir)
+            result = cli_runner.invoke(mod, ["init", "../victim", "--force"])
+        finally:
+            os.chdir(original_dir)
+
+        assert result.exit_code == 1
+        assert (victim / "keep.txt").read_text() == "original"
+
+    def test_init_plugin_preserves_existing_files(self, cli_runner, tmp_path):
+        """Re-running init never overwrites an edited package."""
+        import os
+
+        (tmp_path / "plugin.json").write_text('{"name": "edited"}')
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(tmp_path)
+            result = cli_runner.invoke(mod, ["init"])
+        finally:
+            os.chdir(original_dir)
+
+        assert result.exit_code == 0
+        assert "already exists, skipping" in result.output
+        assert (tmp_path / "plugin.json").read_text() == '{"name": "edited"}'
+        assert (tmp_path / "README.md").exists()
+
+    def test_init_unslugifiable_directory_name(self, cli_runner, tmp_path):
+        """An underivable plugin name asks for an explicit one."""
+        import os
+
+        workdir = tmp_path / "___"
+        workdir.mkdir()
+        original_dir = os.getcwd()
+
+        try:
+            os.chdir(workdir)
+            result = cli_runner.invoke(mod, ["init"])
+        finally:
+            os.chdir(original_dir)
+
+        assert result.exit_code == 1
+        assert "pass a name" in result.output
 
     def test_init_with_name(self, cli_runner, tmp_path):
         """Initialize module with name creates subdirectory."""

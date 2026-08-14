@@ -266,6 +266,9 @@ def add_module(
     try:
         module = Module.from_path(module_path, module_content_dirname)
     except LolaError as error:
+        # A malformed plugin.json leaves an unregistered directory behind.
+        if module_path.exists():
+            shutil.rmtree(module_path)
         handle_lola_error(error)
     if not module:
         error_msg = "[yellow]No skills or commands found[/yellow]"
@@ -294,6 +297,12 @@ def add_module(
         if new_path.exists():
             console.print()
             console.print(f"[yellow]Module '{module.name}' already exists.[/yellow]")
+            if not is_interactive():
+                shutil.rmtree(module.path)
+                console.print(
+                    "[red]Cannot confirm overwrite in non-interactive mode[/red]"
+                )
+                raise SystemExit(1)
             if not click.confirm("Overwrite existing module?", default=False):
                 shutil.rmtree(module.path)
                 console.print("[yellow]Cancelled[/yellow]")
@@ -424,6 +433,14 @@ def init_module(
         lola mod init --no-mcps                 # Skip creating mcp.json
         lola mod init --no-instructions         # Skip creating AGENTS.md
     """
+    # The name becomes a path component below, so reject traversal before
+    # any directory is resolved or removed.
+    if name:
+        try:
+            name = validate_module_name(name)
+        except ModuleNameError as error:
+            handle_lola_error(error)
+
     if format_name == "agent-plugins":
         from lola.agent_plugin_scaffold import (
             ScaffoldOptions,
@@ -432,7 +449,10 @@ def init_module(
         )
 
         repo_dir = Path.cwd() / name if name else Path.cwd()
-        module_name = name or plugin_name_from_directory(repo_dir.name)
+        try:
+            module_name = name or plugin_name_from_directory(repo_dir.name)
+        except LolaError as error:
+            handle_lola_error(error)
         if name and repo_dir.exists():
             if force:
                 shutil.rmtree(repo_dir)
@@ -445,10 +465,13 @@ def init_module(
             include_mcps=not (minimal or no_mcps),
             include_instructions=not (minimal or no_instructions),
         )
+        skipped: list[Path] = []
         try:
-            scaffold_agent_plugin(repo_dir, module_name, options)
+            skipped = scaffold_agent_plugin(repo_dir, module_name, options)
         except LolaError as error:
             handle_lola_error(error)
+        for existing in skipped:
+            console.print(f"[yellow]File already exists, skipping:[/yellow] {existing}")
         console.print(f"[green]Initialized module {module_name}[/green]")
         console.print(f"  [dim]Path:[/dim] {repo_dir}")
         return

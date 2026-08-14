@@ -251,7 +251,7 @@ cd my-skills
 
 This creates an Agent Plugins 1.0 package:
 
-```
+```text
 my-skills/
   plugin.json          # Package manifest
   skills/

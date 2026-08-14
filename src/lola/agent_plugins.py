@@ -149,7 +149,7 @@ def materialize_mcps(
         command = server.get("command")
         if isinstance(command, str):
             if command.startswith("./"):
-                server["command"] = str(plugin_root / command[2:])
+                server["command"] = str(plugin_root.resolve() / command[2:])
             else:
                 server["command"] = _expand_plugin_value(
                     command, root_value, data_value
@@ -173,7 +173,7 @@ def materialize_mcps(
         cwd = server.get("cwd")
         if isinstance(cwd, str):
             if cwd.startswith("./"):
-                server["cwd"] = str(plugin_root / cwd[2:])
+                server["cwd"] = str(plugin_root.resolve() / cwd[2:])
             else:
                 server["cwd"] = _expand_plugin_value(cwd, root_value, data_value)
         elif server_type == "stdio":
@@ -259,6 +259,8 @@ def _discover_skills(root: Path, warnings: list[str]) -> list[str]:
 
     skills: list[str] = []
     for skill_dir in sorted(skills_root.iterdir()):
+        if skill_dir.name.startswith("."):
+            continue
         skill_file = skill_dir / SKILL_FILE
         if not skill_dir.is_dir() or not skill_file.is_file():
             continue

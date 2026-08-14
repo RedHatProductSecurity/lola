@@ -221,7 +221,12 @@ class Module:
                 instructions_path=plugin.instructions_path,
                 mcps_data=plugin.mcps_data,
                 format_warnings=plugin.warnings,
-                has_instructions=plugin.instructions_path is not None,
+                # Same rule as the legacy branch: an empty file is no
+                # instructions at all.
+                has_instructions=(
+                    plugin.instructions_path is not None
+                    and plugin.instructions_path.stat().st_size > 0
+                ),
             )
 
         skills = []
