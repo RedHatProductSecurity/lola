@@ -56,6 +56,11 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
             return False
 
         skill_dest = dest_path / skill_name
+        # Replace a pre-existing symlink (e.g. a user's manual ln -s into a
+        # separate checkout) with a real directory instead of writing through
+        # it or failing to create a directory over a file symlink.
+        if skill_dest.is_symlink():
+            skill_dest.unlink()
         skill_dest.mkdir(parents=True, exist_ok=True)
 
         # Copy SKILL.md

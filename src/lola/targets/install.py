@@ -41,6 +41,25 @@ console = Console()
 # =============================================================================
 
 
+def _path_contains_symlink(base: Path, child: Path) -> bool:
+    """Return True if any component of ``child`` below ``base`` is a symlink.
+
+    A destination that only exists through a symlink (e.g. a user's manual
+    ``ln -s`` into a separate checkout) was not written by Lola, so it must
+    not be treated as an idempotent re-install.
+    """
+    try:
+        rel = child.relative_to(base)
+    except ValueError:
+        return True
+    current = base
+    for part in rel.parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def _generation_is_idempotent(
     generate_fn: Callable[[Path], bool], real_dest: Path
 ) -> bool:
@@ -55,6 +74,10 @@ def _generation_is_idempotent(
     This lets two targets that write identical output to the same path (for
     example copilot-cli and copilot-vscode sharing ``.github/``) coexist
     without a spurious overwrite conflict.
+
+    Files that are only reachable through a symlink are never considered a
+    no-op: Lola did not create them, so the normal overwrite prompt should
+    apply instead of silently skipping.
     """
     import tempfile
 
@@ -73,6 +96,8 @@ def _generation_is_idempotent(
             produced_any = True
             rel = gen_file.relative_to(tmp_dest)
             real_file = real_dest / rel
+            if _path_contains_symlink(real_dest, real_file):
+                return False
             if not real_file.exists() or real_file.is_dir():
                 return False
             if gen_file.read_bytes() != real_file.read_bytes():

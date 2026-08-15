@@ -357,6 +357,9 @@ class BaseAssistantTarget(AssistantTarget):
     def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
         """Default: remove skill directory."""
         skill_dir = dest_path / skill_name
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+            return True
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
             return True

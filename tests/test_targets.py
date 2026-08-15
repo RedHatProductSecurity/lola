@@ -432,6 +432,22 @@ Agent body content.
         result = target.remove_skill(dest_path, "nonexistent")
         assert result is False
 
+    def test_remove_skill_removes_symlink(self, dest_path: Path):
+        """remove_skill should remove a symlinked skill without touching its
+        target (shutil.rmtree would raise on a symlink)."""
+        target = ClaudeCodeTarget()
+        external = dest_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("content")
+        link = dest_path / "mymod-skill"
+        link.symlink_to(external, target_is_directory=True)
+
+        result = target.remove_skill(dest_path, "mymod-skill")
+
+        assert result is True
+        assert not link.is_symlink()
+        assert (external / "SKILL.md").read_text() == "content"
+
     def test_get_command_filename(self):
         """Command filename should be cmd.md (no prefix)."""
         target = ClaudeCodeTarget()
