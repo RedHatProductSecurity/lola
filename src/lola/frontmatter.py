@@ -42,12 +42,13 @@ def parse_file(file_path: Path) -> tuple[dict, str]:
         Tuple of (frontmatter dict, body content)
     """
     try:
-        post = frontmatter.load(str(file_path))
+        content = file_path.read_text(encoding="utf-8-sig")
+        post = frontmatter.loads(content)
         return dict(post.metadata), post.content
     except Exception:
         # If parsing fails, return empty frontmatter and file content
         try:
-            return {}, file_path.read_text()
+            return {}, file_path.read_text(encoding="utf-8-sig")
         except Exception:
             return {}, ""
 
@@ -65,7 +66,7 @@ def validate_command(command_file: Path) -> list[str]:
     errors = []
 
     try:
-        content = command_file.read_text()
+        content = command_file.read_text(encoding="utf-8-sig")
     except Exception as e:
         return [f"Cannot read file: {e}"]
 
@@ -109,7 +110,7 @@ def validate_skill(skill_file: Path) -> list[str]:
     errors = []
 
     try:
-        content = skill_file.read_text()
+        content = skill_file.read_text(encoding="utf-8-sig")
     except Exception as e:
         return [f"Cannot read file: {e}"]
 
@@ -143,7 +144,7 @@ def validate_agent(agent_file: Path) -> list[str]:
     errors = []
 
     try:
-        content = agent_file.read_text()
+        content = agent_file.read_text(encoding="utf-8-sig")
     except Exception as e:
         return [f"Cannot read file: {e}"]
 
@@ -177,7 +178,7 @@ def validate_mcps(mcps_file: Path) -> list[str]:
     errors = []
 
     try:
-        content = mcps_file.read_text()
+        content = mcps_file.read_text(encoding="utf-8-sig")
     except Exception as e:
         return [f"Cannot read file: {e}"]
 

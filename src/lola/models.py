@@ -231,7 +231,7 @@ class Module:
         mcps_file = content_path / MCPS_FILE
         if mcps_file.exists():
             try:
-                data = json.loads(mcps_file.read_text())
+                data = json.loads(mcps_file.read_text(encoding="utf-8-sig"))
                 mcps = sorted(data.get("mcpServers", {}).keys())
             except (json.JSONDecodeError, OSError):
                 pass
