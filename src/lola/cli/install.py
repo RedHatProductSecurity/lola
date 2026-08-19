@@ -769,6 +769,13 @@ def _format_update_summary(result: UpdateResult) -> str:
     default="project",
     help="Installation scope: project (default) or user",
 )
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Install as a self-contained plugin bundle",
+)
 @click.argument("project_path", required=False, default="./")
 def install_cmd(
     module_name: Optional[str],
@@ -780,6 +787,7 @@ def install_cmd(
     append_context: tuple[str, ...],
     workspace: Optional[str],
     scope: str,
+    as_plugin: bool,
     project_path: str,
 ):
     """
@@ -984,8 +992,35 @@ def install_cmd(
     # Convert CLI tuple to list for the rest of the flow
     append_context_list = list(append_context) if append_context else None
 
+    # Some clients don't support plugins; others support only specific scopes
+    # (e.g. user but not project). When -a is explicit, exit on unsupported.
+    if as_plugin and assistant is not None:
+        target = get_target(assistant)
+        if target.get_plugin_layout(scope) is None:
+            if (
+                target.get_plugin_layout("user") is None
+                and target.get_plugin_layout("project") is None
+            ):
+                console.print(
+                    f"[red]--plugin is not supported with {assistant}[/red]",
+                )
+            else:
+                console.print(
+                    f"[red]{scope}-level plugin is not supported for {assistant}[/red]",
+                )
+            raise SystemExit(1)
+
     total_installed = 0
     for asst in assistants_to_install:
+        # In plugin mode without -a, skip clients that don't support plugins.
+        if as_plugin:
+            target = get_target(asst)
+            if target.get_plugin_layout(scope) is None:
+                console.print(
+                    f"  [dim]{asst}: plugin not supported"
+                    f" at {scope} scope, skipping[/dim]",
+                )
+                continue
         total_installed += install_to_assistant(
             module,
             asst,
@@ -998,6 +1033,7 @@ def install_cmd(
             effective_pre_install,
             effective_post_install,
             append_context_list,
+            as_plugin=as_plugin,
         )
 
     # Update installation records with version/ref from marketplace metadata

@@ -10,6 +10,7 @@ from .base import (
     BaseAssistantTarget,
     ManagedInstructionsTarget,
     MCPSupportMixin,
+    PluginLayout,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
     _transform_claude_agent_frontmatter,
@@ -23,6 +24,19 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
     name = "claude-code"
     supports_agents = True
     INSTRUCTIONS_FILE = "CLAUDE.md"
+
+    def get_plugin_layout(
+        self,
+        scope: str = "project",
+    ) -> PluginLayout | None:
+        template = (
+            "~/.claude/skills/{name}" if scope == "user" else ".claude/skills/{name}"
+        )
+        return PluginLayout(
+            plugin_root_template=template,
+            manifest_path=".claude-plugin",
+            mcp_path=".mcp.json",
+        )
 
     def get_skill_path(self, project_path: str, scope: str = "project") -> Path:
         base = Path.home() if scope == "user" else Path(project_path)

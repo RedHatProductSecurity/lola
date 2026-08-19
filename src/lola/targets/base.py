@@ -18,6 +18,7 @@ import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -116,6 +117,52 @@ def _resolve_source_content(source: Path | str | list[str]) -> str | None:
     elif isinstance(source, str):
         return source.strip()
     return None
+
+
+# =============================================================================
+# Plugin layout
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class PluginLayout:
+    """Plugin directory structure for a target."""
+
+    plugin_root_template: str
+    manifest_path: str | None
+    mcp_path: str | None
+    skills_path: str = "skills"
+    agents_path: str | None = "agents"
+    commands_path: str | None = "commands"
+    instructions_path: str | None = None
+
+    def resolve_root(
+        self, module_name: str, scope: str, project_path: str | None
+    ) -> Path:
+        """Resolve the plugin root directory from the template."""
+        template = self.plugin_root_template.format(name=module_name)
+        if template.startswith("~/"):
+            return Path.home() / template[2:]
+        if scope == "project" and project_path:
+            return Path(project_path) / template
+        return Path(template)
+
+    def resolve_paths(self, plugin_root: Path) -> dict[str, Path | None]:
+        """Resolve all component paths relative to plugin root."""
+        return {
+            "skills": plugin_root / self.skills_path,
+            "commands": plugin_root / self.commands_path
+            if self.commands_path
+            else None,
+            "agents": plugin_root / self.agents_path if self.agents_path else None,
+            "mcp": plugin_root / self.mcp_path if self.mcp_path else None,
+            "instructions": plugin_root / self.instructions_path
+            if self.instructions_path
+            else None,
+            "manifest": plugin_root / self.manifest_path
+            if self.manifest_path
+            else plugin_root,
+        }
 
 
 # =============================================================================
@@ -325,6 +372,13 @@ class AssistantTarget(ABC):
             Returns True immediately if supports_agents is False.
         """
         ...
+
+    def get_plugin_layout(
+        self,
+        scope: str = "project",
+    ) -> PluginLayout | None:
+        """Return plugin layout, or None if not supported."""
+        return None
 
 
 # =============================================================================
