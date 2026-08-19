@@ -123,7 +123,9 @@ class CopilotCliTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
                 continue
             dest_item = skill_dir / item.name
             if item.is_dir():
-                if dest_item.exists():
+                if dest_item.is_symlink():
+                    dest_item.unlink()
+                elif dest_item.exists():
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
@@ -137,7 +139,10 @@ class CopilotCliTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
 
         removed = False
         skill_dir = dest_path / skill_name
-        if skill_dir.exists():
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+            removed = True
+        elif skill_dir.exists():
             shutil.rmtree(skill_dir)
             removed = True
         # Legacy cleanup: old .instructions.md format

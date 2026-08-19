@@ -194,6 +194,25 @@ class TestClaudeCodeTarget:
 
         assert (skill_dest / "scripts" / "new_file.py").exists()
 
+    def test_generate_skill_replaces_nested_directory_symlink(
+        self, skill_source: Path, dest_path: Path, tmp_path: Path
+    ) -> None:
+        """Supporting directory symlinks are replaced without touching targets."""
+        target = ClaudeCodeTarget()
+        skill_dest = dest_path / "mymod-test-skill"
+        skill_dest.mkdir()
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "old.py").write_text("old")
+        (skill_dest / "scripts").symlink_to(external, target_is_directory=True)
+
+        target.generate_skill(skill_source, dest_path, "mymod-test-skill")
+
+        assert not (skill_dest / "scripts").is_symlink()
+        assert (skill_dest / "scripts" / "helper.py").exists()
+        assert (external / "old.py").read_text() == "old"
+
     def test_generate_command_creates_file(self, command_source: Path, dest_path: Path):
         """generate_command should create properly named markdown file."""
         target = ClaudeCodeTarget()

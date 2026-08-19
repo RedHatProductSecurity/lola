@@ -136,6 +136,32 @@ def test_generate_skill_basic(tmp_path):
     assert "Do the thing." in content
 
 
+def test_generate_skill_replaces_nested_directory_symlink(tmp_path):
+    """Supporting directory symlinks are replaced without touching targets."""
+    target = CopilotTarget()
+    source = tmp_path / "my-skill"
+    source.mkdir()
+    (source / "SKILL.md").write_text(
+        "---\ndescription: Does the thing\n---\n\nDo the thing.\n"
+    )
+    (source / "scripts").mkdir()
+    (source / "scripts" / "helper.py").write_text("new")
+
+    dest = tmp_path / "skills"
+    skill_dest = dest / "my-skill"
+    skill_dest.mkdir(parents=True)
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "old.py").write_text("old")
+    (skill_dest / "scripts").symlink_to(external, target_is_directory=True)
+
+    assert target.generate_skill(source, dest, "my-skill") is True
+
+    assert not (skill_dest / "scripts").is_symlink()
+    assert (skill_dest / "scripts" / "helper.py").exists()
+    assert (external / "old.py").read_text() == "old"
+
+
 def test_generate_skill_missing_description(tmp_path):
     """Return False if SKILL.md has no description (required by Copilot)."""
     target = CopilotTarget()
@@ -234,6 +260,18 @@ def test_remove_skill_not_found(tmp_path):
 
     result = target.remove_skill(dest, "missing")
     assert result is False
+
+
+def test_remove_skill_removes_dangling_symlink(tmp_path):
+    """Removing a dangling symlink unlinks it instead of ignoring it."""
+    target = CopilotTarget()
+    dest = tmp_path / "skills"
+    dest.mkdir()
+    link = dest / "missing"
+    link.symlink_to(tmp_path / "missing-target", target_is_directory=True)
+
+    assert target.remove_skill(dest, "missing") is True
+    assert not link.is_symlink()
 
 
 # --- copilot-vscode variant tests ---

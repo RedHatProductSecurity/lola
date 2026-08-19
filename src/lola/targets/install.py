@@ -48,6 +48,8 @@ def _path_contains_symlink(base: Path, child: Path) -> bool:
     ``ln -s`` into a separate checkout) was not written by Lola, so it must
     not be treated as an idempotent re-install.
     """
+    if base.is_symlink():
+        return True
     try:
         rel = child.relative_to(base)
     except ValueError:
@@ -252,9 +254,10 @@ def _check_skill_exists(
     else:
         # For file-based targets, check if directory/file exists
         if target.name == "cursor":
-            return (skill_dest / f"{skill_name}.mdc").exists()
+            candidate = skill_dest / f"{skill_name}.mdc"
         else:
-            return (skill_dest / skill_name).exists()
+            candidate = skill_dest / skill_name
+        return candidate.is_symlink() or candidate.exists()
 
 
 def _install_skills(
