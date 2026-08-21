@@ -1011,12 +1011,32 @@ def _uninstall_mcps(
     return [], list(inst.mcps)
 
 
+def _uninstall_plugin(
+    target: AssistantTarget,
+    inst: Installation,
+) -> tuple[list[str], list[str]]:
+    """Remove plugin directory if it exists. Returns (removed, failed)."""
+    layout = target.get_plugin_layout(inst.scope)
+    if layout is None:
+        return [], []
+    plugin_root = layout.resolve_root(
+        inst.module_name,
+        inst.scope,
+        inst.project_path,
+    )
+    if not plugin_root.exists():
+        return [], []
+    shutil.rmtree(plugin_root)
+    return [inst.module_name], []
+
+
 def _print_uninstall_summary(
     assistant: str,
     removed_skills: list[str],
     removed_commands: list[str],
     removed_agents: list[str],
     removed_mcps: list[str],
+    removed_plugin: list[str],
     had_instructions: bool,
     module_name: str,
     verbose: bool,
@@ -1027,6 +1047,7 @@ def _print_uninstall_summary(
         or removed_commands
         or removed_agents
         or removed_mcps
+        or removed_plugin
         or had_instructions
     ):
         return
@@ -1048,6 +1069,8 @@ def _print_uninstall_summary(
         parts.append(f"{len(removed_mcps)} MCP{'s' if len(removed_mcps) != 1 else ''}")
     if had_instructions:
         parts.append("instructions")
+    if removed_plugin:
+        parts.append("plugin.json")
 
     console.print(f"  [green]{assistant}[/green] [dim]({', '.join(parts)})[/dim]")
 
@@ -1091,6 +1114,7 @@ def uninstall_from_assistant(
     removed_agents, _ = _uninstall_agents(target, inst)
     removed_mcps, _ = _uninstall_mcps(target, inst)
     instructions_removed = _uninstall_instructions(target, inst)
+    removed_plugin, _ = _uninstall_plugin(target, inst)
 
     _print_uninstall_summary(
         inst.assistant,
@@ -1098,6 +1122,7 @@ def uninstall_from_assistant(
         removed_commands,
         removed_agents,
         removed_mcps,
+        removed_plugin,
         instructions_removed,
         inst.module_name,
         verbose,

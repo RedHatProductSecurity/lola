@@ -605,6 +605,7 @@ class TestUninstallCmd:
         mock_target.get_command_path.return_value = command_dest
         mock_target.get_command_filename.return_value = "mymodule.cmd1.md"
         mock_target.remove_skill.return_value = True
+        mock_target.get_plugin_layout.return_value = None
 
         with (
             patch("lola.cli.install.ensure_lola_dirs"),

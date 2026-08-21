@@ -1312,6 +1312,20 @@ def uninstall_cmd(
                 if verbose:
                     console.print(f"  [green]Removed MCPs from {mcp_dest}[/green]")
 
+        # Remove plugin directory if it exists
+        layout = target.get_plugin_layout(inst_scope)
+        if layout is not None:
+            plugin_root = layout.resolve_root(
+                module_name,
+                inst_scope,
+                inst.project_path,
+            )
+            if plugin_root.exists():
+                shutil.rmtree(plugin_root)
+                removed_count += 1
+                if verbose:
+                    console.print(f"  [green]Removed plugin {plugin_root}[/green]")
+
         # Also remove the project-local module copy
         if inst.scope == "project" and inst.project_path:
             local_modules = get_local_modules_path(inst.project_path)

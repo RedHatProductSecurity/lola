@@ -678,6 +678,7 @@ class TestUninstallWithInstructions:
         mock_target.get_instructions_path.return_value = claude_md
         mock_target.remove_skill.return_value = True
         mock_target.remove_instructions.return_value = True
+        mock_target.get_plugin_layout.return_value = None
 
         runner = CliRunner()
         with (
