@@ -25,6 +25,7 @@ from typing import Any, Optional
 import yaml
 
 import lola.frontmatter as fm
+from lola.models import Module
 
 
 def unlink_symlink_if_present(path: Path) -> None:
@@ -117,6 +118,61 @@ def _resolve_source_content(source: Path | str | list[str]) -> str | None:
     elif isinstance(source, str):
         return source.strip()
     return None
+
+
+# =============================================================================
+# Plugin manifest
+# =============================================================================
+
+_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+
+
+@dataclass
+class PluginManifest:
+    """Plugin manifest (plugin.json) per the Open Plugin Spec."""
+
+    name: str
+    version: str | None = None
+    description: str | None = None
+    author: dict[str, str] | None = None
+    homepage: str | None = None
+    repository: str | None = None
+    license: str | None = None
+    keywords: list[str] | None = None
+    extensions: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("PluginManifest requires a non-empty name")
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"$schema": _PLUGIN_SCHEMA, "name": self.name}
+        if self.version:
+            result["version"] = self.version
+        if self.description:
+            result["description"] = self.description
+        if self.author:
+            result["author"] = {
+                k: v for k, v in self.author.items() if k in {"name", "email", "url"}
+            }
+        if self.homepage:
+            result["homepage"] = self.homepage
+        if self.repository:
+            result["repository"] = self.repository
+        if self.license:
+            result["license"] = self.license
+        if self.keywords:
+            result["keywords"] = self.keywords
+        if self.extensions:
+            result["extensions"] = self.extensions
+        return result
+
+    def write(self, manifest_dir: Path) -> bool:
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        (manifest_dir / "plugin.json").write_text(
+            json.dumps(self.to_dict(), indent=2) + "\n"
+        )
+        return True
 
 
 # =============================================================================
@@ -379,6 +435,10 @@ class AssistantTarget(ABC):
     ) -> PluginLayout | None:
         """Return plugin layout, or None if not supported."""
         return None
+
+    def build_plugin_manifest(self, module: Module) -> PluginManifest:
+        """Build plugin manifest. Override in targets that support plugins."""
+        raise NotImplementedError(f"{self.name} does not support plugins")
 
 
 # =============================================================================

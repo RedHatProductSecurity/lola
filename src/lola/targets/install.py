@@ -611,17 +611,15 @@ def _install_mcps(
 
 def _install_plugin_manifest(
     as_plugin: bool,
-    manifest_dir: Path | None,
+    paths: dict[str, Path | None] | None,
+    target: AssistantTarget,
     module: Module,
 ) -> bool:
     """Generate plugin.json manifest. Returns True if generated."""
+    manifest_dir = paths.get("manifest") if paths else None
     if not as_plugin or manifest_dir is None:
         return False
-    manifest_dir.mkdir(parents=True, exist_ok=True)
-    manifest: dict[str, str] = {"name": module.name}
-    manifest_path = manifest_dir / "plugin.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    return True
+    return target.build_plugin_manifest(module).write(manifest_dir)
 
 
 def _print_summary(
@@ -823,9 +821,7 @@ def install_to_assistant(
     )
 
     plugin_manifest_installed = _install_plugin_manifest(
-        as_plugin,
-        paths["manifest"] if paths else None,
-        module,
+        as_plugin, paths, target, module
     )
 
     _print_summary(

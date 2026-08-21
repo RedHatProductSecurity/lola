@@ -6,11 +6,13 @@ import shutil
 from pathlib import Path
 
 import lola.config as config
+from lola.models import Module
 from .base import (
     BaseAssistantTarget,
     ManagedInstructionsTarget,
     MCPSupportMixin,
     PluginLayout,
+    PluginManifest,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
     _transform_claude_agent_frontmatter,
@@ -37,6 +39,9 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
             manifest_path=".claude-plugin",
             mcp_path=".mcp.json",
         )
+
+    def build_plugin_manifest(self, module: Module) -> PluginManifest:
+        return PluginManifest(name=module.name)
 
     def get_skill_path(self, project_path: str, scope: str = "project") -> Path:
         base = Path.home() if scope == "user" else Path(project_path)
