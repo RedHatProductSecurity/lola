@@ -14,9 +14,12 @@ from pathlib import Path
 from typing import Any
 
 import lola.config as config
+from lola.models import Module
 from .base import (
     MCPSupportMixin,
     BaseAssistantTarget,
+    PluginLayout,
+    PluginManifest,
     _convert_env_var_to_cursor_vscode,
     _generate_passthrough_command,
     _generate_agent_with_frontmatter,
@@ -32,6 +35,26 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
 
     name = "cursor"
     supports_agents = True
+
+    def get_plugin_layout(
+        self,
+        scope: str = "project",
+    ) -> PluginLayout | None:
+        if scope == "project":
+            return None
+        # Uses the Agent Plugin (global spec) format with plugin.json at root,
+        # not Cursor's own format (.cursor-plugin/plugin.json).
+        return PluginLayout(
+            plugin_root_template="~/.cursor/plugins/local/{name}",
+            manifest_path=None,
+            mcp_path="mcp.json",
+        )
+
+    def build_plugin_manifest(self, module: Module) -> PluginManifest:
+        existing = PluginManifest.from_file(module.content_path / "plugin.json")
+        if existing is not None:
+            return existing
+        return PluginManifest(name=module.name)
 
     def get_skill_path(self, project_path: str, scope: str = "project") -> Path:
         base = Path.home() if scope == "user" else Path(project_path)
