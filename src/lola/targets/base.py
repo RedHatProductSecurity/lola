@@ -145,6 +145,30 @@ class PluginManifest:
         if not self.name:
             raise ValueError("PluginManifest requires a non-empty name")
 
+    @classmethod
+    def from_file(cls, path: Path) -> PluginManifest | None:
+        """Load from an existing plugin.json. Returns None if not found or invalid."""
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        name = data.get("name")
+        if not name:
+            return None
+        return cls(
+            name=name,
+            version=data.get("version"),
+            description=data.get("description"),
+            author=data.get("author"),
+            homepage=data.get("homepage"),
+            repository=data.get("repository"),
+            license=data.get("license"),
+            keywords=data.get("keywords"),
+            extensions=data.get("extensions"),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"$schema": _PLUGIN_SCHEMA, "name": self.name}
         if self.version:

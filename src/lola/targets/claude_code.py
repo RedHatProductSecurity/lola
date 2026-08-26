@@ -41,6 +41,9 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         )
 
     def build_plugin_manifest(self, module: Module) -> PluginManifest:
+        existing = PluginManifest.from_file(module.content_path / "plugin.json")
+        if existing is not None:
+            return existing
         return PluginManifest(name=module.name)
 
     def get_skill_path(self, project_path: str, scope: str = "project") -> Path:
