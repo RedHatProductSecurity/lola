@@ -1,8 +1,29 @@
 # Go Project Structure — Implementation Design
 
-Paired with [ADR-0004: Go Project Structure](../../adr/0004-go-project-structure.md).
+Paired with [ADR-0004: Go Project
+Structure](../../adr/0004-go-project-structure.md).
 
-## Complete File Tree
+This tree implements [ADR-0003: Extension
+Architecture](../../adr/extension-architecture.md): built-in extensions are
+compiled into the `lola` binary, external extensions run as subprocesses. A
+change to that boundary changes this tree.
+
+## Module Path
+
+```
+module github.com/LobsterTrap/lola
+```
+
+Extension developers import the public packages at:
+
+```go
+import (
+    "github.com/LobsterTrap/lola/pkg/sdk"
+    "github.com/LobsterTrap/lola/pkg/models"
+)
+```
+
+## File Tree
 
 ```
 cmd/
@@ -21,7 +42,6 @@ internal/
     install.go                    # lola install <module> -a <target>
     update.go                     # lola update
     search.go                     # lola search <query> [--type mod|skill|plugin|ext]
-    serve.go                      # lola serve (future)
 
   extensions/                     # Extension discovery and lifecycle
     registry.go                   # Factory maps for built-in extensions
@@ -32,19 +52,16 @@ internal/
     config.go                     # LOLA_HOME, MODULES_DIR, INSTALLED_FILE, etc.
 
   sync/                           # Install/uninstall/update orchestration
-    install.go                    # install_to_target(), copy_module_to_local()
-    update.go                     # update_module(), compute orphans
+    install.go                    # InstallToTarget(), CopyModuleToLocal()
+    update.go                     # UpdateModule(), compute orphans
     uninstall.go                  # remove from target + registry
 
-  frontmatter/                    # Hand-rolled YAML frontmatter parser
+  frontmatter/                    # YAML frontmatter parser
     parse.go                      # ParseFrontmatter(content, v) (body, err)
 
   repo/                           # Repository/marketplace management
     manager.go                    # RepoRegistry: add, update, search, resolve
     search.go                     # Cross-repo module search
-
-  serve/                          # API server (future)
-    server.go
 
 pkg/
   sdk/                            # PUBLIC extension SDK
@@ -53,8 +70,6 @@ pkg/
     target.go                     # TargetExtension interface
     source.go                     # SourceExtension interface
     repo.go                       # RepoExtension interface
-    runtime.go                    # RuntimeExtension interface
-    scan.go                       # ScanExtension interface
 
   builtin/                        # PUBLIC built-in extension implementations
     targets/
@@ -79,6 +94,12 @@ pkg/
     repo.go                       # Repo (was Marketplace)
     group.go                      # Group definition
 ```
+
+`pkg/sdk/` declares interfaces only for extension kinds that have an
+implementation. The `runtime` and `scan` kinds are reserved in the extension
+architecture ADR but have no built-ins; their interfaces are added when the
+first implementation lands, so the public API never carries a shape nothing has
+exercised.
 
 ## Package Dependency Flow
 
@@ -106,20 +127,28 @@ graph TD
 
 Green = public (`pkg/`), white = private (`internal/`).
 
+### Import Rule
+
+**`pkg/` must never import `internal/`.** Dependencies flow one way: `cmd/` →
+`internal/` → `pkg/`.
+
+The Go compiler only enforces half of this. It blocks code *outside* this module
+from importing `internal/`, but nothing stops `pkg/sdk` from importing
+`internal/config` — they are in the same module. A violation would make the
+public API silently depend on private code, defeating the boundary the ADR is
+built on.
+
+Enforce it in CI:
+
+```bash
+if go list -deps ./pkg/... | grep -q '^github.com/LobsterTrap/lola/internal/'; then
+    echo "violation: pkg/ imports internal/" >&2
+    exit 1
+fi
+```
+
 ## Cobra Command Registration
 
-Each command file in `internal/cli/` exports a `NewXxxCmd()` function. The root command registers all subcommands explicitly — no magic discovery:
-
-```
-root.go: NewRootCmd()
-  ├── mod.go:     NewModCmd()
-  ├── skill.go:   NewSkillCmd()
-  ├── plugin.go:  NewPluginCmd()
-  ├── group.go:   NewGroupCmd()
-  ├── repo.go:    NewRepoCmd()
-  ├── ext.go:     NewExtCmd()
-  ├── install.go: NewInstallCmd()
-  ├── update.go:  NewUpdateCmd()
-  ├── search.go:  NewSearchCmd()
-  └── serve.go:   NewServeCmd()
-```
+Each command file in `internal/cli/` exports a `NewXxxCmd()` constructor, and
+`root.go` registers them explicitly. No `init()`-based self-registration, so the
+command tree is readable in one place and command order is deterministic.
