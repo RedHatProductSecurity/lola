@@ -129,7 +129,12 @@ _PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 
 @dataclass
 class PluginManifest:
-    """Plugin manifest (plugin.json) per the Open Plugin Spec."""
+    """Plugin manifest (plugin.json) per the Open Plugin Spec.
+
+    Based on the docs https://agent-plugins.org/plugin-authors/manifest the schema is closed,
+    Do not add any new properties to this class without checking the schema.
+    If adding a new property, make sure to update the the to_dict and from_file methods.
+    """
 
     name: str
     version: str | None = None
