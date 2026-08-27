@@ -5,10 +5,10 @@ ADR_TEMPLATE := $(ADR_DIR)/template.md
 
 .PHONY: adr-new adr-list adr-help
 
-adr-new: ## - Create new ADR: make adr-new topic-name
+adr-new: ## - Create new ADR: make adr-new 0012-topic-name
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "Usage: make adr-new topic-name"; \
-		echo "Example: make adr-new go-migration"; \
+		echo "Usage: make adr-new <nnnn-topic-name>"; \
+		echo "Example: make adr-new 0012-topic-name"; \
 		exit 1; \
 	fi
 	@NAME=$(filter-out $@,$(MAKECMDGOALS)); \
@@ -27,15 +27,15 @@ adr-help: ## - Show ADR usage and examples
 	@echo "Lola ADR (Architecture Decision Records) Management"
 	@echo ""
 	@echo "Commands:"
-	@echo "  make adr-new topic-name  - Create new ADR from template"
+	@echo "  make adr-new nnnn-topic  - Create new ADR from template"
 	@echo "  make adr-list            - List all ADRs"
 	@echo "  make adr-help            - Show this help"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make adr-new go-migration"
-	@echo "  make adr-new use-postgresql"
+	@echo "  make adr-new 0012-topic-name"
+	@echo "  make adr-new 0013-another-topic"
 	@echo ""
-	@echo "ADRs live in $(ADR_DIR)/ as <topic-name>.md"
+	@echo "ADRs live in $(ADR_DIR)/ as <nnnn-topic-name>.md"
 
 # Prevent make from treating arguments as targets
 %:
