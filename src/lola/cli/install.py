@@ -1060,7 +1060,9 @@ def install_cmd(
     console.print()
     if total_installed > 0:
         console.print(
-            f"[green]Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}[/green]"
+            f"[green]Installed to {total_installed}"
+            f" assistant{'s' if total_installed != 1 else ''}"
+            f"[/green]"
         )
     else:
         console.print("[yellow]Nothing was installed[/yellow]")
@@ -1247,6 +1249,7 @@ def uninstall_cmd(
 
     # Uninstall each
     removed_count = 0
+    uninstalled_count = 0
     for inst in installations:
         target = get_target(inst.assistant)
 
@@ -1297,6 +1300,7 @@ def uninstall_cmd(
                 scope=inst.scope,
                 project_path=inst.project_path,
             )
+            uninstalled_count += 1
             continue
 
         # Remove skill files
@@ -1400,10 +1404,13 @@ def uninstall_cmd(
             scope=inst.scope,
             project_path=inst.project_path,
         )
+        uninstalled_count += 1
 
     console.print(
-        f"[green]Uninstalled from {removed_count} installation{'s' if removed_count != 1 else ''}[/green]"
-        if removed_count > 0
+        f"[green]Uninstalled from {uninstalled_count}"
+        f" installation{'s' if uninstalled_count != 1 else ''}"
+        f"[/green]"
+        if uninstalled_count > 0
         else "[yellow]Nothing was uninstalled[/yellow]"
     )
 

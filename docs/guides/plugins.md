@@ -29,8 +29,8 @@ implementation per the [Open Plugin Spec](https://agent-plugins.org/).
 | Cursor | No | Yes | Uses the [Agent Plugins](https://agent-plugins.org/) global spec |
 | Copilot CLI | — | — | Not yet supported |
 | Copilot VS Code | — | — | Not yet supported |
-| OpenCode | — | — | Does not support plugins |
-| Gemini CLI | — | — | Shut down; replaced by Antigravity (not yet supported by Lola) |
+| OpenCode | — | — | Does not support Lola plugin bundles |
+| Gemini CLI | — | — | Not yet supported |
 | OpenClaw | — | — | Not yet supported |
 
 ### Claude Code
@@ -92,7 +92,7 @@ Lola tracks whether a module was installed as a plugin or as individual files.
 Attempting to uninstall a plugin without `--plugin` (or vice versa) will show
 an error:
 
-```
+```text
 my-module was installed as a plugin for claude-code, use --plugin to uninstall
 ```
 

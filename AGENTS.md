@@ -93,7 +93,7 @@ lola install <module> -a claude-code
 
 | Assistant | Skills | Commands | Agents | Plugin |
 |-----------|--------|----------|--------|--------|
-| claude-code | `.claude/skills/` | `.claude/commands/` | `.claude/agents/` | `.claude/skills/<name>/` (project + user) |
+| claude-code | `.claude/skills/` | `.claude/commands/` | `.claude/agents/` | `.claude/skills/<name>/` (project), `~/.claude/skills/<name>/` (user) |
 | cursor | `.cursor/skills/` | `.cursor/commands/` | `.cursor/agents/` | `~/.cursor/plugins/local/<name>/` (user only) |
 | gemini-cli | `GEMINI.md` | `.gemini/commands/` | N/A | N/A |
 | opencode | `AGENTS.md` | `.opencode/commands/` | `.opencode/agents/` | N/A |
