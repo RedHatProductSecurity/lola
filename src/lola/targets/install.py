@@ -41,6 +41,27 @@ console = Console()
 # =============================================================================
 
 
+def _path_contains_symlink(base: Path, child: Path) -> bool:
+    """Return True if any component of ``child`` below ``base`` is a symlink.
+
+    A destination that only exists through a symlink (e.g. a user's manual
+    ``ln -s`` into a separate checkout) was not written by Lola, so it must
+    not be treated as an idempotent re-install.
+    """
+    if base.is_symlink():
+        return True
+    try:
+        rel = child.relative_to(base)
+    except ValueError:
+        return True
+    current = base
+    for part in rel.parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def _generation_is_idempotent(
     generate_fn: Callable[[Path], bool], real_dest: Path
 ) -> bool:
@@ -55,6 +76,10 @@ def _generation_is_idempotent(
     This lets two targets that write identical output to the same path (for
     example copilot-cli and copilot-vscode sharing ``.github/``) coexist
     without a spurious overwrite conflict.
+
+    Files that are only reachable through a symlink are never considered a
+    no-op: Lola did not create them, so the normal overwrite prompt should
+    apply instead of silently skipping.
     """
     import tempfile
 
@@ -73,6 +98,8 @@ def _generation_is_idempotent(
             produced_any = True
             rel = gen_file.relative_to(tmp_dest)
             real_file = real_dest / rel
+            if _path_contains_symlink(real_dest, real_file):
+                return False
             if not real_file.exists() or real_file.is_dir():
                 return False
             if gen_file.read_bytes() != real_file.read_bytes():
@@ -227,9 +254,10 @@ def _check_skill_exists(
     else:
         # For file-based targets, check if directory/file exists
         if target.name == "cursor":
-            return (skill_dest / f"{skill_name}.mdc").exists()
+            candidate = skill_dest / f"{skill_name}.mdc"
         else:
-            return (skill_dest / skill_name).exists()
+            candidate = skill_dest / skill_name
+        return candidate.is_symlink() or candidate.exists()
 
 
 def _install_skills(
@@ -286,6 +314,13 @@ def _install_skills(
                     # Identical content already present (e.g. another Copilot
                     # variant wrote it): treat as an installed no-op.
                     installed.append(skill_name)
+                    continue
+                elif not is_interactive():
+                    console.print(
+                        f"  [yellow]Skill '{skill_name}' already exists; "
+                        "use --force to overwrite in non-interactive mode.[/yellow]"
+                    )
+                    failed.append(skill_name)
                     continue
                 elif click.confirm(
                     f"Skill '{skill_name}' already exists. Overwrite?", default=False

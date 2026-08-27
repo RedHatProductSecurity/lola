@@ -26,6 +26,7 @@ from lola.targets import (
     get_target,
 )
 from lola.cli.install import _resolve_install_path
+from lola.targets.copilot import CopilotCliTarget
 
 
 # =============================================================================
@@ -193,6 +194,25 @@ class TestClaudeCodeTarget:
         target.generate_skill(skill_source, dest_path, "mymod-test-skill")
 
         assert (skill_dest / "scripts" / "new_file.py").exists()
+
+    def test_generate_skill_replaces_nested_directory_symlink(
+        self, skill_source: Path, dest_path: Path, tmp_path: Path
+    ) -> None:
+        """Supporting directory symlinks are replaced without touching targets."""
+        target = ClaudeCodeTarget()
+        skill_dest = dest_path / "mymod-test-skill"
+        skill_dest.mkdir()
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "old.py").write_text("old")
+        (skill_dest / "scripts").symlink_to(external, target_is_directory=True)
+
+        target.generate_skill(skill_source, dest_path, "mymod-test-skill")
+
+        assert not (skill_dest / "scripts").is_symlink()
+        assert (skill_dest / "scripts" / "helper.py").exists()
+        assert (external / "old.py").read_text() == "old"
 
     def test_generate_command_creates_file(self, command_source: Path, dest_path: Path):
         """generate_command should create properly named markdown file."""
@@ -432,6 +452,22 @@ Agent body content.
         result = target.remove_skill(dest_path, "nonexistent")
         assert result is False
 
+    def test_remove_skill_removes_symlink(self, dest_path: Path):
+        """remove_skill should remove a symlinked skill without touching its
+        target (shutil.rmtree would raise on a symlink)."""
+        target = ClaudeCodeTarget()
+        external = dest_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("content")
+        link = dest_path / "mymod-skill"
+        link.symlink_to(external, target_is_directory=True)
+
+        result = target.remove_skill(dest_path, "mymod-skill")
+
+        assert result is True
+        assert not link.is_symlink()
+        assert (external / "SKILL.md").read_text() == "content"
+
     def test_get_command_filename(self):
         """Command filename should be cmd.md (no prefix)."""
         target = ClaudeCodeTarget()
@@ -560,6 +596,90 @@ Agent body content.
 # =============================================================================
 # CursorTarget Tests
 # =============================================================================
+
+
+@pytest.mark.parametrize(
+    "target_class",
+    [
+        ClaudeCodeTarget,
+        CopilotCliTarget,
+        CursorTarget,
+        OpenClawTarget,
+        OpenCodeTarget,
+    ],
+)
+def test_file_based_targets_replace_skill_directory_symlink(
+    target_class, skill_source: Path, dest_path: Path, tmp_path: Path
+) -> None:
+    """Every file-based target replaces a skill-directory symlink safely."""
+    target = target_class()
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "sentinel.txt").write_text("external")
+    skill_dest = dest_path / "mymod-test-skill"
+    skill_dest.symlink_to(external, target_is_directory=True)
+
+    assert target.generate_skill(skill_source, dest_path, "mymod-test-skill") is True
+
+    assert not skill_dest.is_symlink()
+    assert (skill_dest / "SKILL.md").is_file()
+    assert (external / "sentinel.txt").read_text() == "external"
+
+
+@pytest.mark.parametrize(
+    "target_class",
+    [
+        ClaudeCodeTarget,
+        CopilotCliTarget,
+        CursorTarget,
+        OpenClawTarget,
+        OpenCodeTarget,
+    ],
+)
+def test_file_based_targets_replace_skill_file_symlinks(
+    target_class, skill_source: Path, dest_path: Path, tmp_path: Path
+) -> None:
+    """Skill and supporting-file links are replaced without touching targets."""
+    target = target_class()
+    skill_dest = dest_path / "mymod-test-skill"
+    skill_dest.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    external_skill = external / "SKILL.md"
+    external_notes = external / "notes.md"
+    external_skill.write_text("external skill")
+    external_notes.write_text("external notes")
+    (skill_dest / "SKILL.md").symlink_to(external_skill)
+    (skill_dest / "notes.md").symlink_to(external_notes)
+
+    assert target.generate_skill(skill_source, dest_path, "mymod-test-skill") is True
+
+    assert not (skill_dest / "SKILL.md").is_symlink()
+    assert not (skill_dest / "notes.md").is_symlink()
+    assert (skill_dest / "SKILL.md").is_file()
+    assert (skill_dest / "notes.md").is_file()
+    assert external_skill.read_text() == "external skill"
+    assert external_notes.read_text() == "external notes"
+
+
+@pytest.mark.parametrize("target_class", [CursorTarget, OpenClawTarget])
+def test_invalid_skill_does_not_remove_destination_symlink(
+    target_class, tmp_path: Path, dest_path: Path
+) -> None:
+    """Missing SKILL.md leaves an existing destination link untouched."""
+    target = target_class()
+    source = tmp_path / "invalid-skill"
+    source.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "sentinel.txt").write_text("external")
+    skill_dest = dest_path / "invalid-skill"
+    skill_dest.symlink_to(external, target_is_directory=True)
+
+    assert target.generate_skill(source, dest_path, "invalid-skill") is False
+
+    assert skill_dest.is_symlink()
+    assert (external / "sentinel.txt").read_text() == "external"
 
 
 class TestCursorTarget:

@@ -26,6 +26,20 @@ import yaml
 import lola.frontmatter as fm
 
 
+def unlink_symlink_if_present(path: Path) -> None:
+    """Remove ``path`` if it is a symlink, so a later write lands at a real
+    location rather than following the link to its target.
+
+    A pre-existing symlink (for example a user manually ``ln -s``ing a skill
+    directory into a separate checkout) must not be written through: Lola
+    would silently rewrite the external target instead of the destination
+    the user asked for. Idempotent - no-op when ``path`` does not exist or is
+    not a symlink.
+    """
+    if path.is_symlink():
+        path.unlink()
+
+
 _CLAUDE_TOOL_NAME_MAP: dict[str, str] = {
     "lsp": "LSP",
     "webfetch": "WebFetch",
@@ -357,6 +371,9 @@ class BaseAssistantTarget(AssistantTarget):
     def remove_skill(self, dest_path: Path, skill_name: str) -> bool:
         """Default: remove skill directory."""
         skill_dir = dest_path / skill_name
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+            return True
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
             return True

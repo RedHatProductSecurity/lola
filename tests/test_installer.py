@@ -1,5 +1,6 @@
 """Tests for the core/installer module."""
 
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 
@@ -344,6 +345,191 @@ class TestGenerationIsIdempotent:
         )
         assert installed_vscode == ["skill1"]
         assert failed_vscode == []
+
+    def test_returns_false_when_destination_is_symlink(self, tmp_path: Path) -> None:
+        """A skill that exists only via a symlink (e.g. a user's manual ln -s
+        into a separate checkout) must not be treated as an idempotent
+        re-install: the overwrite prompt should apply instead."""
+        from lola.targets.install import _generation_is_idempotent
+
+        real = tmp_path / "dest"
+        real.mkdir()
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "f.txt").write_text("same")
+        (real / "link").symlink_to(external, target_is_directory=True)
+
+        def generate(d: Path) -> bool:
+            (d / "link").mkdir(parents=True)
+            (d / "link" / "f.txt").write_text("same")
+            return True
+
+        assert _generation_is_idempotent(generate, real) is False
+
+    def test_returns_false_when_base_is_symlink(self, tmp_path: Path) -> None:
+        """A symlinked destination root is never treated as idempotent."""
+        from lola.targets.install import _generation_is_idempotent
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "f.txt").write_text("same")
+        real = tmp_path / "dest"
+        real.symlink_to(external, target_is_directory=True)
+
+        def generate(d: Path) -> bool:
+            (d / "f.txt").write_text("same")
+            return True
+
+        assert _generation_is_idempotent(generate, real) is False
+
+
+class TestInstallSkillsSymlink:
+    """Skills whose destination is a pre-existing symlink."""
+
+    def _make_module(self, tmp_path: Path, content: str = "new") -> Module:
+        module_dir = tmp_path / "mod"
+        skill_dir = module_dir / "skills" / "skill1"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(content)
+        (skill_dir / "data.txt").write_text("data")
+        return Module(
+            name="mymod", path=module_dir, content_path=module_dir, skills=["skill1"]
+        )
+
+    def test_overwrite_replaces_directory_symlink_with_real_copy(
+        self, tmp_path: Path
+    ) -> None:
+        """Overwriting a skill whose directory is a symlink creates a real
+        managed copy instead of writing through the link."""
+        from unittest import mock
+
+        from lola.targets.claude_code import ClaudeCodeTarget
+        from lola.targets.install import _install_skills
+
+        proj = tmp_path / "proj"
+        skills_dir = proj / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("old")
+        (external / "data.txt").write_text("data")
+        link = skills_dir / "skill1"
+        link.symlink_to(external, target_is_directory=True)
+
+        module = self._make_module(tmp_path, content="new")
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
+            installed, failed = _install_skills(
+                ClaudeCodeTarget(), module, module.path, str(proj), "project"
+            )
+
+        assert installed == ["skill1"]
+        assert failed == []
+        assert not link.is_symlink()
+        assert (skills_dir / "skill1" / "SKILL.md").is_file()
+        assert (skills_dir / "skill1" / "SKILL.md").read_text() == "new"
+        # The external target is left untouched.
+        assert (external / "SKILL.md").read_text() == "old"
+
+    def test_overwrite_replaces_file_symlink_with_real_copy(
+        self, tmp_path: Path
+    ) -> None:
+        """A skill directory that is a file symlink no longer crashes on
+        overwrite; it is replaced with a real directory."""
+        from unittest import mock
+
+        from lola.targets.claude_code import ClaudeCodeTarget
+        from lola.targets.install import _install_skills
+
+        proj = tmp_path / "proj"
+        skills_dir = proj / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("old")
+        link = skills_dir / "skill1"
+        link.symlink_to(external / "SKILL.md")
+
+        module = self._make_module(tmp_path, content="new")
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
+            installed, failed = _install_skills(
+                ClaudeCodeTarget(), module, module.path, str(proj), "project"
+            )
+
+        assert installed == ["skill1"]
+        assert failed == []
+        assert not link.is_symlink()
+        assert (skills_dir / "skill1" / "SKILL.md").read_text() == "new"
+
+    def test_overwrite_replaces_dangling_skill_symlink(self, tmp_path: Path) -> None:
+        """A dangling skill symlink still triggers the overwrite path."""
+        from unittest import mock
+
+        from lola.targets.claude_code import ClaudeCodeTarget
+        from lola.targets.install import _install_skills
+
+        proj = tmp_path / "proj"
+        skills_dir = proj / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+        link = skills_dir / "skill1"
+        link.symlink_to(tmp_path / "missing-target", target_is_directory=True)
+
+        module = self._make_module(tmp_path, content="new")
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
+            installed, failed = _install_skills(
+                ClaudeCodeTarget(), module, module.path, str(proj), "project"
+            )
+
+        assert installed == ["skill1"]
+        assert failed == []
+        assert not link.is_symlink()
+        assert (link / "SKILL.md").read_text() == "new"
+
+    def test_non_interactive_symlink_conflict_requires_force(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Non-interactive installs report the conflict and preserve the link."""
+        from unittest import mock
+
+        from lola.targets.claude_code import ClaudeCodeTarget
+        from lola.targets.install import _install_skills
+
+        proj = tmp_path / "proj"
+        skills_dir = proj / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("external")
+        link = skills_dir / "skill1"
+        link.symlink_to(external, target_is_directory=True)
+
+        module = self._make_module(tmp_path, content="new")
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=False),
+            mock.patch("lola.targets.install.click.confirm") as confirm,
+        ):
+            installed, failed = _install_skills(
+                ClaudeCodeTarget(), module, module.path, str(proj), "project"
+            )
+
+        assert installed == []
+        assert failed == ["skill1"]
+        assert link.is_symlink()
+        assert (external / "SKILL.md").read_text() == "external"
+        confirm.assert_not_called()
+        assert "use --force" in capsys.readouterr().out
 
 
 class TestRunInstallHook:

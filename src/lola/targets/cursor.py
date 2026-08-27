@@ -23,6 +23,7 @@ from .base import (
     _merge_mcps_into_file,
     _transform_claude_agent_frontmatter,
     _transform_mcp_env_vars,
+    unlink_symlink_if_present,
 )
 
 
@@ -81,15 +82,21 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         if not source_path.exists():
             return False
 
-        skill_dest = dest_path / skill_name
-        skill_dest.mkdir(parents=True, exist_ok=True)
-
-        # Copy SKILL.md
+        # Validate the source before replacing any existing destination link.
         skill_file = source_path / config.SKILL_FILE
         if not skill_file.exists():
             return False
 
-        (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+        skill_dest = dest_path / skill_name
+        # Never mkdir or write through a pre-existing symlink; unlink first so
+        # a manual ln -s into an external checkout is replaced with a real dir.
+        unlink_symlink_if_present(skill_dest)
+        skill_dest.mkdir(parents=True, exist_ok=True)
+
+        # Copy SKILL.md
+        skill_file_dest = skill_dest / "SKILL.md"
+        unlink_symlink_if_present(skill_file_dest)
+        skill_file_dest.write_text(skill_file.read_text())
 
         # Copy supporting files
         for item in source_path.iterdir():
@@ -97,10 +104,14 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
                 continue
             dest_item = skill_dest / item.name
             if item.is_dir():
-                if dest_item.exists():
+                if dest_item.is_symlink():
+                    dest_item.unlink()
+                elif dest_item.exists():
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
+                # copy2 follows a pre-existing symlink; unlink first.
+                unlink_symlink_if_present(dest_item)
                 shutil.copy2(item, dest_item)
         return True
 

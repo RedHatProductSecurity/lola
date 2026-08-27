@@ -15,6 +15,7 @@ from .base import (
     _convert_env_var_to_opencode,
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
+    unlink_symlink_if_present,
 )
 
 
@@ -271,10 +272,15 @@ class OpenCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
             return False
 
         skill_dest = dest_path / skill_name
+        # Never mkdir or write through a pre-existing symlink; unlink first so
+        # a manual ln -s into an external checkout is replaced with a real dir.
+        unlink_symlink_if_present(skill_dest)
         skill_dest.mkdir(parents=True, exist_ok=True)
 
-        # Copy SKILL.md
-        shutil.copy2(skill_file, skill_dest / config.SKILL_FILE)
+        # Copy SKILL.md; copy2 follows a pre-existing symlink, so unlink it.
+        skill_file_dest = skill_dest / config.SKILL_FILE
+        unlink_symlink_if_present(skill_file_dest)
+        shutil.copy2(skill_file, skill_file_dest)
 
         # Copy supporting files (scripts, references, assets, etc.)
         for item in source_path.iterdir():
@@ -282,10 +288,14 @@ class OpenCodeTarget(ManagedInstructionsTarget, BaseAssistantTarget):
                 continue
             dest_item = skill_dest / item.name
             if item.is_dir():
-                if dest_item.exists():
+                if dest_item.is_symlink():
+                    dest_item.unlink()
+                elif dest_item.exists():
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
+                # copy2 follows a pre-existing symlink; unlink first.
+                unlink_symlink_if_present(dest_item)
                 shutil.copy2(item, dest_item)
         return True
 
