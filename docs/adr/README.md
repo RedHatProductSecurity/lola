@@ -7,11 +7,12 @@ to create, update, and deprecate ADRs.
 ## Quick Start
 
 ```bash
-make adr-new topic-name
+make adr-new 0012-topic-name
 ```
 
-This copies the template to `docs/adr/topic-name.md`. Fill in the sections and
-open a pull request.
+This copies the template to `docs/adr/0012-topic-name.md`. Take the next unused
+number; see [use-adrs.md](use-adrs.md) for the naming rule. Fill in the sections
+and open a pull request.
 
 ## ADR Statuses
 

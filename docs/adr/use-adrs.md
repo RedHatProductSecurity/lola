@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-04-28
-**Last Updated**: 2026-05-25
+**Last Updated**: 2026-08-26
 **Authors**: Igor Brandao
 **Reviewers**:
 
@@ -22,8 +22,10 @@ Each ADR documents one architectural decision and lives as a single markdown fil
 ## How We Use ADRs
 
 **Creating an ADR:**
-Copy `docs/adr/template.md` to `docs/adr/topic-name.md`, fill in all sections, and
-open a pull request. Use `make adr-new topic-name` for convenience.
+Copy `docs/adr/template.md` to `docs/adr/<nnnn>-<topic-name>.md`, taking the
+next unused number, fill in all sections, and open a pull request. Use
+`make adr-new 0012-topic-name` for convenience; the target writes whatever
+filename you give it.
 
 **Updating an ADR:**
 If a decision changes, update the existing ADR in place and bump `Last Updated` to
@@ -43,13 +45,17 @@ If a decision is no longer relevant, set `Status` to `Deprecated` and update
 
 ## Naming Convention
 
-ADR files use descriptive kebab-case names — no sequential numbers, no date prefix.
-The date lives inside the document. Topic names must be unique.
+ADR files use a sequential number prefix followed by a descriptive kebab-case
+name. The number is allocated when the ADR is opened. The date lives inside the
+document, and topic names must be unique.
 
 ```text
-docs/adr/use-adrs.md
-docs/adr/go-migration.md
+docs/adr/<nnnn>-<topic-name>.md
 ```
+
+ADRs written before this rule keep their existing unnumbered filenames. Nothing
+is renamed retroactively, so cite an older ADR by its actual filename and put
+the number in the link text.
 
 ## Template Changes
 
@@ -59,23 +65,25 @@ approval. Existing ADRs are not retroactively reformatted.
 
 ## Rationale
 
-Topic-based names avoid merge conflicts from sequential numbering and make the ADR
-subject immediately clear from the filename. Updating ADRs in place keeps one file per
-topic with git as the audit trail.
+A number gives every decision a short, stable handle to cite in review and from
+other ADRs, and the kebab-case suffix keeps the subject clear from the filename.
+Updating ADRs in place keeps one file per topic with git as the audit trail.
 
 ## Consequences
 
 ### Positive Consequences
 
-- No merge conflicts from sequential numbering
+- Every ADR has a short, stable identifier to cite
 - ADR filenames are self-describing
 - No external tooling dependency
 - One file per topic
 
 ### Negative Consequences
 
-- ADRs are not ordered by creation date from the filename; use `git log docs/adr/` for
-  chronological ordering
+- Two ADRs drafted concurrently can claim the same number; the later one is
+  renumbered before merge
+- Numbers record allocation order, not the date inside the document; use
+  `git log docs/adr/` for true chronological ordering
 
 ## References
 
