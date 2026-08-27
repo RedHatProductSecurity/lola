@@ -89,6 +89,20 @@ def validate_module_name(name: str) -> str:
     return name
 
 
+def _find_plugin_root(root: Path) -> Optional[Path]:
+    """Return the shallowest directory holding an Agent Plugins manifest.
+
+    Agent Plugins packages keep their commands/agents under a client
+    namespace directory (``dev.getlola/commands``), so the SKILL.md and
+    ``commands/`` heuristics below would otherwise select the namespace
+    directory and drop ``plugin.json`` and ``skills/`` on the floor.
+    """
+    roots = [path.parent for path in root.rglob("plugin.json") if path.is_file()]
+    if not roots:
+        return None
+    return min(roots, key=lambda path: len(path.parts))
+
+
 class SourceHandler(ABC):
     """Base class for module source handlers."""
 
@@ -241,6 +255,10 @@ class ZipSourceHandler(SourceHandler):
         return module_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
+        plugin_root = _find_plugin_root(root)
+        if plugin_root is not None:
+            return plugin_root
+
         for path in root.rglob(SKILL_FILE):
             skill_dir = path.parent
             maybe_skills_dir = skill_dir.parent
@@ -321,6 +339,10 @@ class TarSourceHandler(SourceHandler):
         return module_dir
 
     def _find_module_dir(self, root: Path) -> Optional[Path]:
+        plugin_root = _find_plugin_root(root)
+        if plugin_root is not None:
+            return plugin_root
+
         for path in root.rglob(SKILL_FILE):
             skill_dir = path.parent
             maybe_skills_dir = skill_dir.parent
@@ -553,6 +575,10 @@ class FolderSourceHandler(SourceHandler):
     ) -> Optional[Path]:
         """Locate the module subtree by scanning for SKILL.md or commands/*.md."""
         candidates = self._candidate_files(source_path, kept)
+        # An Agent Plugins manifest marks its own package root.
+        plugin_rels = [rel.parent for rel in candidates if rel.name == "plugin.json"]
+        if plugin_rels:
+            return source_path / min(plugin_rels, key=lambda rel: len(rel.parts))
         # Prefer SKILL.md
         for rel in candidates:
             if rel.name == SKILL_FILE:
