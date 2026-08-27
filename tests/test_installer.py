@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 
 from lola.targets import get_registry, copy_module_to_local, install_to_assistant
-from lola.models import Module, InstallationRegistry
+from lola.models import Installation, Module, InstallationRegistry
 
 
 class TestGetRegistry:
@@ -264,6 +264,84 @@ Do {cmd}.
     # Note: test_install_missing_skill_source and test_install_missing_command_source
     # were removed because with auto-discovery, skills and commands are only
     # discovered if they actually exist. There's no manifest to list non-existent items.
+
+    def test_standard_install_blocks_plugin_reinstall(self, tmp_path):
+        """Cannot install as plugin when already installed as standard."""
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        registry = InstallationRegistry(installed_file)
+        registry.add(
+            Installation(
+                module_name="testmod",
+                assistant="claude-code",
+                scope="project",
+                project_path=str(tmp_path),
+                skills=["skill1"],
+                is_plugin=False,
+            )
+        )
+
+        module = self.create_test_module(tmp_path, skills=["skill1"])
+        local_modules = tmp_path / ".lola" / "modules"
+        local_modules.mkdir(parents=True)
+
+        mock_target = MagicMock()
+        mock_target.name = "claude-code"
+
+        with (
+            patch("lola.targets.console", self.console_mock),
+            patch("lola.targets.get_target", return_value=mock_target),
+        ):
+            count = install_to_assistant(
+                module=module,
+                assistant="claude-code",
+                scope="project",
+                project_path=str(tmp_path),
+                local_modules=local_modules,
+                registry=registry,
+                as_plugin=True,
+            )
+
+        assert count == 0
+
+    def test_plugin_install_blocks_standard_reinstall(self, tmp_path):
+        """Cannot install as standard when already installed as plugin."""
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        registry = InstallationRegistry(installed_file)
+        registry.add(
+            Installation(
+                module_name="testmod",
+                assistant="claude-code",
+                scope="project",
+                project_path=str(tmp_path),
+                skills=["skill1"],
+                is_plugin=True,
+            )
+        )
+
+        module = self.create_test_module(tmp_path, skills=["skill1"])
+        local_modules = tmp_path / ".lola" / "modules"
+        local_modules.mkdir(parents=True)
+
+        mock_target = MagicMock()
+        mock_target.name = "claude-code"
+
+        with (
+            patch("lola.targets.console", self.console_mock),
+            patch("lola.targets.get_target", return_value=mock_target),
+        ):
+            count = install_to_assistant(
+                module=module,
+                assistant="claude-code",
+                scope="project",
+                project_path=str(tmp_path),
+                local_modules=local_modules,
+                registry=registry,
+                as_plugin=False,
+            )
+
+        assert count == 0
 
 
 class TestGenerationIsIdempotent:

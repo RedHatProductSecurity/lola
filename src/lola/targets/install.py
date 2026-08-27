@@ -714,6 +714,31 @@ def install_to_assistant(
 
     target = get_target(assistant)
 
+    # Check for mode mismatch with existing installation
+    existing = [
+        inst
+        for inst in registry.find(module.name)
+        if inst.assistant == assistant
+        and inst.scope == scope
+        and inst.project_path == project_path
+    ]
+    if existing:
+        inst = existing[0]
+        if as_plugin and not inst.is_plugin:
+            console.print(
+                f"[red]{module.name} is installed as standard"
+                f" for {assistant}, use --plugin to reinstall"
+                f" as a plugin or uninstall first[/red]",
+            )
+            return 0
+        if not as_plugin and inst.is_plugin:
+            console.print(
+                f"[red]{module.name} is installed as a plugin"
+                f" for {assistant}, uninstall with --plugin"
+                f" first[/red]",
+            )
+            return 0
+
     paths: dict[str, Path | None] | None = None
 
     if as_plugin:

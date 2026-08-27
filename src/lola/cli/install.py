@@ -1058,9 +1058,12 @@ def install_cmd(
                         registry.add(inst)  # Update the record
 
     console.print()
-    console.print(
-        f"[green]Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}[/green]"
-    )
+    if total_installed > 0:
+        console.print(
+            f"[green]Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}[/green]"
+        )
+    else:
+        console.print("[yellow]Nothing was installed[/yellow]")
 
 
 @click.command(name="uninstall")
