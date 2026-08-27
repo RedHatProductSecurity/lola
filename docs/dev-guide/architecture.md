@@ -7,7 +7,12 @@ While skills are becoming a standard for agent context (see [AgentSkills.io](htt
 Lola works similarly to [vim-plug](https://github.com/junegunn/vim-plug) for caching and installing, while mimicking the behavior of package managers like DNF, YUM, or APT for distribution and dependency management.
 
 !!! note
-    Lola currently uses the term "market" (or "marketplace") for its federated module catalogs. We are considering renaming this concept to "repository" or "repo" in a future release for better alignment with established package manager terminology.
+    Lola's federated module catalogs answer to two names. "Marketplace" is
+    canonical: it is what `lola market` and the `@marketplace/module` install
+    syntax already use, and what Claude Code and Cursor call the same concept.
+    "Repository" and "repo" are accepted synonyms, both in prose and as command
+    aliases, for readers coming from DNF, YUM or APT. Neither term is being
+    retired.
 
 ## How Lola Works
 

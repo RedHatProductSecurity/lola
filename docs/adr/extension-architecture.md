@@ -2,7 +2,7 @@
 
 **Status**: Proposed
 **Date**: 2026-04-28
-**Last Updated**: 2026-05-29
+**Last Updated**: 2026-08-26
 **Authors**: Igor Brandao
 **Reviewers**:
 
@@ -22,13 +22,20 @@ for new capabilities without forking or modifying the Lola core binary.
 
 Introduce a formal extension system with the following extension kinds:
 
-| Kind | What it extends | Built-in examples |
-|------|----------------|-------------------|
-| `target` | Where skills are installed (assistant file formats and paths) | claude-code, cursor, gemini-cli, openclaw, opencode |
-| `repo` | Where skills are discovered (catalogs and registries) | yaml-catalog |
-| `runtime` | Where skills are executed (agent framework environments) | — (future) |
-| `source` | How skills are fetched (transport protocols) | git, zip, tar, folder |
-| `scan` | How skills are validated (security scanning) | — (future) |
+| Kind          | What it extends                                               | Built-in examples                                   |
+|---------------|---------------------------------------------------------------|-----------------------------------------------------|
+| `target`      | Where skills are installed (assistant file formats and paths) | claude-code, cursor, gemini-cli, openclaw, opencode |
+| `marketplace` | Where skills are discovered (catalogs and registries)         | yaml-catalog                                        |
+| `runtime`     | Where skills are executed (agent framework environments)      | — (future)                                          |
+| `source`      | How skills are fetched (transport protocols)                  | git, zip, tar, folder                               |
+| `scan`        | How skills are validated (security scanning)                  | — (future)                                          |
+
+The kind identifier `marketplace` is canonical, because a registry needs one
+key per kind. "Repository" and "repo" remain accepted synonyms in prose and as
+CLI aliases, in the same way `lola mod search` aliases `lola search --mod`.
+Aliasing the surface while keeping one identifier lets readers arriving from
+DNF, YUM or APT use the word they expect without making an extension manifest
+ambiguous about which kind it declares.
 
 Extensions will use a YAML manifest (`extension.yaml`) and a language-agnostic
 communication protocol. The detailed design — manifest schema, discovery flow,
@@ -47,7 +54,7 @@ once the Go project structure is established.
 ### Positive Consequences
 
 - Community can add support for new assistants without forking Lola
-- Custom skill catalogs are addable as repo extensions
+- Custom skill catalogs are addable as marketplace extensions
 - Security scanning is pluggable via scan extensions
 - Built-in and external extensions share the same interface contract
 
