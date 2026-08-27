@@ -168,7 +168,7 @@ class PluginManifest:
             name=name,
             version=data.get("version"),
             description=data.get("description"),
-            author=data.get("author"),
+            author=data.get("author") if isinstance(data.get("author"), dict) else None,
             homepage=data.get("homepage"),
             repository=data.get("repository"),
             license=data.get("license"),
