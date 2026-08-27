@@ -1428,7 +1428,19 @@ def uninstall_cmd(
     is_flag=True,
     help="Show detailed output for each skill and command",
 )
-def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bool):
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Update a plugin bundle (reinstalls from source)",
+)
+def update_cmd(
+    module_name: Optional[str],
+    assistant: Optional[str],
+    verbose: bool,
+    as_plugin: bool,
+):
     """
     Regenerate assistant files from source in .lola/modules/.
 
@@ -1486,12 +1498,72 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 console.print(f'  [dim]path:[/dim] "{project_path}"')
 
             for inst in scope_insts:
+                # Check for mode mismatch
+                if as_plugin and not inst.is_plugin:
+                    console.print(
+                        f"    [red]{inst.assistant}: installed as"
+                        f" standard, use --plugin to reinstall"
+                        f" or uninstall first[/red]",
+                    )
+                    continue
+                if not as_plugin and inst.is_plugin:
+                    console.print(
+                        f"    [red]{inst.assistant}: installed as"
+                        f" a plugin, use --plugin to update[/red]",
+                    )
+                    continue
+
                 # Validate installation
                 is_valid, error_msg = _validate_installation_for_update(inst)
                 if not is_valid:
                     console.print(f"    [red]{inst.assistant}: {error_msg}[/red]")
                     if error_msg == "project path no longer exists":
                         stale_installations.append(inst)
+                    continue
+
+                # Plugin update: uninstall and reinstall
+                if as_plugin and inst.is_plugin:
+                    target = get_target(inst.assistant)
+                    layout = target.get_plugin_layout(inst.scope)
+                    if layout:
+                        plugin_root = layout.resolve_root(
+                            inst.module_name,
+                            inst.scope,
+                            inst.project_path,
+                        )
+                        if plugin_root.exists():
+                            shutil.rmtree(plugin_root)
+                    global_module = load_registered_module(
+                        MODULES_DIR / inst.module_name,
+                    )
+                    if not global_module:
+                        console.print(
+                            f"    [red]{inst.assistant}: module not found[/red]",
+                        )
+                        continue
+                    if inst.scope == "user":
+                        local_modules = get_local_modules_path(
+                            str(Path.cwd()),
+                        )
+                    else:
+                        local_modules = get_local_modules_path(
+                            inst.project_path,
+                        )
+                    count = install_to_assistant(
+                        module=global_module,
+                        assistant=inst.assistant,
+                        scope=inst.scope,
+                        project_path=inst.project_path,
+                        local_modules=local_modules,
+                        registry=registry,
+                        verbose=verbose,
+                        force=True,
+                        as_plugin=True,
+                    )
+                    console.print(
+                        f"    [green]{inst.assistant}[/green]"
+                        f" [dim](reinstalled, {count} items)[/dim]",
+                    )
                     continue
 
                 # Build context for update
