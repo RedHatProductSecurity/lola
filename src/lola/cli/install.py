@@ -1021,7 +1021,7 @@ def install_cmd(
                     f" at {scope} scope, skipping[/dim]",
                 )
                 continue
-        total_installed += install_to_assistant(
+        result = install_to_assistant(
             module,
             asst,
             scope,
@@ -1035,6 +1035,8 @@ def install_cmd(
             append_context_list,
             as_plugin=as_plugin,
         )
+        if result > 0:
+            total_installed += 1
 
     # Update installation records with version/ref from marketplace metadata
     if module_dict:
