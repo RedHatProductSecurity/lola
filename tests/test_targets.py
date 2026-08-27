@@ -662,6 +662,26 @@ def test_file_based_targets_replace_skill_file_symlinks(
     assert external_notes.read_text() == "external notes"
 
 
+@pytest.mark.parametrize("target_class", [CursorTarget, OpenClawTarget])
+def test_invalid_skill_does_not_remove_destination_symlink(
+    target_class, tmp_path: Path, dest_path: Path
+) -> None:
+    """Missing SKILL.md leaves an existing destination link untouched."""
+    target = target_class()
+    source = tmp_path / "invalid-skill"
+    source.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "sentinel.txt").write_text("external")
+    skill_dest = dest_path / "invalid-skill"
+    skill_dest.symlink_to(external, target_is_directory=True)
+
+    assert target.generate_skill(source, dest_path, "invalid-skill") is False
+
+    assert skill_dest.is_symlink()
+    assert (external / "sentinel.txt").read_text() == "external"
+
+
 class TestCursorTarget:
     """Tests for CursorTarget implementation (Cursor 2.4+)."""
 

@@ -82,6 +82,11 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         if not source_path.exists():
             return False
 
+        # Validate the source before replacing any existing destination link.
+        skill_file = source_path / config.SKILL_FILE
+        if not skill_file.exists():
+            return False
+
         skill_dest = dest_path / skill_name
         # Never mkdir or write through a pre-existing symlink; unlink first so
         # a manual ln -s into an external checkout is replaced with a real dir.
@@ -89,10 +94,6 @@ class CursorTarget(MCPSupportMixin, BaseAssistantTarget):
         skill_dest.mkdir(parents=True, exist_ok=True)
 
         # Copy SKILL.md
-        skill_file = source_path / config.SKILL_FILE
-        if not skill_file.exists():
-            return False
-
         skill_file_dest = skill_dest / "SKILL.md"
         unlink_symlink_if_present(skill_file_dest)
         skill_file_dest.write_text(skill_file.read_text())
