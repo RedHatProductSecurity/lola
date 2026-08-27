@@ -810,15 +810,20 @@ def install_to_assistant(
         dest_override=paths["mcp"] if paths else None,
     )
 
-    instructions_installed = _install_instructions(
-        target,
-        module,
-        local_module_path,
-        project_path,
-        append_context,
-        scope,
-        dest_override=paths["instructions"] if paths else None,
-    )
+    # In plugin mode, skip instructions if the layout has no instructions path
+    # to avoid writing outside the plugin bundle.
+    if as_plugin and (not paths or not paths.get("instructions")):
+        instructions_installed = False
+    else:
+        instructions_installed = _install_instructions(
+            target,
+            module,
+            local_module_path,
+            project_path,
+            append_context,
+            scope,
+            dest_override=paths["instructions"] if paths else None,
+        )
 
     plugin_manifest_installed = _install_plugin_manifest(
         as_plugin, paths, target, module

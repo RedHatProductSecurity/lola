@@ -159,6 +159,8 @@ class PluginManifest:
             data = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
             return None
+        if not isinstance(data, dict):
+            return None
         name = data.get("name")
         if not name:
             return None
