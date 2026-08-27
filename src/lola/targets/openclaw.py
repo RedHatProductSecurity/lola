@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 import lola.config as config
-from .base import BaseAssistantTarget
+from .base import BaseAssistantTarget, unlink_symlink_if_present
 
 
 class OpenClawTarget(BaseAssistantTarget):
@@ -64,23 +64,32 @@ class OpenClawTarget(BaseAssistantTarget):
             return False
 
         skill_dest = dest_path / skill_name
+        # Never mkdir or write through a pre-existing symlink; unlink first so
+        # a manual ln -s into an external checkout is replaced with a real dir.
+        unlink_symlink_if_present(skill_dest)
         skill_dest.mkdir(parents=True, exist_ok=True)
 
         skill_file = source_path / config.SKILL_FILE
         if not skill_file.exists():
             return False
 
-        (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+        skill_file_dest = skill_dest / "SKILL.md"
+        unlink_symlink_if_present(skill_file_dest)
+        skill_file_dest.write_text(skill_file.read_text())
 
         for item in source_path.iterdir():
             if item.name == "SKILL.md":
                 continue
             dest_item = skill_dest / item.name
             if item.is_dir():
-                if dest_item.exists():
+                if dest_item.is_symlink():
+                    dest_item.unlink()
+                elif dest_item.exists():
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
+                # copy2 follows a pre-existing symlink; unlink first.
+                unlink_symlink_if_present(dest_item)
                 shutil.copy2(item, dest_item)
 
         return True

@@ -346,7 +346,7 @@ class TestGenerationIsIdempotent:
         assert installed_vscode == ["skill1"]
         assert failed_vscode == []
 
-    def test_returns_false_when_destination_is_symlink(self, tmp_path):
+    def test_returns_false_when_destination_is_symlink(self, tmp_path: Path) -> None:
         """A skill that exists only via a symlink (e.g. a user's manual ln -s
         into a separate checkout) must not be treated as an idempotent
         re-install: the overwrite prompt should apply instead."""
@@ -360,7 +360,7 @@ class TestGenerationIsIdempotent:
         (external / "f.txt").write_text("same")
         (real / "link").symlink_to(external, target_is_directory=True)
 
-        def generate(d):
+        def generate(d: Path) -> bool:
             (d / "link").mkdir(parents=True)
             (d / "link" / "f.txt").write_text("same")
             return True
@@ -419,7 +419,10 @@ class TestInstallSkillsSymlink:
         link.symlink_to(external, target_is_directory=True)
 
         module = self._make_module(tmp_path, content="new")
-        with mock.patch("click.confirm", return_value=True):
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
             installed, failed = _install_skills(
                 ClaudeCodeTarget(), module, module.path, str(proj), "project"
             )
@@ -453,7 +456,10 @@ class TestInstallSkillsSymlink:
         link.symlink_to(external / "SKILL.md")
 
         module = self._make_module(tmp_path, content="new")
-        with mock.patch("click.confirm", return_value=True):
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
             installed, failed = _install_skills(
                 ClaudeCodeTarget(), module, module.path, str(proj), "project"
             )
@@ -477,7 +483,10 @@ class TestInstallSkillsSymlink:
         link.symlink_to(tmp_path / "missing-target", target_is_directory=True)
 
         module = self._make_module(tmp_path, content="new")
-        with mock.patch("click.confirm", return_value=True):
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=True),
+            mock.patch("click.confirm", return_value=True),
+        ):
             installed, failed = _install_skills(
                 ClaudeCodeTarget(), module, module.path, str(proj), "project"
             )
@@ -486,6 +495,41 @@ class TestInstallSkillsSymlink:
         assert failed == []
         assert not link.is_symlink()
         assert (link / "SKILL.md").read_text() == "new"
+
+    def test_non_interactive_symlink_conflict_requires_force(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Non-interactive installs report the conflict and preserve the link."""
+        from unittest import mock
+
+        from lola.targets.claude_code import ClaudeCodeTarget
+        from lola.targets.install import _install_skills
+
+        proj = tmp_path / "proj"
+        skills_dir = proj / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "SKILL.md").write_text("external")
+        link = skills_dir / "skill1"
+        link.symlink_to(external, target_is_directory=True)
+
+        module = self._make_module(tmp_path, content="new")
+        with (
+            mock.patch("lola.targets.install.is_interactive", return_value=False),
+            mock.patch("lola.targets.install.click.confirm") as confirm,
+        ):
+            installed, failed = _install_skills(
+                ClaudeCodeTarget(), module, module.path, str(proj), "project"
+            )
+
+        assert installed == []
+        assert failed == ["skill1"]
+        assert link.is_symlink()
+        assert (external / "SKILL.md").read_text() == "external"
+        confirm.assert_not_called()
+        assert "use --force" in capsys.readouterr().out
 
 
 class TestRunInstallHook:

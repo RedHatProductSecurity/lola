@@ -315,6 +315,13 @@ def _install_skills(
                     # variant wrote it): treat as an installed no-op.
                     installed.append(skill_name)
                     continue
+                elif not is_interactive():
+                    console.print(
+                        f"  [yellow]Skill '{skill_name}' already exists; "
+                        "use --force to overwrite in non-interactive mode.[/yellow]"
+                    )
+                    failed.append(skill_name)
+                    continue
                 elif click.confirm(
                     f"Skill '{skill_name}' already exists. Overwrite?", default=False
                 ):

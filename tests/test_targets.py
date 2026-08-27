@@ -26,6 +26,7 @@ from lola.targets import (
     get_target,
 )
 from lola.cli.install import _resolve_install_path
+from lola.targets.copilot import CopilotCliTarget
 
 
 # =============================================================================
@@ -595,6 +596,70 @@ Agent body content.
 # =============================================================================
 # CursorTarget Tests
 # =============================================================================
+
+
+@pytest.mark.parametrize(
+    "target_class",
+    [
+        ClaudeCodeTarget,
+        CopilotCliTarget,
+        CursorTarget,
+        OpenClawTarget,
+        OpenCodeTarget,
+    ],
+)
+def test_file_based_targets_replace_skill_directory_symlink(
+    target_class, skill_source: Path, dest_path: Path, tmp_path: Path
+) -> None:
+    """Every file-based target replaces a skill-directory symlink safely."""
+    target = target_class()
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "sentinel.txt").write_text("external")
+    skill_dest = dest_path / "mymod-test-skill"
+    skill_dest.symlink_to(external, target_is_directory=True)
+
+    assert target.generate_skill(skill_source, dest_path, "mymod-test-skill") is True
+
+    assert not skill_dest.is_symlink()
+    assert (skill_dest / "SKILL.md").is_file()
+    assert (external / "sentinel.txt").read_text() == "external"
+
+
+@pytest.mark.parametrize(
+    "target_class",
+    [
+        ClaudeCodeTarget,
+        CopilotCliTarget,
+        CursorTarget,
+        OpenClawTarget,
+        OpenCodeTarget,
+    ],
+)
+def test_file_based_targets_replace_skill_file_symlinks(
+    target_class, skill_source: Path, dest_path: Path, tmp_path: Path
+) -> None:
+    """Skill and supporting-file links are replaced without touching targets."""
+    target = target_class()
+    skill_dest = dest_path / "mymod-test-skill"
+    skill_dest.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    external_skill = external / "SKILL.md"
+    external_notes = external / "notes.md"
+    external_skill.write_text("external skill")
+    external_notes.write_text("external notes")
+    (skill_dest / "SKILL.md").symlink_to(external_skill)
+    (skill_dest / "notes.md").symlink_to(external_notes)
+
+    assert target.generate_skill(skill_source, dest_path, "mymod-test-skill") is True
+
+    assert not (skill_dest / "SKILL.md").is_symlink()
+    assert not (skill_dest / "notes.md").is_symlink()
+    assert (skill_dest / "SKILL.md").is_file()
+    assert (skill_dest / "notes.md").is_file()
+    assert external_skill.read_text() == "external skill"
+    assert external_notes.read_text() == "external notes"
 
 
 class TestCursorTarget:

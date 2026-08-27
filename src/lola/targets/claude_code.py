@@ -13,6 +13,7 @@ from .base import (
     _generate_agent_with_frontmatter,
     _generate_passthrough_command,
     _transform_claude_agent_frontmatter,
+    unlink_symlink_if_present,
 )
 
 
@@ -59,14 +60,18 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         # Replace a pre-existing symlink (e.g. a user's manual ln -s into a
         # separate checkout) with a real directory instead of writing through
         # it or failing to create a directory over a file symlink.
-        if skill_dest.is_symlink():
-            skill_dest.unlink()
+        unlink_symlink_if_present(skill_dest)
         skill_dest.mkdir(parents=True, exist_ok=True)
 
         # Copy SKILL.md
         skill_file = source_path / config.SKILL_FILE
         if skill_file.exists():
-            (skill_dest / "SKILL.md").write_text(skill_file.read_text())
+            skill_file_dest = skill_dest / "SKILL.md"
+            # Write must not follow a symlink that shadows the skill file
+            # (written before by a manual ln -s or a previous target): the
+            # link points at an external file Lola should not overwrite.
+            unlink_symlink_if_present(skill_file_dest)
+            skill_file_dest.write_text(skill_file.read_text())
 
         # Copy supporting files
         for item in source_path.iterdir():
@@ -80,6 +85,9 @@ class ClaudeCodeTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
+                # Regular file: copy2 follows a pre-existing symlink and
+                # rewrites its target, so unlink the link first.
+                unlink_symlink_if_present(dest_item)
                 shutil.copy2(item, dest_item)
         return True
 

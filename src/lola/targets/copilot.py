@@ -15,6 +15,7 @@ from .base import (
     _convert_env_var_to_cursor_vscode,
     _generate_passthrough_command,
     _transform_mcp_env_vars,
+    unlink_symlink_if_present,
 )
 
 
@@ -91,8 +92,7 @@ class CopilotCliTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         # Replace a pre-existing symlink (e.g. a user's manual ln -s into a
         # separate checkout) with a real directory instead of writing through
         # it or failing to create a directory over a file symlink.
-        if skill_dir.is_symlink():
-            skill_dir.unlink()
+        unlink_symlink_if_present(skill_dir)
         skill_dir.mkdir(parents=True, exist_ok=True)
 
         # Build Copilot-compatible frontmatter (requires name + description)
@@ -113,6 +113,10 @@ class CopilotCliTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
         output = f"---\n{fm_str}\n---\n{body}"
 
         dest_file = skill_dir / "SKILL.md"
+        # Write must not follow a symlink that shadows the skill file (a
+        # manual ln -s or an earlier target): the link points at an external
+        # file Lola should not overwrite.
+        unlink_symlink_if_present(dest_file)
         dest_file.write_text(output)
 
         # Copy supporting files (scripts, examples, etc.)
@@ -129,6 +133,9 @@ class CopilotCliTarget(MCPSupportMixin, ManagedInstructionsTarget, BaseAssistant
                     shutil.rmtree(dest_item)
                 shutil.copytree(item, dest_item)
             else:
+                # copy2 follows a pre-existing symlink and rewrites its
+                # target; unlink the link first so the write stays local.
+                unlink_symlink_if_present(dest_item)
                 shutil.copy2(item, dest_item)
 
         return True
