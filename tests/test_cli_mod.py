@@ -1434,6 +1434,53 @@ class TestModRemoveAdvanced:
         # CRITICAL: Verify get_skill_path was called with the correct scope
         mock_target.get_skill_path.assert_called_once_with("/some/project", "user")
 
+    def test_rm_removes_user_scope_plugin(self, cli_runner, sample_module, tmp_path):
+        """mod rm removes user-scope plugin directory."""
+        from unittest.mock import MagicMock
+        from lola.models import Installation, InstallationRegistry
+        from lola.targets.base import PluginLayout
+
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / ".lola" / "installed.yml"
+
+        dest = modules_dir / "sample-module"
+        shutil.copytree(sample_module, dest)
+
+        registry = InstallationRegistry(installed_file)
+        registry.add(
+            Installation(
+                module_name="sample-module",
+                assistant="cursor",
+                scope="user",
+                skills=["skill1"],
+                is_plugin=True,
+            )
+        )
+
+        plugin_dir = tmp_path / "plugins" / "sample-module"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "plugin.json").write_text('{"name": "sample-module"}')
+
+        layout = PluginLayout(
+            plugin_root_template=str(tmp_path / "plugins" / "{name}"),
+            manifest_path=None,
+            mcp_path="mcp.json",
+        )
+        mock_target = MagicMock()
+        mock_target.get_plugin_layout.return_value = layout
+
+        with (
+            patch("lola.cli.mod.MODULES_DIR", modules_dir),
+            patch("lola.cli.mod.INSTALLED_FILE", installed_file),
+            patch("lola.cli.mod.get_target", return_value=mock_target),
+            patch("lola.cli.mod.ensure_lola_dirs"),
+        ):
+            result = cli_runner.invoke(mod, ["rm", "sample-module", "-f"])
+
+        assert result.exit_code == 0
+        assert not plugin_dir.exists()
+
 
 class TestModRmInteractive:
     """Tests for mod rm interactive picker (no argument)."""
