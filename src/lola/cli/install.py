@@ -1091,6 +1091,13 @@ def install_cmd(
     default=None,
     help="Filter by installation scope",
 )
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Uninstall a plugin bundle instead of individual files",
+)
 def uninstall_cmd(
     module_name: Optional[str],
     assistant: Optional[str],
@@ -1098,6 +1105,7 @@ def uninstall_cmd(
     project_path: Optional[str],
     force: bool,
     scope: Optional[str],
+    as_plugin: bool,
 ):
     """
     Uninstall a module's skills from AI assistants.
@@ -1243,6 +1251,51 @@ def uninstall_cmd(
         path_context = inst.project_path or ""
         inst_scope = inst.scope
 
+        if as_plugin and not inst.is_plugin:
+            console.print(
+                f"[red]{module_name} was not installed as a plugin"
+                f" for {inst.assistant}[/red]",
+            )
+            continue
+        if not as_plugin and inst.is_plugin:
+            console.print(
+                f"[red]{module_name} was installed as a plugin"
+                f" for {inst.assistant}, use --plugin to"
+                f" uninstall[/red]",
+            )
+            continue
+
+        if as_plugin:
+            layout = target.get_plugin_layout(inst_scope)
+            if layout is None:
+                console.print(
+                    f"[red]--plugin is not supported with {inst.assistant}[/red]",
+                )
+                continue
+            plugin_root = layout.resolve_root(
+                module_name,
+                inst_scope,
+                inst.project_path,
+            )
+            if not plugin_root.exists():
+                console.print(
+                    f"[yellow]Plugin not found: {plugin_root}[/yellow]",
+                )
+                continue
+            shutil.rmtree(plugin_root)
+            removed_count += 1
+            if verbose:
+                console.print(
+                    f"  [green]Removed plugin {plugin_root}[/green]",
+                )
+            registry.remove(
+                module_name,
+                assistant=inst.assistant,
+                scope=inst.scope,
+                project_path=inst.project_path,
+            )
+            continue
+
         # Remove skill files
         if inst.skills:
             skill_dest = target.get_skill_path(path_context, inst_scope)
@@ -1312,20 +1365,6 @@ def uninstall_cmd(
                 if verbose:
                     console.print(f"  [green]Removed MCPs from {mcp_dest}[/green]")
 
-        # Remove plugin directory if it exists
-        layout = target.get_plugin_layout(inst_scope)
-        if layout is not None:
-            plugin_root = layout.resolve_root(
-                module_name,
-                inst_scope,
-                inst.project_path,
-            )
-            if plugin_root.exists():
-                shutil.rmtree(plugin_root)
-                removed_count += 1
-                if verbose:
-                    console.print(f"  [green]Removed plugin {plugin_root}[/green]")
-
         # Also remove the project-local module copy
         if inst.scope == "project" and inst.project_path:
             local_modules = get_local_modules_path(inst.project_path)
@@ -1360,7 +1399,9 @@ def uninstall_cmd(
         )
 
     console.print(
-        f"[green]Uninstalled from {len(installations)} installation{'s' if len(installations) != 1 else ''}[/green]"
+        f"[green]Uninstalled from {removed_count} installation{'s' if removed_count != 1 else ''}[/green]"
+        if removed_count > 0
+        else "[yellow]Nothing was uninstalled[/yellow]"
     )
 
 

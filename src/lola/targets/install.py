@@ -860,6 +860,7 @@ def install_to_assistant(
                 mcps=installed_mcps,
                 has_instructions=instructions_installed,
                 append_context=append_context,
+                is_plugin=as_plugin,
             )
         )
 
