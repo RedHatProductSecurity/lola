@@ -18,12 +18,14 @@ import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
 import lola.frontmatter as fm
+from lola.models import Module
 
 
 def unlink_symlink_if_present(path: Path) -> None:
@@ -116,6 +118,138 @@ def _resolve_source_content(source: Path | str | list[str]) -> str | None:
     elif isinstance(source, str):
         return source.strip()
     return None
+
+
+# =============================================================================
+# Plugin manifest
+# =============================================================================
+
+_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+
+
+@dataclass
+class PluginManifest:
+    """Plugin manifest (plugin.json) per the Open Plugin Spec.
+
+    Based on the docs https://agent-plugins.org/plugin-authors/manifest the schema is closed,
+    Do not add any new properties to this class without checking the schema.
+    If adding a new property, make sure to update the the to_dict and from_file methods.
+    """
+
+    name: str
+    version: str | None = None
+    description: str | None = None
+    author: dict[str, str] | None = None
+    homepage: str | None = None
+    repository: str | None = None
+    license: str | None = None
+    keywords: list[str] | None = None
+    extensions: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("PluginManifest requires a non-empty name")
+
+    @classmethod
+    def from_file(cls, path: Path) -> PluginManifest | None:
+        """Load from an existing plugin.json. Returns None if not found or invalid."""
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        name = data.get("name")
+        if not name:
+            return None
+        return cls(
+            name=name,
+            version=data.get("version"),
+            description=data.get("description"),
+            author=data.get("author") if isinstance(data.get("author"), dict) else None,
+            homepage=data.get("homepage"),
+            repository=data.get("repository"),
+            license=data.get("license"),
+            keywords=data.get("keywords"),
+            extensions=data.get("extensions"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"$schema": _PLUGIN_SCHEMA, "name": self.name}
+        if self.version:
+            result["version"] = self.version
+        if self.description:
+            result["description"] = self.description
+        if self.author:
+            result["author"] = {
+                k: v for k, v in self.author.items() if k in {"name", "email", "url"}
+            }
+        if self.homepage:
+            result["homepage"] = self.homepage
+        if self.repository:
+            result["repository"] = self.repository
+        if self.license:
+            result["license"] = self.license
+        if self.keywords:
+            result["keywords"] = self.keywords
+        if self.extensions:
+            result["extensions"] = self.extensions
+        return result
+
+    def write(self, manifest_dir: Path) -> bool:
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        (manifest_dir / "plugin.json").write_text(
+            json.dumps(self.to_dict(), indent=2) + "\n"
+        )
+        return True
+
+
+# =============================================================================
+# Plugin layout
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class PluginLayout:
+    """Plugin directory structure for a target."""
+
+    plugin_root_template: str
+    manifest_path: str | None
+    mcp_path: str | None
+    skills_path: str = "skills"
+    agents_path: str | None = "agents"
+    commands_path: str | None = "commands"
+    instructions_path: str | None = None
+
+    def resolve_root(
+        self, module_name: str, scope: str, project_path: str | None
+    ) -> Path:
+        """Resolve the plugin root directory from the template."""
+        template = self.plugin_root_template.format(name=module_name)
+        if template.startswith("~/"):
+            return Path.home() / template[2:]
+        if scope == "project" and project_path:
+            return Path(project_path) / template
+        return Path(template)
+
+    def resolve_paths(self, plugin_root: Path) -> dict[str, Path | None]:
+        """Resolve all component paths relative to plugin root."""
+        return {
+            "skills": plugin_root / self.skills_path,
+            "commands": plugin_root / self.commands_path
+            if self.commands_path
+            else None,
+            "agents": plugin_root / self.agents_path if self.agents_path else None,
+            "mcp": plugin_root / self.mcp_path if self.mcp_path else None,
+            "instructions": plugin_root / self.instructions_path
+            if self.instructions_path
+            else None,
+            "manifest": plugin_root / self.manifest_path
+            if self.manifest_path
+            else plugin_root,
+        }
 
 
 # =============================================================================
@@ -325,6 +459,17 @@ class AssistantTarget(ABC):
             Returns True immediately if supports_agents is False.
         """
         ...
+
+    def get_plugin_layout(
+        self,
+        scope: str = "project",
+    ) -> PluginLayout | None:
+        """Return plugin layout, or None if not supported."""
+        return None
+
+    def build_plugin_manifest(self, module: Module) -> PluginManifest:
+        """Build plugin manifest. Override in targets that support plugins."""
+        raise NotImplementedError(f"{self.name} does not support plugins")
 
 
 # =============================================================================

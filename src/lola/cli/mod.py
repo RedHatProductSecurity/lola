@@ -805,21 +805,30 @@ def remove_module(module_name: str | None, force: bool):
 
     # Uninstall from all locations
     for inst in installations:
-        if not inst.project_path:
-            continue
-
         target = get_target(inst.assistant)
-        skill_dest = target.get_skill_path(inst.project_path, inst.scope)
 
-        # Remove generated skill files
-        if target.uses_managed_section:
-            # Remove module section from managed file (e.g., GEMINI.md, AGENTS.md)
-            if target.remove_skill(skill_dest, module_name):
-                console.print(f"  [dim]Removed from: {skill_dest}[/dim]")
-        else:
-            for skill in inst.skills:
-                if target.remove_skill(skill_dest, skill):
-                    console.print(f"  [dim]Removed: {skill}[/dim]")
+        # Remove plugin directory if this was a plugin install
+        if inst.is_plugin:
+            layout = target.get_plugin_layout(inst.scope)
+            if layout is not None:
+                plugin_root = layout.resolve_root(
+                    module_name,
+                    inst.scope,
+                    inst.project_path,
+                )
+                if plugin_root.exists():
+                    shutil.rmtree(plugin_root)
+                    console.print(f"  [dim]Removed: {plugin_root}[/dim]")
+        elif inst.project_path:
+            skill_dest = target.get_skill_path(inst.project_path, inst.scope)
+
+            if target.uses_managed_section:
+                if target.remove_skill(skill_dest, module_name):
+                    console.print(f"  [dim]Removed from: {skill_dest}[/dim]")
+            else:
+                for skill in inst.skills:
+                    if target.remove_skill(skill_dest, skill):
+                        console.print(f"  [dim]Removed: {skill}[/dim]")
 
         # Remove source files from project .lola/modules/ if applicable
         if inst.project_path:

@@ -1,6 +1,8 @@
 """Tests for ClaudeCodeTarget scope-aware path resolution."""
 
+import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from lola.targets.claude_code import ClaudeCodeTarget
 
@@ -99,3 +101,59 @@ def test_claude_code_mcp_path_default_scope():
     target = ClaudeCodeTarget()
     result = target.get_mcp_path("/home/user/project")
     assert result == Path("/home/user/project/.mcp.json")
+
+
+# --- Plugin tests ---
+
+
+def test_claude_code_plugin_layout_project():
+    target = ClaudeCodeTarget()
+    layout = target.get_plugin_layout("project")
+    assert layout is not None
+    root = layout.resolve_root("my-pack", "project", "/home/user/project")
+    assert root == Path("/home/user/project/.claude/skills/my-pack")
+
+
+def test_claude_code_plugin_layout_user():
+    target = ClaudeCodeTarget()
+    layout = target.get_plugin_layout("user")
+    assert layout is not None
+    root = layout.resolve_root("my-pack", "user", None)
+    assert root == Path.home() / ".claude" / "skills" / "my-pack"
+
+
+def test_claude_code_plugin_layout_manifest_path():
+    target = ClaudeCodeTarget()
+    layout = target.get_plugin_layout("project")
+    assert layout is not None
+    root = layout.resolve_root("my-pack", "project", "/project")
+    paths = layout.resolve_paths(root)
+    assert paths["manifest"] == root / ".claude-plugin"
+
+
+def test_claude_code_plugin_layout_mcp_path():
+    target = ClaudeCodeTarget()
+    layout = target.get_plugin_layout("project")
+    assert layout is not None
+    root = layout.resolve_root("my-pack", "project", "/project")
+    paths = layout.resolve_paths(root)
+    assert paths["mcp"] == root / ".mcp.json"
+
+
+def test_claude_code_build_manifest_uses_existing(tmp_path):
+    target = ClaudeCodeTarget()
+    (tmp_path / "plugin.json").write_text(
+        json.dumps(
+            {
+                "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+                "name": "from-pack",
+                "version": "2.0.0",
+            }
+        )
+    )
+    module = MagicMock()
+    module.name = "my-pack"
+    module.content_path = tmp_path
+    manifest = target.build_plugin_manifest(module)
+    assert manifest.name == "from-pack"
+    assert manifest.version == "2.0.0"

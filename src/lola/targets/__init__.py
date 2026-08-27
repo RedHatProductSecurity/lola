@@ -18,6 +18,8 @@ from lola.targets.base import (
     ManagedInstructionsTarget,
     ManagedSectionTarget,
     MCPSupportMixin,
+    PluginLayout,
+    PluginManifest,
     _convert_env_var_to_cursor_vscode,
     _convert_env_var_to_opencode,
     _generate_agent_with_frontmatter,
@@ -97,6 +99,8 @@ __all__ = [
     "ManagedInstructionsTarget",
     "ManagedSectionTarget",
     "MCPSupportMixin",
+    "PluginLayout",
+    "PluginManifest",
     # Concrete targets
     "ClaudeCodeTarget",
     "CopilotCliTarget",

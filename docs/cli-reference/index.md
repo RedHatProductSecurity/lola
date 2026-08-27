@@ -44,7 +44,9 @@ Complete command reference for the Lola CLI. Use `lola --help` or `lola <command
 | `lola install @<marketplace>/<module>`              | Install from a specific marketplace           |
 | `lola install @<marketplace>/<module>@<ref>`        | Install from a marketplace at a specific ref  |
 | `lola install <module> --append-context <path>`     | Append context reference                      |
+| `lola install <module> --plugin`                    | Install as a self-contained plugin bundle (uses existing `plugin.json` or generates one) |
 | `lola uninstall <module>`                           | Uninstall module                              |
+| `lola uninstall <module> --plugin`                  | Uninstall a plugin bundle                     |
 | `lola list`                                         | List all installations (shows version and ref when set) |
 | `lola update`                                       | Regenerate assistant files                    |
 | `lola sync`                                         | Install modules from `.lola-req`              |

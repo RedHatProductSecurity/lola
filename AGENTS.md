@@ -60,6 +60,7 @@ lola install <module> -a claude-code
 | Architecture overview | `docs/dev-guide/architecture.md` |
 | E2E tests | `docs/dev-guide/design/e2e-bdd.md` |
 | CLI reference | `docs/cli-reference/` |
+| Plugin installation | `docs/guides/plugins.md` |
 | Proposing a change | `openspec/changes/` or `specs/` |
 | PR template | `.github/PULL_REQUEST_TEMPLATE.md` |
 
@@ -90,14 +91,14 @@ lola install <module> -a claude-code
 
 ### Target Assistants
 
-| Assistant | Skills | Commands | Agents |
-|-----------|--------|----------|--------|
-| claude-code | `.claude/skills/` | `.claude/commands/` | `.claude/agents/` |
-| cursor | `.cursor/skills/` | `.cursor/commands/` | `.cursor/agents/` |
-| gemini-cli | `GEMINI.md` | `.gemini/commands/` | N/A |
-| opencode | `AGENTS.md` | `.opencode/commands/` | `.opencode/agents/` |
-| copilot-cli | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
-| copilot-vscode | `.github/skills/` | `.github/prompts/` | `.github/agents/` |
+| Assistant | Skills | Commands | Agents | Plugin |
+|-----------|--------|----------|--------|--------|
+| claude-code | `.claude/skills/` | `.claude/commands/` | `.claude/agents/` | `.claude/skills/<name>/` (project), `~/.claude/skills/<name>/` (user) |
+| cursor | `.cursor/skills/` | `.cursor/commands/` | `.cursor/agents/` | `~/.cursor/plugins/local/<name>/` (user only) |
+| gemini-cli | `GEMINI.md` | `.gemini/commands/` | N/A | N/A |
+| opencode | `AGENTS.md` | `.opencode/commands/` | `.opencode/agents/` | N/A |
+| copilot-cli | `.github/skills/` | `.github/prompts/` | `.github/agents/` | N/A |
+| copilot-vscode | `.github/skills/` | `.github/prompts/` | `.github/agents/` | N/A |
 
 ### Module Structure
 

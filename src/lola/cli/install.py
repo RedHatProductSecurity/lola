@@ -769,6 +769,13 @@ def _format_update_summary(result: UpdateResult) -> str:
     default="project",
     help="Installation scope: project (default) or user",
 )
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Install as a self-contained plugin bundle",
+)
 @click.argument("project_path", required=False, default="./")
 def install_cmd(
     module_name: Optional[str],
@@ -780,6 +787,7 @@ def install_cmd(
     append_context: tuple[str, ...],
     workspace: Optional[str],
     scope: str,
+    as_plugin: bool,
     project_path: str,
 ):
     """
@@ -984,9 +992,36 @@ def install_cmd(
     # Convert CLI tuple to list for the rest of the flow
     append_context_list = list(append_context) if append_context else None
 
+    # Some clients don't support plugins; others support only specific scopes
+    # (e.g. user but not project). When -a is explicit, exit on unsupported.
+    if as_plugin and assistant is not None:
+        target = get_target(assistant)
+        if target.get_plugin_layout(scope) is None:
+            if (
+                target.get_plugin_layout("user") is None
+                and target.get_plugin_layout("project") is None
+            ):
+                console.print(
+                    f"[red]--plugin is not supported with {assistant}[/red]",
+                )
+            else:
+                console.print(
+                    f"[red]{scope}-level plugin is not supported for {assistant}[/red]",
+                )
+            raise SystemExit(1)
+
     total_installed = 0
     for asst in assistants_to_install:
-        total_installed += install_to_assistant(
+        # In plugin mode without -a, skip clients that don't support plugins.
+        if as_plugin:
+            target = get_target(asst)
+            if target.get_plugin_layout(scope) is None:
+                console.print(
+                    f"  [dim]{asst}: plugin not supported"
+                    f" at {scope} scope, skipping[/dim]",
+                )
+                continue
+        result = install_to_assistant(
             module,
             asst,
             scope,
@@ -998,7 +1033,10 @@ def install_cmd(
             effective_pre_install,
             effective_post_install,
             append_context_list,
+            as_plugin=as_plugin,
         )
+        if result > 0:
+            total_installed += 1
 
     # Update installation records with version/ref from marketplace metadata
     if module_dict:
@@ -1022,9 +1060,14 @@ def install_cmd(
                         registry.add(inst)  # Update the record
 
     console.print()
-    console.print(
-        f"[green]Installed to {len(assistants_to_install)} assistant{'s' if len(assistants_to_install) != 1 else ''}[/green]"
-    )
+    if total_installed > 0:
+        console.print(
+            f"[green]Installed to {total_installed}"
+            f" assistant{'s' if total_installed != 1 else ''}"
+            f"[/green]"
+        )
+    else:
+        console.print("[yellow]Nothing was installed[/yellow]")
 
 
 @click.command(name="uninstall")
@@ -1055,6 +1098,13 @@ def install_cmd(
     default=None,
     help="Filter by installation scope",
 )
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Uninstall a plugin bundle instead of individual files",
+)
 def uninstall_cmd(
     module_name: Optional[str],
     assistant: Optional[str],
@@ -1062,6 +1112,7 @@ def uninstall_cmd(
     project_path: Optional[str],
     force: bool,
     scope: Optional[str],
+    as_plugin: bool,
 ):
     """
     Uninstall a module's skills from AI assistants.
@@ -1200,12 +1251,59 @@ def uninstall_cmd(
 
     # Uninstall each
     removed_count = 0
+    uninstalled_count = 0
     for inst in installations:
         target = get_target(inst.assistant)
 
         # Get scope-aware paths for removal
         path_context = inst.project_path or ""
         inst_scope = inst.scope
+
+        if as_plugin and not inst.is_plugin:
+            console.print(
+                f"[red]{module_name} was not installed as a plugin"
+                f" for {inst.assistant}[/red]",
+            )
+            continue
+        if not as_plugin and inst.is_plugin:
+            console.print(
+                f"[red]{module_name} was installed as a plugin"
+                f" for {inst.assistant}, use --plugin to"
+                f" uninstall[/red]",
+            )
+            continue
+
+        if as_plugin:
+            layout = target.get_plugin_layout(inst_scope)
+            if layout is None:
+                console.print(
+                    f"[red]--plugin is not supported with {inst.assistant}[/red]",
+                )
+                continue
+            plugin_root = layout.resolve_root(
+                module_name,
+                inst_scope,
+                inst.project_path,
+            )
+            if not plugin_root.exists():
+                console.print(
+                    f"[yellow]Plugin not found: {plugin_root}[/yellow]",
+                )
+                continue
+            shutil.rmtree(plugin_root)
+            removed_count += 1
+            if verbose:
+                console.print(
+                    f"  [green]Removed plugin {plugin_root}[/green]",
+                )
+            registry.remove(
+                module_name,
+                assistant=inst.assistant,
+                scope=inst.scope,
+                project_path=inst.project_path,
+            )
+            uninstalled_count += 1
+            continue
 
         # Remove skill files
         if inst.skills:
@@ -1308,9 +1406,14 @@ def uninstall_cmd(
             scope=inst.scope,
             project_path=inst.project_path,
         )
+        uninstalled_count += 1
 
     console.print(
-        f"[green]Uninstalled from {len(installations)} installation{'s' if len(installations) != 1 else ''}[/green]"
+        f"[green]Uninstalled from {uninstalled_count}"
+        f" installation{'s' if uninstalled_count != 1 else ''}"
+        f"[/green]"
+        if uninstalled_count > 0
+        else "[yellow]Nothing was uninstalled[/yellow]"
     )
 
 
@@ -1334,7 +1437,19 @@ def uninstall_cmd(
     is_flag=True,
     help="Show detailed output for each skill and command",
 )
-def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bool):
+@click.option(
+    "--plugin",
+    "as_plugin",
+    is_flag=True,
+    default=False,
+    help="Update a plugin bundle (reinstalls from source)",
+)
+def update_cmd(
+    module_name: Optional[str],
+    assistant: Optional[str],
+    verbose: bool,
+    as_plugin: bool,
+):
     """
     Regenerate assistant files from source in .lola/modules/.
 
@@ -1392,12 +1507,72 @@ def update_cmd(module_name: Optional[str], assistant: Optional[str], verbose: bo
                 console.print(f'  [dim]path:[/dim] "{project_path}"')
 
             for inst in scope_insts:
+                # Check for mode mismatch
+                if as_plugin and not inst.is_plugin:
+                    console.print(
+                        f"    [red]{inst.assistant}: installed as"
+                        f" standard, use --plugin to reinstall"
+                        f" or uninstall first[/red]",
+                    )
+                    continue
+                if not as_plugin and inst.is_plugin:
+                    console.print(
+                        f"    [red]{inst.assistant}: installed as"
+                        f" a plugin, use --plugin to update[/red]",
+                    )
+                    continue
+
                 # Validate installation
                 is_valid, error_msg = _validate_installation_for_update(inst)
                 if not is_valid:
                     console.print(f"    [red]{inst.assistant}: {error_msg}[/red]")
                     if error_msg == "project path no longer exists":
                         stale_installations.append(inst)
+                    continue
+
+                # Plugin update: uninstall and reinstall
+                if as_plugin and inst.is_plugin:
+                    target = get_target(inst.assistant)
+                    layout = target.get_plugin_layout(inst.scope)
+                    if layout:
+                        plugin_root = layout.resolve_root(
+                            inst.module_name,
+                            inst.scope,
+                            inst.project_path,
+                        )
+                        if plugin_root.exists():
+                            shutil.rmtree(plugin_root)
+                    global_module = load_registered_module(
+                        MODULES_DIR / inst.module_name,
+                    )
+                    if not global_module:
+                        console.print(
+                            f"    [red]{inst.assistant}: module not found[/red]",
+                        )
+                        continue
+                    if inst.scope == "user":
+                        local_modules = get_local_modules_path(
+                            str(Path.cwd()),
+                        )
+                    else:
+                        local_modules = get_local_modules_path(
+                            inst.project_path,
+                        )
+                    count = install_to_assistant(
+                        module=global_module,
+                        assistant=inst.assistant,
+                        scope=inst.scope,
+                        project_path=inst.project_path,
+                        local_modules=local_modules,
+                        registry=registry,
+                        verbose=verbose,
+                        force=True,
+                        as_plugin=True,
+                    )
+                    console.print(
+                        f"    [green]{inst.assistant}[/green]"
+                        f" [dim](reinstalled, {count} items)[/dim]",
+                    )
                     continue
 
                 # Build context for update

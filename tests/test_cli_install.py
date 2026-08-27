@@ -1,6 +1,7 @@
 """Tests for the install CLI commands."""
 
 import shutil
+from pathlib import Path
 from unittest.mock import patch
 
 from lola.cli.install import (
@@ -605,6 +606,7 @@ class TestUninstallCmd:
         mock_target.get_command_path.return_value = command_dest
         mock_target.get_command_filename.return_value = "mymodule.cmd1.md"
         mock_target.remove_skill.return_value = True
+        mock_target.get_plugin_layout.return_value = None
 
         with (
             patch("lola.cli.install.ensure_lola_dirs"),
@@ -615,6 +617,167 @@ class TestUninstallCmd:
 
         assert result.exit_code == 0
         assert "Uninstalled" in result.output
+
+    def test_plugin_install_plugin_uninstall(self, cli_runner, tmp_path):
+        """Uninstall a plugin with --plugin removes plugin directory."""
+        from unittest.mock import MagicMock
+
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        registry = InstallationRegistry(installed_file)
+        project_path = str(tmp_path / "project")
+        Path(project_path).mkdir()
+        registry.add(
+            Installation(
+                module_name="mymodule",
+                assistant="claude-code",
+                scope="project",
+                project_path=project_path,
+                skills=["skill1"],
+                is_plugin=True,
+            )
+        )
+
+        plugin_dir = Path(project_path) / ".claude" / "skills" / "mymodule"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "plugin.json").write_text('{"name": "mymodule"}')
+
+        from lola.targets.base import PluginLayout
+
+        layout = PluginLayout(
+            plugin_root_template=".claude/skills/{name}",
+            manifest_path=".claude-plugin",
+            mcp_path=".mcp.json",
+        )
+        mock_target = MagicMock()
+        mock_target.get_plugin_layout.return_value = layout
+        mock_target.get_plugin_layout.return_value = layout
+
+        with (
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = cli_runner.invoke(
+                uninstall_cmd,
+                ["mymodule", "--plugin", "-f"],
+            )
+
+        assert result.exit_code == 0
+        assert not plugin_dir.exists()
+
+    def test_plugin_install_standard_uninstall(self, cli_runner, tmp_path):
+        """Uninstall a plugin without --plugin shows error."""
+        from unittest.mock import MagicMock
+
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        registry = InstallationRegistry(installed_file)
+        registry.add(
+            Installation(
+                module_name="mymodule",
+                assistant="cursor",
+                scope="user",
+                skills=["skill1"],
+                is_plugin=True,
+            )
+        )
+
+        mock_target = MagicMock()
+        mock_target.get_plugin_layout.return_value = None
+
+        with (
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = cli_runner.invoke(
+                uninstall_cmd,
+                ["mymodule", "-f"],
+            )
+
+        assert "installed as a plugin" in result.output
+        assert "Nothing was uninstalled" in result.output
+
+    def test_standard_install_plugin_uninstall(self, cli_runner, tmp_path):
+        """Uninstall a standard install with --plugin shows error."""
+        from unittest.mock import MagicMock
+
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        project_path = str(tmp_path / "project")
+        Path(project_path).mkdir()
+        registry = InstallationRegistry(installed_file)
+        registry.add(
+            Installation(
+                module_name="mymodule",
+                assistant="claude-code",
+                scope="project",
+                project_path=project_path,
+                skills=["skill1"],
+                is_plugin=False,
+            )
+        )
+
+        mock_target = MagicMock()
+        mock_target.get_plugin_layout.return_value = None
+
+        with (
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = cli_runner.invoke(
+                uninstall_cmd,
+                ["mymodule", "--plugin", "-f"],
+            )
+
+        assert "not installed as a plugin" in result.output
+        assert "Nothing was uninstalled" in result.output
+
+    def test_standard_install_standard_uninstall(self, cli_runner, tmp_path):
+        """Uninstall a standard install without --plugin works."""
+        from unittest.mock import MagicMock
+
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        installed_file.parent.mkdir(parents=True)
+        registry = InstallationRegistry(installed_file)
+
+        skill_dest = tmp_path / "skills"
+        skill_dir = skill_dest / "skill1"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("content")
+
+        registry.add(
+            Installation(
+                module_name="mymodule",
+                assistant="cursor",
+                scope="user",
+                skills=["skill1"],
+                is_plugin=False,
+            )
+        )
+
+        mock_target = MagicMock()
+        mock_target.get_skill_path.return_value = skill_dest
+        mock_target.get_command_path.return_value = None
+        mock_target.get_agent_path.return_value = None
+        mock_target.uses_managed_section = False
+        mock_target.remove_skill.return_value = True
+        mock_target.get_plugin_layout.return_value = None
+
+        with (
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry", return_value=registry),
+            patch("lola.cli.install.get_target", return_value=mock_target),
+        ):
+            result = cli_runner.invoke(
+                uninstall_cmd,
+                ["mymodule", "-f"],
+            )
+
+        assert result.exit_code == 0
+        assert "Uninstalled from 1 installation" in result.output
 
 
 class TestUpdateCmd:
