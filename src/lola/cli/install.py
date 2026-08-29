@@ -17,7 +17,6 @@ from lola.config import MODULES_DIR, MARKET_DIR, CACHE_DIR
 from lola.exceptions import (
     ModuleInvalidError,
     ModuleNotFoundError,
-    PathNotFoundError,
     ValidationError,
 )
 from lola.models import Installation, InstallationRegistry, Module
@@ -769,6 +768,12 @@ def _format_update_summary(result: UpdateResult) -> str:
     default="project",
     help="Installation scope: project (default) or user",
 )
+@click.option(
+    "--create",
+    "create_project_path",
+    is_flag=True,
+    help="Create the project directory if it does not exist",
+)
 @click.argument("project_path", required=False, default="./")
 def install_cmd(
     module_name: Optional[str],
@@ -780,6 +785,7 @@ def install_cmd(
     append_context: tuple[str, ...],
     workspace: Optional[str],
     scope: str,
+    create_project_path: bool,
     project_path: str,
 ):
     """
@@ -795,6 +801,7 @@ def install_cmd(
         lola install my-module                         # Pick assistants interactively
         lola install my-module -a claude-code          # Specific assistant, no prompt
         lola install my-module ./my-project            # Install in a specific project directory
+        lola install my-module ./my-project --create   # Create project directory if missing
         lola install my-module --append-context module/AGENTS.md   # Single context reference
         lola install my-module --append-context module/AGENTS.md --append-context /opt/guidelines.md  # Multiple context references
         lola install my-module -a openclaw             # Install to ~/.openclaw/workspace/skills/
@@ -843,7 +850,14 @@ def install_cmd(
         # Project scope: validate and resolve project path
         install_project_path = str(Path(project_path).resolve())
         if not Path(install_project_path).exists():
-            handle_lola_error(PathNotFoundError(install_project_path, "Project path"))
+            if create_project_path:
+                Path(install_project_path).mkdir(parents=True)
+            else:
+                click.echo(f"Project path does not exist: {install_project_path}")
+                click.echo(
+                    "Tip: create it first with mkdir -p, or pass --create to have lola create it."
+                )
+                raise SystemExit(1)
         local_modules = get_local_modules_path(install_project_path)
 
     # Default to global registry

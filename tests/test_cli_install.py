@@ -53,18 +53,45 @@ class TestInstallCmd:
         assert "not found" in result.output
 
     def test_install_project_path_not_exists(self, cli_runner, tmp_path):
-        """Fail when project path doesn't exist."""
+        """Fail with guidance when project path doesn't exist."""
         modules_dir = tmp_path / ".lola" / "modules"
         modules_dir.mkdir(parents=True)
+        missing_path = tmp_path / "missing"
 
         with (
             patch("lola.cli.install.MODULES_DIR", modules_dir),
             patch("lola.cli.install.ensure_lola_dirs"),
         ):
-            result = cli_runner.invoke(install_cmd, ["mymodule", "/nonexistent/path"])
+            result = cli_runner.invoke(install_cmd, ["mymodule", str(missing_path)])
 
         assert result.exit_code == 1
-        assert "does not exist" in result.output
+        assert f"Project path does not exist: {missing_path}" in result.output
+        assert "pass --create to have lola create it" in result.output
+
+    def test_install_create_project_path(self, cli_runner, sample_module, tmp_path):
+        """--create creates a missing project path before installing."""
+        modules_dir = tmp_path / ".lola" / "modules"
+        modules_dir.mkdir(parents=True)
+        installed_file = tmp_path / ".lola" / "installed.yml"
+        project_path = tmp_path / "new-project"
+        shutil.copytree(sample_module, modules_dir / "sample-module")
+
+        with (
+            patch("lola.cli.install.MODULES_DIR", modules_dir),
+            patch("lola.cli.install.ensure_lola_dirs"),
+            patch("lola.cli.install.get_registry") as mock_registry,
+            patch("lola.cli.install.get_local_modules_path", return_value=modules_dir),
+            patch("lola.cli.install.install_to_assistant", return_value=1),
+        ):
+            mock_registry.return_value = InstallationRegistry(installed_file)
+            result = cli_runner.invoke(
+                install_cmd,
+                ["sample-module", str(project_path), "-a", "claude-code", "--create"],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert project_path.is_dir()
+        assert "Installing" in result.output
 
     def test_install_module(self, cli_runner, sample_module, tmp_path):
         """Install a module successfully."""
