@@ -11,7 +11,7 @@ from lola.cli.mod import load_registered_module, save_source_info
 from lola.targets import get_registry, TARGETS, default_assistants
 from lola.targets.install import install_to_assistant
 from lola.market.manager import parse_market_ref, MarketplaceRegistry
-from lola.parsers import detect_source_type, fetch_module, fetch_module_as_name
+from lola.parsers import detect_source_type, fetch_module_as_name
 from lola.models import Marketplace
 
 console = Console()
@@ -343,6 +343,13 @@ def resolve_and_fetch_module(spec: ModuleSpec, verbose: bool) -> tuple[str, dict
             url_path = url_path[:-4]
         module_name = Path(url_path).stem
 
+        # Combine repo stem + subdirectory leaf so entries from the same
+        # repo get distinct names without colliding across repos.
+        if spec.subdirectory:
+            subdir_name = Path(spec.subdirectory).name
+            if subdir_name:
+                module_name = f"{module_name}-{subdir_name}"
+
         module_path = MODULES_DIR / module_name
 
         # Add repository to registry if not already present
@@ -356,9 +363,10 @@ def resolve_and_fetch_module(spec: ModuleSpec, verbose: bool) -> tuple[str, dict
                 console.print(f"[dim]Adding {module_name} from URL{ref_msg}...[/dim]")
 
             source_type = detect_source_type(module_url)
-            module_path = fetch_module(
+            module_path = fetch_module_as_name(
                 module_url,
                 MODULES_DIR,
+                module_name,
                 module_content_dirname=spec.subdirectory,
                 ref=git_ref,
             )

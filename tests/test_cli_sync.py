@@ -3,7 +3,12 @@
 import pytest
 from unittest.mock import patch
 
-from lola.cli.sync import sync_cmd, _fetch_from_marketplace_quiet
+from lola.cli.sync import (
+    sync_cmd,
+    resolve_and_fetch_module,
+    _fetch_from_marketplace_quiet,
+)
+from lola.sync import ModuleSpec
 
 
 @pytest.fixture
@@ -491,26 +496,24 @@ class TestSyncWithGitUrls:
         lolareq = project / ".lola-req"
         lolareq.write_text("git+https://github.com/user/test-module.git\n")
 
-        # Mock the fetch_module and detect_source_type functions
+        # Mock the fetch_module_as_name and detect_source_type functions
         with (
-            patch("lola.cli.sync.fetch_module") as mock_fetch,
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
             patch("lola.cli.sync.detect_source_type") as mock_detect,
             patch("lola.cli.sync.save_source_info"),
             patch("lola.cli.sync.load_registered_module") as mock_load,
         ):
             mock_detect.return_value = "git"
 
-            # Set up mock_fetch to create the module when called
-            test_module = mock_sync_environment["modules"] / "test-module"
-
-            def create_module(*args, **kwargs):
-                test_module.mkdir()
-                skills = test_module / "skills" / "test"
+            def create_module(source, dest, name, **kwargs):
+                mod = dest / name
+                mod.mkdir(parents=True, exist_ok=True)
+                skills = mod / "skills" / "test"
                 skills.mkdir(parents=True)
                 (skills / "SKILL.md").write_text(
                     "---\ndescription: Test\n---\n\n# Test"
                 )
-                return test_module
+                return mod
 
             mock_fetch.side_effect = create_module
             # mock_load should return a valid Module object
@@ -532,24 +535,22 @@ class TestSyncWithGitUrls:
         lolareq.write_text("git+ssh://git@github.com/user/test-module.git\n")
 
         with (
-            patch("lola.cli.sync.fetch_module") as mock_fetch,
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
             patch("lola.cli.sync.detect_source_type") as mock_detect,
             patch("lola.cli.sync.save_source_info"),
             patch("lola.cli.sync.load_registered_module") as mock_load,
         ):
             mock_detect.return_value = "git"
 
-            # Set up mock_fetch to create the module when called
-            test_module = mock_sync_environment["modules"] / "test-module"
-
-            def create_module(*args, **kwargs):
-                test_module.mkdir()
-                skills = test_module / "skills" / "test"
+            def create_module(source, dest, name, **kwargs):
+                mod = dest / name
+                mod.mkdir(parents=True, exist_ok=True)
+                skills = mod / "skills" / "test"
                 skills.mkdir(parents=True)
                 (skills / "SKILL.md").write_text(
                     "---\ndescription: Test\n---\n\n# Test"
                 )
-                return test_module
+                return mod
 
             mock_fetch.side_effect = create_module
             # mock_load should return a valid Module object
@@ -561,3 +562,172 @@ class TestSyncWithGitUrls:
 
             # Should have stripped git+ prefix
             mock_detect.assert_called_with("ssh://git@github.com/user/test-module.git")
+
+
+class TestSyncSubdirectoryNameDerivation:
+    """Regression tests for #177: subdirectory-aware module name derivation."""
+
+    def _make_spec(self, url, subdirectory=None):
+        """Build a ModuleSpec for a URL with optional subdirectory."""
+        return ModuleSpec(
+            raw_line=url,
+            module_ref=url.split("#")[0] if "#" in url else url,
+            subdirectory=subdirectory,
+        )
+
+    def _create_module_dir(self, modules_dir, name):
+        """Create a minimal valid module directory."""
+        mod = modules_dir / name
+        mod.mkdir(parents=True, exist_ok=True)
+        skills = mod / "skills" / "s"
+        skills.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("---\ndescription: test\n---\n")
+        return mod
+
+    def test_subdirectory_uses_basename_as_module_name(self, tmp_path):
+        """Module name comes from subdirectory basename, not URL."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="plugins/dev",
+        )
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+            name, _ = resolve_and_fetch_module(spec, verbose=False)
+
+        assert name == "ai-helpers-dev"
+        mock_fetch.assert_called_once()
+        assert mock_fetch.call_args.args[2] == "ai-helpers-dev"
+
+    def test_no_subdirectory_uses_url_stem(self, tmp_path):
+        """Without subdirectory, module name comes from URL stem."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec = self._make_spec("https://github.com/quay/ai-helpers.git")
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+            name, _ = resolve_and_fetch_module(spec, verbose=False)
+
+        assert name == "ai-helpers"
+        mock_fetch.assert_called_once()
+        assert mock_fetch.call_args.args[2] == "ai-helpers"
+
+    def test_two_subdirectories_same_repo_get_distinct_names(self, tmp_path):
+        """Two entries from the same repo with different subdirectories get distinct names."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec1 = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="plugins/dev",
+        )
+        spec2 = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="plugins/jira-planning",
+        )
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+
+            name1, _ = resolve_and_fetch_module(spec1, verbose=False)
+            name2, _ = resolve_and_fetch_module(spec2, verbose=False)
+
+        assert name1 == "ai-helpers-dev"
+        assert name2 == "ai-helpers-jira-planning"
+        assert name1 != name2
+
+    def test_root_subdirectory_falls_back_to_url_stem(self, tmp_path):
+        """Edge case: #subdirectory=/ falls back to URL stem."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="/",
+        )
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+            name, _ = resolve_and_fetch_module(spec, verbose=False)
+
+        assert name == "ai-helpers"
+        assert mock_fetch.call_args.args[2] == "ai-helpers"
+
+    def test_deep_subdirectory_uses_repo_stem_plus_leaf(self, tmp_path):
+        """Deep subdirectory path uses repo stem + leaf directory name."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="a/b/c/mymod",
+        )
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+            name, _ = resolve_and_fetch_module(spec, verbose=False)
+
+        assert name == "ai-helpers-mymod"
+
+    def test_trailing_slash_subdirectory(self, tmp_path):
+        """Trailing slash on subdirectory is handled correctly."""
+        modules_dir = tmp_path / "modules"
+        modules_dir.mkdir()
+
+        spec = self._make_spec(
+            "https://github.com/quay/ai-helpers.git",
+            subdirectory="plugins/dev/",
+        )
+
+        with (
+            patch("lola.cli.sync.MODULES_DIR", modules_dir),
+            patch("lola.cli.sync.fetch_module_as_name") as mock_fetch,
+            patch("lola.cli.sync.detect_source_type", return_value="git"),
+            patch("lola.cli.sync.save_source_info"),
+        ):
+            mock_fetch.side_effect = lambda src, dest, name, **kw: (
+                self._create_module_dir(dest, name)
+            )
+            name, _ = resolve_and_fetch_module(spec, verbose=False)
+
+        assert name == "ai-helpers-dev"
