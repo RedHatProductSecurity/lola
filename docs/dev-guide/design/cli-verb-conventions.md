@@ -5,9 +5,10 @@
 > 💪 Reviewed by a human before submission
 ----
 
-Implementation detail for [ADR-0010](../../adr/0010-cli-verb-conventions.md).
-The ADR owns the rule; this document owns the command map, the two Cobra gaps
-that have to be closed by hand, and the alias configuration format.
+Implementation detail for
+[ADR: CLI Verb Conventions](../../adr/cli-verb-conventions.md). The ADR owns
+the rule; this document owns the command map, the two Cobra gaps that have to
+be closed by hand, and the alias configuration format.
 
 The support figures quoted here were produced by running each verb with `--help`
 against dnf 4.20.0, npm 11.9.0, pip 23.3.2, cargo 1.96.1 and gem 3.6.9, and by
@@ -148,8 +149,9 @@ user alias, because chains make an unknown-command error impossible to explain.
 
 ## Extensions
 
-ADR-0003 defines five extension kinds — `target`, `repo`, `runtime`, `source`
-and `scan` — and none of them contributes a CLI command. Extensions cannot add
+[ADR: Extension Architecture](../../adr/extension-architecture.md) defines five
+extension kinds — `target`, `repo`, `runtime`, `source` and `scan` — and none
+of them contributes a CLI command. Extensions cannot add
 verbs today, so nothing here applies to them yet.
 
 Recording one rule now, because it is cheaper than retrofitting it: if a future
